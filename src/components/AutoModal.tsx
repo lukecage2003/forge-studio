@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles } from 'lucide-react';
+import { PROFILE, PROFILES, type ProfileId } from '../engine/direction';
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
@@ -23,6 +24,11 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const pages = useStore((s) => s.project.pages.length);
   const styles = (Object.keys(STYLES) as AutoStyle[]).filter((k) => STYLES[k].face === hasFace || (!hasFace && k === 'explainer'));
   const [style, setStyle] = useState<AutoStyle>(hasFace ? (format === '16:9' ? 'explainer' : 'energetic') : format === '16:9' ? 'cinematic' : 'dynamic');
+  const [profile, setProfileState] = useState<ProfileId | null>(() => {
+    try { const v = localStorage.getItem('forge.profile'); if (v === 'none') return null; if (v && v in PROFILE) return v as ProfileId; } catch { /* storage off */ }
+    return 'premium';
+  });
+  const setProfile = (v: ProfileId | null) => { setProfileState(v); try { localStorage.setItem('forge.profile', v ?? 'none'); } catch { /* storage off */ } };
   const [length, setLength] = useState<AutoLength>(hasVoice ? 'voice' : 'auto');
   const [hook, setHook] = useState('');
   const [hooks, setHooks] = useState<string[]>([]);
@@ -72,7 +78,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
+      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
       void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
@@ -108,6 +114,21 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         </header>
 
         <div className="field">
+          <label>Direction créative</label>
+          <div className="profile-cards">
+            {PROFILES.map((pr) => (
+              <button key={pr.id} className={`profile-card ${profile === pr.id ? 'on' : ''}`} onClick={() => setProfile(pr.id)} title={pr.desc}>
+                <strong>{pr.label}</strong>
+              </button>
+            ))}
+            <button className={`profile-card ${profile === null ? 'on' : ''}`} onClick={() => setProfile(null)} title="Les styles d’avant, sans budget d’effets">
+              <strong>Classique</strong>
+            </button>
+          </div>
+          <p className="help">{profile ? PROFILE[profile].desc : 'Styles d’avant : choisis-en un ci-dessous.'}</p>
+        </div>
+
+        {!profile && <div className="field">
           <label>Style</label>
           <div className={`style-cards n${styles.length}`}>
             {styles.map((k) => {
@@ -121,7 +142,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {!hasFace && (
           <div className="field">

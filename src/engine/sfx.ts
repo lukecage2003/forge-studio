@@ -87,7 +87,23 @@ export function sfxEvents(p: Project): SfxEvent[] {
     if (s.shake > 0.3 || s.transition === 'flash') ev.push({ t: ts.start, kind: 'impact', gain: 0.5 + 0.5 * Math.min(1, s.shake) });
   }
   for (const f of p.fx ?? []) if (f.kind === 'callout') ev.push({ t: f.start, kind: 'impact', gain: 0.6 });
-  return ev.filter((e) => e.t >= 0).sort((a, b) => a.t - b.t);
+  return budget(ev.filter((e) => e.t >= 0).sort((a, b) => a.t - b.t), p.autoSfx.perMin);
+}
+
+/**
+ * Sound never on every transition: at least 1.2 s between two sounds of the
+ * same kind, and a creative profile's limit of sounds per minute.
+ */
+export function budget(ev: SfxEvent[], perMin?: number): SfxEvent[] {
+  const out: SfxEvent[] = [];
+  const last: Partial<Record<Kind, number>> = {};
+  for (const e of ev) {
+    if (e.t - (last[e.kind] ?? -1e9) < 1.2) continue;
+    if (perMin != null && out.filter((x) => x.t > e.t - 60).length >= Math.max(1, perMin)) continue;
+    out.push(e);
+    last[e.kind] = e.t;
+  }
+  return out;
 }
 
 export function scheduleSfx(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0: number, T0: number, until = Infinity) {

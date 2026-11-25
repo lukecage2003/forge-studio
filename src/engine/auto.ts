@@ -14,6 +14,8 @@ import { planStory } from './story';
 import { emphasisTimes } from './emphasis';
 import { brandOf } from './brand';
 import type { FxItem } from '../types';
+import { PROFILE, applyProfileLook, direct, type ProfileId } from './direction';
+import { BEAT_FR } from './narrative';
 import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMotion } from './brain';
 
 /**
@@ -39,6 +41,8 @@ export interface AutoOptions {
   matches?: Record<string, number>;
   /** follow the narration: each sentence gets the panel that illustrates it */
   story?: 'auto' | 'local' | 'google' | false;
+  /** creative direction profile (engine/direction): rhythm, palette, look, sound, budget */
+  profile?: ProfileId;
   onProgress?: (label: string, p: number) => void;
 }
 
@@ -254,7 +258,12 @@ export function buildSubtitles(words: Word[], maxWords: number): Subtitle[] {
 interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean; cover?: string }
 
 export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project: Project; report: AutoReport }> {
-  const st = STYLES[o.style];
+  const prof = o.profile ? PROFILE[o.profile] : null;
+  const st: StyleDef = prof ? {
+    ...STYLES[o.style],
+    base: prof.rhythm.base, min: prof.rhythm.min, max: prof.rhythm.max, intensity: prof.rhythm.intensity, maxWords: prof.rhythm.maxWords,
+    preset: prof.type.preset, anim: prof.type.anim, splashShake: prof.camera.shake, soloLayouts: prof.layouts,
+  } : STYLES[o.style];
   const notes: string[] = [];
   await Promise.all([
     ...p.pages.map((pg) => ensureMedia(pg.mediaId, 'image')),
@@ -683,6 +692,15 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   }
 
   proj = { ...proj, shots };
+
+  /* creative direction: transitions from the narration, under the effects budget */
+  if (prof) {
+    const d = direct(proj.shots, prof);
+    proj = applyProfileLook({ ...proj, shots: d.shots }, prof);
+    const beats = Object.entries(d.report.beats).filter(([b]) => b !== 'plain' && b !== 'hook').sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([b, n]) => `${n} ${BEAT_FR[b as keyof typeof BEAT_FR]}`).join(', ');
+    notes.push(`Direction « ${prof.label} » : ${d.report.strong} effet(s) fort(s), ${d.report.accents} accent(s), le reste en coupes franches.${beats ? ' Temps forts repérés : ' + beats + '.' : ''}`);
+  }
 
   /* mix: music fitted to the edit, ducked under the voice */
   const music = proj.audio.find((c) => c.kind === 'music');

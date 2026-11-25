@@ -160,3 +160,65 @@ describe('phase 3 : déterminisme, jetons, catalogue', () => {
     expect(tp(shot, 'spread')).toBe(1.5);
   });
 });
+
+import { beatOf } from '../src/engine/narrative';
+import { PROFILES, direct } from '../src/engine/direction';
+import { budget } from '../src/engine/sfx';
+import { TRANSITION } from '../src/engine/effects';
+
+describe('phase 4 : direction créative', () => {
+  it('reconnaît les temps forts de la narration', () => {
+    expect(beatOf('Il ouvre le rush', 0)).toBe('hook');
+    expect(beatOf('En 1986, Alan Moore publie Watchmen')).toBe('date');
+    expect(beatOf('Il est plus puissant que Superman')).toBe('compare');
+    expect(beatOf('Il voit tout l’univers à la fois')).toBe('cosmic');
+    expect(beatOf('Rorschach frappe le criminel')).toBe('action');
+    expect(beatOf('Mais en réalité, personne ne sait')).toBe('reveal');
+    expect(beatOf('Sa femme meurt dans ses bras')).toBe('emotion');
+    expect(beatOf('Le personnage porte un manteau')).toBe('plain');
+  });
+
+  const texts = ['Intro', 'En 1985 la guerre froide', 'Il frappe fort', 'Mais en réalité', 'Il voit l’univers', 'plus fort que tout',
+    'Il marche', 'Il parle', 'Combat final', 'explosion', 'Le secret', 'Il pleure', 'Il part', 'Puis il revient', 'Ensuite il frappe'];
+  const mk = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: 's' + i, pageId: 'p' + Math.floor(i / 2), rect: { x: 0, y: 0, w: 1, h: 1 }, duration: 2.4, framing: 'fit', motion: 'auto', intensity: 0.6,
+    transition: 'whip', transitionDur: 0.3, shake: 0.9, layout: 'full', caption: { text: texts[i % texts.length], preset: 'tiktok', anim: 'pop', y: 0.8, size: 1 },
+    auto: { duration: 2.4, layout: 'full', motion: 'auto', style: 'dynamic' },
+  })) as never[];
+
+  for (const prof of PROFILES) {
+    it(`profil « ${prof.label} » : budget tenu, aucune répétition, palette respectée`, () => {
+      const { shots } = direct(mk(60), prof); // 60 plans × 2,4 s = 2 min 24
+      const quiet = (t: string) => t === 'cut' || t === 'glide';
+      const all = [...prof.palette.calm, ...prof.palette.accent, ...prof.palette.strong, 'whip'];
+      let t = 0; const marks: { t: number; strong: boolean }[] = [];
+      shots.forEach((s: any, i: number) => {
+        if (i > 0) {
+          expect(all).toContain(s.transition);
+          if (!quiet(s.transition)) expect(s.transition).not.toBe(shots[i - 1].transition);
+          expect(s.transitionDur).toBeLessThanOrEqual(s.duration * 0.45 + 1e-9);
+          expect(s.transitionDur).toBeGreaterThanOrEqual(quiet(s.transition) ? 0 : TRANSITION[s.transition as 'fade'].minDur ?? 0);
+          expect(s.shake).toBeLessThanOrEqual(prof.camera.shake + 1e-9);
+          if (prof.palette.strong.includes(s.transition)) marks.push({ t, strong: true });
+          else if (prof.palette.accent.includes(s.transition)) marks.push({ t, strong: false });
+        }
+        t += s.duration;
+      });
+      for (const m of marks) {
+        const win = marks.filter((x) => x.t <= m.t && x.t > m.t - 60);
+        expect(win.filter((x) => x.strong).length).toBeLessThanOrEqual(Math.max(1, Math.floor(prof.budget.strong)));
+        expect(win.length).toBeLessThanOrEqual(Math.max(1, Math.floor(prof.budget.accent)));
+      }
+      // never an effect on every cut: at least 40 % plain cuts or fades
+      const calm = shots.slice(1).filter((s: any) => prof.palette.calm.includes(s.transition)).length;
+      expect(calm / (shots.length - 1)).toBeGreaterThan(0.4);
+    });
+  }
+
+  it('le son ne tombe jamais sur chaque transition', () => {
+    const ev = Array.from({ length: 60 }, (_, i) => ({ t: i * 0.5, kind: 'whoosh' as const, gain: 1 }));
+    const b = budget(ev, 4);
+    expect(b.length).toBeLessThanOrEqual(4);
+    for (let i = 1; i < b.length; i++) expect(b[i].t - b[i - 1].t).toBeGreaterThanOrEqual(1.2);
+  });
+});

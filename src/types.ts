@@ -226,7 +226,9 @@ export interface Project {
   /** stressed moments of the voice (timeline seconds): slight punch-ins */
   emphasis?: number[];
   /** automatic sound design: whooshes on transitions, impacts on splashes */
-  autoSfx?: { on: boolean; volume: number };
+  autoSfx?: { on: boolean; volume: number; /** whooshes allowed per minute (creative profile) */ perMin?: number };
+  /** creative direction profile used by the last auto edit */
+  direction?: { profile: string };
 }
 
 export type Selection =

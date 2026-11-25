@@ -272,3 +272,45 @@ L'audit (phases 1 et 2) a conclu de garder l'architecture et de l'étendre par c
   - `npm run test:visual` rend 50 images d'une scène synthétique (toutes les transitions, mouvements et options d'image, sans image protégée) et les compare aux références de `tests/visual/baseline`.
   - `npm run test:visual:update` régénère ces références.
   - Les références dépendent du rendu des polices et du GPU de la machine : génère-les sur celle qui les vérifie.
+
+## Moteur de production : phase 4 (direction créative et rythme)
+
+Dans « Montage auto », la **direction créative** propose 8 profils. « Classique » garde les styles d'avant. Le dernier choix est mémorisé.
+
+| Profil | Esprit | Effets forts / min | Accents / min | Sons / min |
+|---|---|---|---|---|
+| Documentaire comics premium | sobre, trame BD et encre pour les grands moments | 1 | 4 | 3 |
+| Cinématique cosmique | lent, mises au point, vitesse lumière, trou noir | 1 | 4 | 4 |
+| Action et combat | whips, coupes BD, zoom flou, tremblements sur les coups | 4 | 10 | 10 |
+| Analyse de personnage | fondus, iris, encre pour les tournants intimes | 1 | 4 | 3 |
+| Explication scientifique | coupes nettes, volets propres | 1 | 3 | 2 |
+| Frise historique | papier vieilli, volets sur les dates, brûlure pellicule | 1 | 5 | 3 |
+| Échelle de puissance | montée en intensité, vitesse lumière au sommet | 2 | 8 | 8 |
+| Commentaire éditorial | coupes sèches, poussées, un flash pour une opinion forte | 1 | 5 | 5 |
+
+Chaque profil (`src/engine/direction.ts`) fixe :
+- le rythme : durée des plans, intensité de caméra, mots par sous-titre ;
+- la typographie des textes ;
+- trois niveaux de transitions : calme, accent, fort ;
+- leurs durées ;
+- le budget d'effets par minute ;
+- le tremblement maximal ;
+- l'image : étalonnage, vignette, grain, papier ;
+- le volume et le nombre de sons ;
+- la densité de mise en page.
+
+**Analyse narrative** (`src/engine/narrative.ts`, locale, français et anglais). Chaque phrase de la narration est classée en accroche, révélation, action, cosmique, date, comparaison, émotion, énumération ou explication.
+
+**Comment le montage applique un profil** :
+- **Choix du niveau de transition.** Un temps fort peut obtenir un effet fort. Une date, une comparaison ou une énumération obtient un accent. Le reste passe en coupe franche ou en fondu, dans la catégorie qui répond à la phrase : action pour un combat, cosmique pour l'univers, information pour une date.
+- **Un changement de page** ne prend un accent que si la phrase suivante n'en a pas besoin.
+- **Le budget est vérifié sur 60 secondes glissantes.**
+- **Aucune transition visible n'est répétée deux fois de suite.**
+- **Les tremblements sont réservés aux coups.**
+- **Le son ne tombe jamais sur chaque transition** : 1,2 s minimum entre deux sons, et une limite par minute selon le profil.
+
+**Contrôle qualité** : il signale une transition répétée deux fois de suite, avec correction en un clic, et plus de 12 transitions marquées par minute.
+
+**Tests** :
+- 10 tests vérifient l'analyse des phrases, le budget de chacun des 8 profils sur 2 min 24, l'absence de répétition, la palette, les durées et le son.
+- Test réel sur Watchmen n°3 avec un script de 17 phrases : 8 montages, de 1 effet fort par minute (Premium) à 3,4 (Action), aucune répétition, aucune erreur de rendu, export MP4 vérifié.

@@ -72,6 +72,19 @@ export function checkProject(p: Project): Issue[] {
     fix: { label: 'Ramener à 100 %', apply: (x) => ({ ...x, audio: x.audio.map((c) => (c.volume > 1.2 ? { ...c, volume: 1 } : c)) }) },
   });
 
+  // editing grammar: the same visible transition twice in a row, or effects everywhere
+  const quiet = (tr: string) => tr === 'cut' || tr === 'glide';
+  const repeats = timed.filter((t, i) => i > 0 && !quiet(t.shot.transition) && t.shot.transition === timed[i - 1].shot.transition);
+  if (repeats.length) out.push({
+    level: 'warn', text: `${repeats.length} transition(s) identique(s) deux fois de suite : l’effet s’use.`, at: repeats[0].start,
+    fix: { label: 'Remplacer par une coupe', apply: (x) => ({ ...x, shots: x.shots.map((s) => (repeats.some((t) => t.shot.id === s.id) ? { ...s, transition: 'cut' as const, transitionDur: 0, tp: undefined } : s)) }) },
+  });
+  if (dur > 20) {
+    const loud = timed.filter((t) => !quiet(t.shot.transition) && t.shot.transition !== 'fade').length;
+    const perMin = loud / (dur / 60);
+    if (perMin > 12) out.push({ level: 'warn', text: `${Math.round(perMin)} transitions marquées par minute : trop d’effets, le montage paraît amateur. Garde des coupes franches entre les temps forts (profils de direction créative).` });
+  }
+
   // story placements still to check
   const review = p.shots.filter((s) => s.match && s.match.conf < 0.5).length;
   if (review) out.push({ level: 'warn', text: `${review} case(s) associée(s) avec peu de certitude : vérifie-les (inspecteur du projet → « À vérifier »).` });
