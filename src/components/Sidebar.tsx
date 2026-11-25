@@ -3,7 +3,7 @@ import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, File
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
-import { addDiagram, addTitleCard, classifyWithGoogle, importAudioFiles, importPages, removePage, setPageKind, togglePageSkip } from '../actions';
+import { addDiagram, addTitleCard, analyzeComics, classifyWithGoogle, importAudioFiles, importPages, removePage, setPageKind, togglePageSkip } from '../actions';
 import { PAGE_KINDS, type PageKind } from '../types';
 import { hasGoogle } from '../engine/google';
 import { importRush } from '../rush';
@@ -79,6 +79,13 @@ export function Sidebar() {
           })}
           {!pages.length && <p className="empty-hint">Glisse tes planches (PDF, CBZ, JPG, PNG) n’importe où dans la fenêtre.</p>}
         </div>
+        {pages.length > 0 && (
+          <div className="read-box">
+            <span>Lire les comics</span>
+            <button className="btn sm ghost" onClick={() => void analyzeComics('local')} title="Lit le texte des bulles sur ton ordinateur (OCR)">Bulles (local)</button>
+            <button className="btn sm google" disabled={!hasGoogle()} onClick={() => void analyzeComics('google')} title="Google décrit chaque page et chaque case : personnages, action, dialogues">Google</button>
+          </div>
+        )}
         <div className="two-btns">
           <button className="btn ghost" onClick={() => addTitleCard()}><Type size={15} /> Carton titre</button>
           <button className="btn ghost" onClick={() => addDiagram('timeline')} title="Frise, réseau de personnages, duel ou classement, avec tes cases"><Network size={15} /> Schéma</button>

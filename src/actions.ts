@@ -306,3 +306,75 @@ export async function classifyWithGoogle() {
     setUI({ busy: null });
   }
 }
+
+/* --------------------------------------------- reading the comics (AI) */
+
+/** Read every page: local OCR of the balloons, or Google (summary + panel descriptions + characters). */
+export async function analyzeComics(engine: 'local' | 'google') {
+  const p0 = getState().project;
+  try {
+    if (engine === 'local') {
+      const { ocrPages } = await import('./engine/understand');
+      const texts = await ocrPages(p0, (i, n) => setUI({ busy: i < 0 ? 'Chargement du lecteur de bulles…' : `Lecture des bulles ${Math.min(i + 1, n)}/${n}…` }));
+      update((p) => ({ ...p, shots: p.shots.map((s) => (texts.has(s.id) ? { ...s, text: texts.get(s.id) } : s)) }));
+      toast(`Bulles lues sur ${texts.size} cases`);
+      return;
+    }
+    const { geminiReadPages, hasGoogle } = await import('./engine/google');
+    if (!hasGoogle()) { setUI({ settingsOpen: true }); toast('Ajoute ta clé Google dans les réglages.', 'error'); return; }
+    const pages = p0.pages.filter((pg) => !pg.skip);
+    for (let k = 0; k < pages.length; k += 4) {
+      setUI({ busy: `Google lit les pages ${k + 1}–${Math.min(pages.length, k + 4)} / ${pages.length}…` });
+      const batch = pages.slice(k, k + 4);
+      const jpegs = batch.map((pg) => {
+        const a = getImage(pg.mediaId)!;
+        const c = document.createElement('canvas');
+        const s = Math.min(1, 1100 / Math.max(a.width, a.height));
+        c.width = Math.round(a.width * s); c.height = Math.round(a.height * s);
+        c.getContext('2d')!.drawImage(a.img, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.82).split(',')[1];
+      });
+      const reads = await geminiReadPages(jpegs);
+      batch.forEach((pg, i) => {
+        const r = reads[i];
+        const a = getImage(pg.mediaId)!;
+        const boxes = r.panels.map((q) => ({ ...q, rect: { x: Math.round(q.box.x0 * a.width), y: Math.round(q.box.y0 * a.height), w: Math.round((q.box.x1 - q.box.x0) * a.width), h: Math.round((q.box.y1 - q.box.y0) * a.height) } }))
+          .filter((q) => q.rect.w > 20 && q.rect.h > 20);
+        const iou = (x: Rect, y: Rect) => { const w = Math.min(x.x + x.w, y.x + y.w) - Math.max(x.x, y.x), h = Math.min(x.y + x.h, y.y + y.h) - Math.max(x.y, y.y); const i2 = w > 0 && h > 0 ? w * h : 0; return i2 / (x.w * x.h + y.w * y.h - i2); };
+        update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pg.id ? { ...x, summary: r.summary } : x)) }));
+        const page = getState().project.pages.find((x) => x.id === pg.id)!;
+        // uncertain pages take Google's panels; good pages keep their cut and get the descriptions
+        if ((page.cut === 'zones' || !getState().project.shots.some((s) => s.pageId === pg.id)) && page.kind !== 'cover' && boxes.length) {
+          replacePageShots(pg.id, boxes.map((b) => b.rect));
+          update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pg.id ? { ...x, cut: 'panels' } : x)) }));
+          const created = getState().project.shots.filter((s) => s.pageId === pg.id);
+          update((p) => ({ ...p, shots: p.shots.map((s) => { const k2 = created.findIndex((c) => c.id === s.id); return k2 >= 0 && boxes[k2] ? { ...s, desc: boxes[k2].desc, text: boxes[k2].dialogue, chars: boxes[k2].characters } : s; }) }));
+        } else {
+          update((p) => ({
+            ...p,
+            shots: p.shots.map((s) => {
+              if (s.pageId !== pg.id) return s;
+              let best = -1, bv = 0.2;
+              boxes.forEach((b, j) => { const v = iou(s.rect, b.rect); if (v > bv) { bv = v; best = j; } });
+              if (best < 0) return { ...s, desc: s.desc ?? r.summary };
+              const b = boxes[best];
+              return { ...s, desc: b.desc, text: b.dialogue || s.text, chars: b.characters };
+            }),
+          }));
+        }
+      });
+    }
+    toast(`Google a lu ${pages.length} pages`);
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  } finally {
+    setUI({ busy: null });
+  }
+}
+
+/** pick another panel for a placed shot (keeps its timing) */
+export function swapPanel(shotId: string, pageId: string, rect: Rect) {
+  update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId ? { ...s, pageId, rect, focus: undefined, zone: undefined, match: s.match ? { ...s.match, conf: 1 } : undefined } : s)) }));
+}
+export const confirmMatch = (shotId: string) =>
+  update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId && s.match ? { ...s, match: { ...s.match, conf: 1 } } : s)) }));

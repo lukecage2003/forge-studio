@@ -192,3 +192,97 @@ export async function geminiClassify(thumbs: string[], signal?: AbortSignal): Pr
     return thumbs.map(() => null);
   }
 }
+
+/* ------------------------------------------------- comics understanding */
+
+export interface PageReading {
+  summary: string;
+  panels: { box: { y0: number; x0: number; y1: number; x1: number }; desc: string; dialogue: string; characters: string[] }[];
+}
+
+/** Gemini reads up to 4 pages per request: summary, and every panel with what it shows and says. */
+export async function geminiReadPages(jpegs: string[], signal?: AbortSignal): Promise<PageReading[]> {
+  const parts: unknown[] = [{
+    text:
+      `Tu es documentaliste de comics. Pour chacune des ${jpegs.length} pages suivantes, donne : ` +
+      `summary (2 phrases en français : ce qui se passe, qui, où, quand), et panels : chaque case dans l'ordre de lecture avec ` +
+      `box_2d [ymin, xmin, ymax, xmax] normalisé 0-1000, desc (ce que montre la case, en français, précis : personnages, action, objets, lieu, concepts), ` +
+      `dialogue (texte des bulles et récitatifs, dans la langue d'origine), characters (noms des personnages visibles ou nommés).`,
+  }];
+  jpegs.forEach((j, i) => { parts.push({ text: `Page ${i + 1} :` }); parts.push({ inline_data: { mime_type: 'image/jpeg', data: j } }); });
+  const text = await generate(parts, {
+    type: 'ARRAY',
+    items: {
+      type: 'OBJECT',
+      properties: {
+        summary: { type: 'STRING' },
+        panels: {
+          type: 'ARRAY',
+          items: {
+            type: 'OBJECT',
+            properties: { box_2d: { type: 'ARRAY', items: { type: 'NUMBER' } }, desc: { type: 'STRING' }, dialogue: { type: 'STRING' }, characters: { type: 'ARRAY', items: { type: 'STRING' } } },
+            required: ['box_2d', 'desc'],
+          },
+        },
+      },
+      required: ['summary', 'panels'],
+    },
+  }, signal);
+  let arr: { summary: string; panels: { box_2d: number[]; desc: string; dialogue?: string; characters?: string[] }[] }[] = [];
+  try { arr = JSON.parse(text); } catch { throw new Error('Réponse de Google illisible pour la lecture des pages.'); }
+  return jpegs.map((_, i) => {
+    const r = arr[i] ?? { summary: '', panels: [] };
+    return {
+      summary: r.summary ?? '',
+      panels: (r.panels ?? []).filter((p) => p.box_2d?.length === 4).map((p) => ({
+        box: { y0: p.box_2d[0] / 1000, x0: p.box_2d[1] / 1000, y1: p.box_2d[2] / 1000, x1: p.box_2d[3] / 1000 },
+        desc: p.desc ?? '', dialogue: p.dialogue ?? '', characters: p.characters ?? [],
+      })),
+    };
+  });
+}
+
+export interface StoryMatch { sentence: number; panels: string[]; conf: number }
+export interface SchemaIdea { kind: 'timeline' | 'network' | 'versus' | 'ranking'; title: string; sentence: number; items: { panel: string; label: string; sub?: string }[] }
+
+/**
+ * Semantic matching: which panels best illustrate each sentence of the narration
+ * (explanations, theories, cosmology, recaps: meaning, not just shared words),
+ * plus a few schema ideas when the narration lists dates, relations or a duel.
+ */
+export async function geminiMatchStory(sentences: string[], catalog: { id: string; line: string }[], signal?: AbortSignal): Promise<{ matches: StoryMatch[]; schemas: SchemaIdea[] }> {
+  const text = await generate([{
+    text:
+      `Tu es monteur pour une chaîne YouTube qui explique les comics (histoire, théories, cosmologie, personnages). ` +
+      `Voici la narration découpée en phrases numérotées, puis le catalogue des cases disponibles (id : description). ` +
+      `Pour CHAQUE phrase, choisis 1 à 3 cases qui l'illustrent le mieux (sens, pas seulement les mots ; la narration peut être en français et les comics en anglais), ` +
+      `dans l'ordre où les montrer, et une confiance entre 0 et 1 (bas si aucune case ne convient vraiment). ` +
+      `Respecte autant que possible l'ordre de l'histoire. Propose aussi 0 à 3 schémas utiles (frise si des dates/époques s'enchaînent, réseau si des liens entre personnages, ` +
+      `versus si une opposition, ranking si un classement), avec les cases à utiliser.\n\nPHRASES :\n` +
+      sentences.map((s, i) => `[${i}] ${s}`).join('\n') +
+      `\n\nCASES :\n` + catalog.map((c) => `${c.id} : ${c.line}`).join('\n'),
+  }], {
+    type: 'OBJECT',
+    properties: {
+      matches: { type: 'ARRAY', items: { type: 'OBJECT', properties: { sentence: { type: 'INTEGER' }, panels: { type: 'ARRAY', items: { type: 'STRING' } }, conf: { type: 'NUMBER' } }, required: ['sentence', 'panels', 'conf'] } },
+      schemas: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            kind: { type: 'STRING', enum: ['timeline', 'network', 'versus', 'ranking'] }, title: { type: 'STRING' }, sentence: { type: 'INTEGER' },
+            items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { panel: { type: 'STRING' }, label: { type: 'STRING' }, sub: { type: 'STRING' } }, required: ['panel', 'label'] } },
+          },
+          required: ['kind', 'title', 'sentence', 'items'],
+        },
+      },
+    },
+    required: ['matches'],
+  }, signal);
+  try {
+    const o = JSON.parse(text);
+    return { matches: o.matches ?? [], schemas: o.schemas ?? [] };
+  } catch {
+    throw new Error('Réponse de Google illisible pour l’association script ↔ cases.');
+  }
+}

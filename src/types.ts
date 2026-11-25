@@ -24,6 +24,8 @@ export interface Page {
   source?: string;
   srcIndex?: number;
   srcCount?: number;
+  /** AI reading of the page (Gemini) */
+  summary?: string;
   /** how the page was cut: real panels, a full-page splash, or reading-order zones */
   cut?: 'panels' | 'splash' | 'zones';
 }
@@ -94,6 +96,12 @@ export interface Shot {
   /** schema / timeline built from comic panels (title-card shots only) */
   diagram?: Diagram;
   titleBg?: string;
+  /** what the panel shows/says: OCR of its balloons, AI description, characters */
+  text?: string;
+  desc?: string;
+  chars?: string[];
+  /** placed by the story matcher: the sentence it illustrates, confidence, alternatives (shot ids) */
+  match?: { sentence: string; conf: number; alts: string[]; source: 'local' | 'google' };
   /** point of interest inside the panel (0..1 of rect): zooms aim here instead of the centre */
   focus?: { x: number; y: number };
   /** set by the auto editor; used by Forge Brain to learn from corrections */
@@ -129,6 +137,8 @@ export interface AudioClip {
   volume: number; // 0..1.5
   fadeIn: number;
   fadeOut: number;
+  /** transcript of a voice-over clip, times relative to the source file */
+  words?: Word[];
 }
 
 /* ------------------------------------------------------- face-cam rush */
@@ -199,6 +209,8 @@ export interface Project {
   accent: string;
   fx: FxItem[];
   look: Look;
+  /** optional script pasted by the user (narration text) */
+  script?: string;
   /** automatic sound design: whooshes on transitions, impacts on splashes */
   autoSfx?: { on: boolean; volume: number };
 }

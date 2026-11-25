@@ -3,7 +3,8 @@ import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles }
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
-import { aiRecut } from '../actions';
+import { aiRecut, analyzeComics } from '../actions';
+import { narration } from '../engine/narration';
 import { toast } from './Toast';
 import { FORMATS } from '../types';
 
@@ -33,6 +34,11 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const unsure = useStore((s) => s.project.pages.filter((p) => p.cut === 'zones' && !p.skip).length);
   const [aiCut, setAiCut] = useState(hasGoogle() && unsure > 0);
   const [busy, setBusy] = useState<string | null>(null);
+  const script0 = useStore((s) => s.project.script ?? '');
+  const [script, setScript] = useState(script0);
+  const hasVoiceWords = useStore((s) => !!s.project.aroll?.words.length || s.project.audio.some((a) => a.kind === 'voice' && !!a.words?.length));
+  const [story, setStory] = useState<boolean>(hasVoiceWords || !!script0.trim());
+  const [storyEngine, setStoryEngine] = useState<'local' | 'google'>(hasGoogle() ? 'google' : 'local');
   const google = hasGoogle();
 
   const suggest = async () => {
@@ -46,7 +52,16 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const run = async () => {
     try {
       let matches: Record<string, number> | undefined;
-      if (aiCut && google && unsure) { setBusy('Google recoupe les pages incertaines…'); await aiRecut(); }
+      update((p) => ({ ...p, script }));
+      if (story && !narration({ ...getState().project, script }).sentences.length) {
+        toast('Pour suivre la narration : transcris la voix (rush ou voix off) ou colle ton script.', 'error');
+        return;
+      }
+      // read the comics first if nothing is known about the panels yet
+      if (story && !getState().project.shots.some((x) => x.desc || x.text)) {
+        setBusy(storyEngine === 'google' ? 'Google lit les comics…' : 'Lecture des bulles…');
+        await analyzeComics(storyEngine);
+      } else if (aiCut && google && unsure) { setBusy('Google recoupe les pages incertaines…'); await aiRecut(); }
       const p0 = getState().project;
       if (aiMatch && google && hasFace && hasWords) {
         setBusy('Google associe les cases au script…');
@@ -55,7 +70,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches });
+      const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
       const bits = [`${report.shots} cases`, `${report.duration.toFixed(1)} s`];
@@ -129,6 +144,22 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
             <div className="chips">{hooks.map((h) => <button key={h} className="chip" onClick={() => setHook(h)}>{h}</button>)}</div>
           )}
           <p className="help">Un texte plein écran pendant les 2 premières secondes{hasFace ? ', posé sur ton visage' : ''}.</p>
+        </div>
+
+        <div className="field">
+          <label htmlFor="script">Script <span className="opt">optionnel · utilisé s’il n’y a pas de voix transcrite</span></label>
+          <textarea id="script" className="input" rows={4} placeholder="Colle ton texte : Forge choisira pour chaque phrase la case qui l’illustre…" value={script} onChange={(e) => { setScript(e.target.value); if (e.target.value.trim() && !script.trim()) setStory(true); }} />
+        </div>
+
+        <div className="story-box">
+          <Toggle on={story} set={setStory} label="Suivre la narration : chaque phrase reçoit la case qui l’illustre"
+            hint={hasVoiceWords ? 'Voix transcrite trouvée' : script.trim() ? 'Durées estimées depuis le script' : 'Transcris ta voix ou colle un script'} />
+          {story && (
+            <div className="seg full">
+              <button className={storyEngine === 'local' ? 'on' : ''} onClick={() => setStoryEngine('local')}>Local · noms et mots</button>
+              <button className={storyEngine === 'google' ? 'on' : ''} disabled={!google} onClick={() => setStoryEngine('google')}>Google · compréhension</button>
+            </div>
+          )}
         </div>
 
         <div className="toggles">

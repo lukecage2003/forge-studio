@@ -126,6 +126,21 @@ Après chaque montage auto et avant chaque export, Forge vérifie et répare le 
 - **Aperçu** plein écran et en boucle ; heure exacte au survol de la timeline.
 - **Effets en plus** : brûlure de pellicule (transition), aberration chromatique sur les impacts, texture papier BD, sous-titres « glissé ».
 
+## 12. Montage qui suit ta narration
+
+Donne ta voix (rush ou voix off transcrite) ou colle ton script, et tes PDF : Forge choisit pour chaque phrase la case qui l’illustre, et ne montre que les passages utiles.
+
+1. **Lire les comics** (barre de gauche) :
+   - *Bulles (local)* : OCR des bulles sur ton ordinateur (Tesseract, anglais + français), gratuit ;
+   - *Google* : Gemini résume chaque page et décrit chaque case (personnages, action, dialogues) ; les pages incertaines reçoivent ses cases.
+2. **Montage auto → « Suivre la narration »** :
+   - *Local* : noms propres, nombres et mots communs, puis un alignement qui suit l’ordre de lecture (Viterbi) ;
+   - *Google* : compréhension du sens (théories, cosmologie, résumés, narration française sur comics anglais) et schémas proposés (frise, réseau, duel, classement).
+3. Le nom d’un personnage s’affiche à sa première mention ; sur un face caméra, une phrase incertaine montre ton visage plutôt qu’une mauvaise case.
+4. **À vérifier** : les placements peu sûrs sont listés (inspecteur du projet, point rouge dans la timeline). Pour chacun : la phrase, la confiance, des cases alternatives en un clic, « C’est la bonne », ou n’importe quelle autre case.
+
+Sans voix transcrite, le script donne des durées estimées (~155 mots/minute) et sert de sous-titres. Une voix off se transcrit depuis son inspecteur (local ou Google).
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

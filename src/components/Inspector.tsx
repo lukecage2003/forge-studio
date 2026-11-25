@@ -8,7 +8,12 @@ import { LAYOUT_FR } from '../engine/brain';
 import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
 import { Slider } from './Slider';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
-import { applyDefaultCaptionToAll, deleteSelection, duplicateShot, fitMusicToVideo } from '../actions';
+import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
+import { PanelPicker } from './FxDiagram';
+import { transcribeClip } from '../rush';
+import { seek } from '../engine/transport';
+import { layoutShots } from '../engine/timeline';
+import { useState } from 'react';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { videoDuration } from '../engine/timeline';
@@ -123,6 +128,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </div>
       </div>
       {!shot.diagram && <ShotThumb shot={shot} />}
+      {shot.match && <MatchSection shot={shot} />}
       {shot.diagram && <DiagramPanel shot={shot} />}
       {!isTitle && (
         <button className="btn sm ghost block" onClick={() => setUI({ mode: 'cut', activePageId: shot.pageId })}>
@@ -250,6 +256,15 @@ function AudioPanel({ clip }: { clip: AudioClip }) {
         <Slider label="Fondu de sortie" value={clip.fadeOut} min={0} max={5} step={0.1}
           fmt={(v) => v.toFixed(1) + ' s'} onChange={(v) => patch({ fadeOut: v }, k('fo'))} />
       </Section>
+      {clip.kind === 'voice' && (
+        <Section title="Transcription">
+          <p className="help">{clip.words?.length ? `${clip.words.length} mots transcrits : le montage auto peut suivre cette voix et la sous-titrer.` : 'Transcris cette voix off pour que le montage suive ce que tu dis.'}</p>
+          <div className="row-btns gap">
+            <button className="btn sm" onClick={() => void transcribeClip(clip.id, 'whisper')}>Transcrire (local)</button>
+            <button className="btn sm google" onClick={() => void transcribeClip(clip.id, 'gemini')}>Google</button>
+          </div>
+        </Section>
+      )}
       <Section title="Placement">
         <Slider label="Début" value={clip.start} min={0} max={Math.max(vlen, clip.start + 1)} step={0.05}
           fmt={(v) => v.toFixed(2) + ' s'} onChange={(v) => patch({ start: v }, k('st'))} />
@@ -272,6 +287,7 @@ function ProjectPanel() {
       <div className="insp-title">
         <div><span className="eyebrow">Projet</span><h2>Réglages</h2></div>
       </div>
+      <ReviewList />
       <Section title="Arrière-plan">
         <Seg<Background> value={p.background} options={[['blur', 'Flou'], ['halftone', 'Trame'], ['page', 'Planche'], ['color', 'Uni']]} onChange={(v) => set({ background: v })} />
         {p.background === 'color' && (
@@ -399,5 +415,64 @@ function ARollPanel({ ar }: { ar: ARoll }) {
         <p className="help">Point de focus : {Math.round(ar.focus.x * 100)} % · {Math.round(ar.focus.y * 100)} %. Change-le dans l’onglet Rush avec « Centrer sur le visage ».</p>
       </Section>
     </>
+  );
+}
+
+/* ---------------------------------------------------------- narration */
+
+function MatchSection({ shot }: { shot: Shot }) {
+  const [pick, setPick] = useState(false);
+  const all = useStore((s) => s.project.shots);
+  const m = shot.match!;
+  const alts = m.alts.map((id) => all.find((x) => x.id === id)).filter((x): x is Shot => !!x && !!x.pageId);
+  const level = m.conf >= 0.7 ? 'sûr' : m.conf >= 0.5 ? 'probable' : 'à vérifier';
+  return (
+    <Section title="Narration" aside={<span className={`conf c-${m.conf >= 0.7 ? 'hi' : m.conf >= 0.5 ? 'mid' : 'lo'}`}>{level} · {Math.round(m.conf * 100)} %</span>}>
+      <blockquote className="said">« {m.sentence} »</blockquote>
+      <p className="help">Case choisie par {m.source === 'google' ? 'Google (sens de la phrase)' : 'Forge (noms, mots et ordre de lecture)'}.</p>
+      {alts.length > 0 && (
+        <>
+          <span className="muted">Autres cases possibles :</span>
+          <div className="alts">
+            {alts.map((a) => (
+              <button key={a.id} title="Utiliser cette case" onClick={() => swapPanel(shot.id, a.pageId!, a.rect)}><AltThumb s={a} /></button>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="row-btns gap">
+        {m.conf < 1 && <button className="btn sm" onClick={() => confirmMatch(shot.id)}>C’est la bonne</button>}
+        <button className="btn sm ghost" onClick={() => setPick(!pick)}>Choisir une autre case…</button>
+      </div>
+      {pick && <PanelPicker onClose={() => setPick(false)} onPick={(pageId, rect) => swapPanel(shot.id, pageId, rect)} />}
+    </Section>
+  );
+}
+
+function AltThumb({ s }: { s: Shot }) {
+  const page = useStore((st) => st.project.pages.find((p) => p.id === s.pageId));
+  const a = page && getImage(page.mediaId);
+  if (!page || !a) return null;
+  const k = 54 / s.rect.h;
+  return <div className="crop" style={{ width: Math.min(s.rect.w * k, 96), height: 54, backgroundImage: `url(${a.url})`, backgroundSize: `${page.width * k}px ${page.height * k}px`, backgroundPosition: `${-s.rect.x * k}px ${-s.rect.y * k}px` }} />;
+}
+
+/** placements the matcher wasn't sure about, to check one by one */
+function ReviewList() {
+  const project = useStore((s) => s.project);
+  const timed = layoutShots(project).filter((t) => t.shot.match && t.shot.match.conf < 0.5);
+  if (!timed.length) return null;
+  return (
+    <Section title={`À vérifier · ${timed.length}`}>
+      <p className="help">Cases placées avec peu de certitude. Clique pour aller au plan, puis confirme ou choisis une autre case.</p>
+      <div className="review-list">
+        {timed.slice(0, 30).map((t) => (
+          <button key={t.shot.id} className="review-item" onClick={() => { setUI({ selection: { kind: 'shot', id: t.shot.id }, mode: 'preview' }); seek(t.start + 0.01); }}>
+            <span className="tc">{Math.floor(t.start / 60)}:{String(Math.floor(t.start % 60)).padStart(2, '0')}</span>
+            <span className="ellipsis">{t.shot.match!.sentence}</span>
+          </button>
+        ))}
+      </div>
+    </Section>
   );
 }

@@ -9,6 +9,8 @@ import { resolveMotion } from './render';
 import { segmentsOf } from './timeline';
 import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speech';
 import { validateProject } from './validate';
+import { narration } from './narration';
+import { planStory } from './story';
 import type { FxItem } from '../types';
 import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMotion } from './brain';
 
@@ -33,6 +35,8 @@ export interface AutoOptions {
   subtitles: boolean;
   /** panelId → sentence index (from Gemini), optional */
   matches?: Record<string, number>;
+  /** follow the narration: each sentence gets the panel that illustrates it */
+  story?: 'auto' | 'local' | 'google' | false;
 }
 
 interface StyleDef {
@@ -354,7 +358,94 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   let faceShare: number | null = null;
   let total = 0;
 
-  if (hasFace) {
+  const narr = o.story ? narration(proj) : { sentences: [], source: 'none' as const };
+  if (o.story && narr.sentences.length && panels.length) {
+    /* ============================ story mode: follow the narration ============================ */
+    const sents = narr.sentences;
+    const plan = await planStory(proj, panels.map((x) => x.shot), sents, o.story);
+    const byId = new Map(panels.map((x) => [x.shot.id, x]));
+    const used = new Set<string>();
+    const named = new Set<string>();
+    const out: Shot[] = [];
+    let flip = false, prevPage: string | null = null, lastLayout: Layout | null = null;
+    const order = panels.map((x) => x.shot.id);
+    const T = hasFace ? segsDuration(segmentsOf(proj.aroll!)) : Math.max(sents[sents.length - 1].e + 0.8, 1);
+    let reviewN = 0;
+    sents.forEach((se, i) => {
+      const a = plan.assign.find((x) => x.sentence === i);
+      const ws = se.s, we = i + 1 < sents.length ? sents[i + 1].s : Math.min(T, se.e + 0.8);
+      const len = we - ws;
+      if (len < 0.3) return;
+      // uncertain over a face cam: show the speaker rather than a wrong panel
+      if (!a?.shotId || (hasFace && a.conf < 0.35)) return;
+      let ids = [a.shotId, ...a.more].filter((id) => byId.has(id));
+      // long sentence: continue with the next panels of the story
+      const want = Math.max(1, Math.min(3, Math.round(len / (st.base * pace * 1.1))));
+      for (let k = order.indexOf(ids[ids.length - 1]) + 1; ids.length < want && k < order.length; k++) if (!used.has(order[k])) ids.push(order[k]);
+      ids = ids.slice(0, want);
+      const per = len / ids.length;
+      ids.forEach((id, k) => {
+        const pn = byId.get(id)!;
+        used.add(id);
+        const start = ws + k * per;
+        const prev = out[out.length - 1];
+        if (prev && prev.id === id && Math.abs((prev.start ?? 0) + prev.duration - start) < 0.05) { prev.duration += per; return; }
+        let layout: Layout = pn.shot.group?.length ? 'grid' : pickLayout((hasFace ? st.faceLayouts : st.soloLayouts).filter(([l]) => l !== 'grid' && !(l === lastLayout && l === 'page')), rand());
+        if (pn.splash && (layout === 'split' || layout === 'page')) layout = 'full';
+        lastLayout = layout;
+        const shot = dress(pn, layout, flip);
+        flip = !flip;
+        let tr: Transition, td: number;
+        if (!prev) { tr = hasFace ? st.enterTr : 'cut'; td = 0.3; }
+        else if (pn.splash) { tr = st.splashTr; td = 0.3; }
+        else if (prevPage === pn.shot.pageId && layout === 'full' && prev.layout === 'full') { tr = 'glide'; td = st.glide; }
+        else { tr = st.pagePool ? st.pagePool[Math.floor(rand() * st.pagePool.length)] : st.pageTr; td = st.pageTrDur; }
+        // character name on screen at its first mention
+        let nameTag = shot.nameTag;
+        for (const c of pn.shot.chars ?? []) {
+          const key = c.toLowerCase();
+          if (!named.has(key) && se.text.toLowerCase().includes(key.split(' ').pop() ?? key)) { nameTag = c; named.add(key); break; }
+        }
+        const conf = k === 0 ? a.conf : Math.max(0.3, a.conf - 0.15);
+        if (conf < 0.5) reviewN++;
+        out.push({
+          ...shot, id: shot.id + (out.some((x) => x.id === shot.id) ? uid('_') : ''), start: +start.toFixed(3), duration: +per.toFixed(3),
+          transition: tr, transitionDur: Math.min(td, per * 0.45), nameTag,
+          match: { sentence: se.text, conf, alts: k === 0 ? a.alts : [], source: plan.engine },
+          auto: { duration: per, layout, motion: shot.motion, style: o.style },
+        });
+        prevPage = pn.shot.pageId;
+      });
+    });
+    // schemas proposed by Google replace the panels of their sentence
+    for (const sc of plan.schemas) {
+      const se = sents[sc.sentence];
+      if (!se || sc.items.length < 2) continue;
+      const ws = se.s, we = sc.sentence + 1 < sents.length ? sents[sc.sentence + 1].s : se.e + 0.8;
+      const items = sc.items.map((it) => { const pn = byId.get(it.panel); return pn ? { id: uid('di_'), label: it.label, sub: it.sub ?? '', pageId: pn.shot.pageId!, rect: pn.shot.rect } : null; }).filter((x): x is NonNullable<typeof x> => !!x);
+      if (items.length < 2) continue;
+      for (let k = out.length - 1; k >= 0; k--) if ((out[k].start ?? 0) >= ws - 0.01 && (out[k].start ?? 0) < we - 0.01) out.splice(k, 1);
+      out.push({ ...newShot(proj, { pageId: null }), start: ws, duration: Math.max(3, we - ws), transition: 'fade', transitionDur: 0.35, layout: 'full', diagram: { kind: sc.kind, title: sc.title, items, links: [] } });
+    }
+    out.sort((x, y) => (x.start ?? 0) - (y.start ?? 0));
+    if (hasFace) {
+      shots = out;
+      proj = { ...proj, aroll: { ...proj.aroll!, punchIn: st.punchIn, drift: st.drift } };
+      faceShare = T > 0 ? 1 - out.reduce((a2, x) => a2 + x.duration, 0) / T : 1;
+    } else {
+      // comics only: the sequence is continuous; a lead-in cover fills the time before the first sentence
+      const first = out[0]?.start ?? 0;
+      shots = out.map((x, k) => ({ ...x, start: undefined, duration: +(((out[k + 1]?.start ?? T) - (x.start ?? 0))).toFixed(3) })).filter((x) => x.duration >= 0.3);
+      if (first > 0.4 && shots[0]) {
+        const cover = panels.find((x) => x.cover !== undefined) ?? panels[0];
+        shots.unshift({ ...dress(cover, 'full', false), id: cover.shot.id + uid('_'), duration: +first.toFixed(3), transition: 'cut', transitionDur: 0 });
+      }
+    }
+    total = T;
+    const words = narr.sentences.flatMap((x) => x.words);
+    if (o.subtitles && words.length) proj = { ...proj, subtitles: buildSubtitles(words, st.maxWords), subtitleStyle: { ...proj.subtitleStyle, on: true, preset: st.preset, anim: 'words', maxWords: st.maxWords } };
+    notes.push(`Narration suivie (${narr.source === 'script' ? 'script, durées estimées' : 'voix'}) · associations ${plan.engine === 'google' ? 'Google' : 'locales'} · ${used.size} cases retenues sur ${panels.length}${reviewN ? ` · ${reviewN} à vérifier` : ''}.`);
+  } else if (hasFace) {
     /* ============================ face cam + comics ============================ */
     const ar = proj.aroll!;
     const segs: Seg[] = segmentsOf(ar);

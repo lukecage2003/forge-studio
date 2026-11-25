@@ -172,3 +172,24 @@ export async function detectFace(quiet = false) {
     setUI({ busy: null });
   }
 }
+
+/** transcribe a voice-over clip so the edit can follow it (and subtitle it) */
+export async function transcribeClip(id: string, engine: 'whisper' | 'gemini', model: WhisperModel = 'base') {
+  const c = getState().project.audio.find((x) => x.id === id);
+  const buf = c && getAudio(c.mediaId);
+  if (!c || !buf) return;
+  try {
+    setUI({ busy: 'Préparation de la voix…' });
+    const pcm = await toMono16k(buf);
+    const lang = getGoogle().language === 'en' ? 'en' : 'fr';
+    const words = engine === 'gemini'
+      ? await geminiTranscribe(pcm, (p) => setUI({ busy: `Transcription Google… ${Math.round(p * 100)} %` }))
+      : await whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label }));
+    update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === id ? { ...x, words } : x)) }));
+    toast(`Voix off transcrite : ${words.length} mots`);
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  } finally {
+    setUI({ busy: null });
+  }
+}

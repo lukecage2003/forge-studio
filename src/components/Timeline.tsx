@@ -286,6 +286,7 @@ function ShotBlock({ shot, project, left, width, on, index, onMove, onResize }: 
       <span className="shot-idx">{index + 1}</span>
       {width > 54 && <span className="shot-dur">{shot.duration.toFixed(1)}s</span>}
       {index > 0 && shot.transition !== 'cut' && <span className="tr-mark" title={`Transition : ${shot.transition}`} />}
+      {shot.match && shot.match.conf < 0.5 && <span className="review-dot" title={`À vérifier : « ${shot.match.sentence} »`} />}
       <div className="resize-h" onPointerDown={onResize} title="Glisser pour changer la durée" />
     </div>
   );
