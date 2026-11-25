@@ -1,4 +1,4 @@
-import { FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
+import { DIAGRAM_3D, FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { personMask } from './segment';
 import { faceAt } from './faces';
 import { layersFor, type Layers } from './layers';
@@ -10,6 +10,7 @@ import { hashSeed, rng } from './rng';
 import { TRANSITION, tp } from './effects';
 import { EASE } from './motion';
 import { drawGlTransition } from './gl';
+import { draw3D, itemValues } from './scene3d';
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
 import { toSource, type Seg } from './speech';
 
@@ -452,11 +453,27 @@ function card(ctx: Ctx, project: Project, it: { label: string; sub?: string; pag
   ctx.restore();
 }
 
+const FALLBACK_2D: Partial<Record<Diagram['kind'], Diagram['kind']>> = { orbit: 'ranking', cosmos: 'ranking', tiers: 'scale' };
+
+/** a figure that counts up while its bar grows (manim's DecimalNumber) */
+function fmtValue(v: number) {
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(a >= 1e10 ? 0 : 1) + ' Md';
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + ' M';
+  if (a >= 1e4) return Math.round(v / 1e3) + ' k';
+  return a >= 100 ? String(Math.round(v)) : String(+v.toFixed(1));
+}
+
 function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagram, local: number, dur: number) {
   const accent = project.accent;
   const vertical = H > W;
   const U = Math.min(W, H) * 0.035;
-  ctx.drawImage(halftone(W, H, accent), 0, 0);
+  const in3D = DIAGRAM_3D.includes(d.kind) && draw3D(ctx, project, d, W, H, local, dur);
+  if (!in3D) {
+    ctx.drawImage(halftone(W, H, accent), 0, 0);
+    const fb = FALLBACK_2D[d.kind];
+    if (fb) d = { ...d, kind: fb };
+  }
   const z = 1 + 0.03 * easeInOutSine(clamp(local / dur, 0, 1));
   ctx.save();
   ctx.translate(W / 2, H / 2);
@@ -478,12 +495,64 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     ctx.restore();
   }
   const n = d.items.length;
-  if (!n) { ctx.restore(); return; }
+  if (!n || in3D) { ctx.restore(); return; }
   const span = Math.max(0.5, dur * 0.7);
   const appear = (i: number) => clamp((local - 0.35 - (i * span) / n) / 0.45, 0, 1);
   const top = vertical ? H * 0.17 : H * 0.22, bottom = H * 0.93;
 
-  if (d.kind === 'timeline') {
+  if (d.kind === 'scale') {
+    // manim-style chart: axes are drawn on, bars grow, the figures count up
+    const vals = itemValues(d);
+    const numeric = d.items.every((it) => Number.isFinite(parseFloat(String(it.sub ?? '').replace(/\s/g, '').replace(',', '.'))));
+    const vmax = Math.max(...vals), vmin = Math.min(...vals);
+    const useLog = vmax / Math.max(1e-9, vmin) > 40;
+    const norm = (v: number) => (useLog ? Math.log1p(v) / Math.log1p(vmax) : v / vmax);
+    const ax = EASE.standard(clamp((local - 0.15) / 0.6, 0, 1));
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = U * 0.12;
+    ctx.lineCap = 'round';
+    if (!vertical) {
+      const x0 = W * 0.07, x1 = W * 0.95, yb = bottom - U * 1.4, yt = top + U * 0.8;
+      ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x0 + (x1 - x0) * ax, yb); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x0, yb - (yb - yt) * ax); ctx.stroke();
+      ctx.save(); ctx.globalAlpha = 0.12 * ax; ctx.setLineDash([U * 0.4, U * 0.4]); ctx.lineWidth = U * 0.06;
+      for (let k = 1; k <= 4; k++) { const y = yb - ((yb - yt) * k) / 4; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); }
+      ctx.restore();
+      const step = (x1 - x0) / n, ch = Math.min((yb - yt) * 0.42, step * 1.1), cw = Math.min(step * 0.86, ch * 0.95);
+      d.items.forEach((it, i) => {
+        const g = EASE.enter(appear(i));
+        const cx = x0 + step * (i + 0.5);
+        const bh = (yb - yt - ch - U) * norm(vals[i]) * g;
+        const grad = ctx.createLinearGradient(0, yb - bh, 0, yb);
+        grad.addColorStop(0, accent); grad.addColorStop(1, hexA(accent, 0.25));
+        ctx.fillStyle = grad;
+        ctx.fillRect(cx - step * 0.22, yb - bh, step * 0.44, bh);
+        card(ctx, project, { ...it, sub: numeric ? undefined : it.sub }, cx, yb - bh - ch / 2 - U * 0.3, cw, ch, appear(i), accent, U);
+        if (numeric && g > 0) {
+          ctx.fillStyle = '#fff'; ctx.font = `700 ${U * 1.1}px ${FONT_STACK.grotesk}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(fmtValue(vals[i] * g), cx, yb - bh / 2, step * 0.9);
+        }
+      });
+    } else {
+      const x0 = W * 0.08, x1 = W * 0.94, y0 = top + U, y1 = bottom - U;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y0 + (y1 - y0) * ax); ctx.stroke();
+      const step = (y1 - y0) / n, ch = step * 0.84, cw = Math.min(W * 0.3, ch * 0.9);
+      d.items.forEach((it, i) => {
+        const g = EASE.enter(appear(i));
+        const cy = y0 + step * (i + 0.5);
+        card(ctx, project, { ...it, sub: numeric ? undefined : it.sub }, x0 + U * 0.6 + cw / 2, cy, cw, ch, appear(i), accent, U);
+        const bx = x0 + cw + U * 1.2, bw = (x1 - bx) * norm(vals[i]) * g;
+        const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+        grad.addColorStop(0, hexA(accent, 0.3)); grad.addColorStop(1, accent);
+        ctx.fillStyle = grad;
+        ctx.fillRect(bx, cy - ch * 0.18, bw, ch * 0.36);
+        if (numeric && g > 0) {
+          ctx.fillStyle = '#fff'; ctx.font = `700 ${U * 1.1}px ${FONT_STACK.grotesk}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(fmtValue(vals[i] * g), bx + U * 0.4, cy - ch * 0.32);
+        }
+      });
+    }
+  } else if (d.kind === 'timeline') {
     if (vertical) {
       const x = W / 2, y0 = top + U, y1 = bottom - U;
       const step = (y1 - y0) / Math.max(1, n);

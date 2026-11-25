@@ -114,7 +114,10 @@ export interface Shot {
   auto?: { duration: number; layout: Layout; motion: Motion; style: string };
 }
 
-export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking';
+export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking'
+  // manim-style chart, and 3D scenes built from comic panels (three.js)
+  | 'scale' | 'orbit' | 'cosmos' | 'tiers';
+export const DIAGRAM_3D: DiagramKind[] = ['orbit', 'cosmos', 'tiers'];
 export interface DiagramItem { id: string; label: string; sub?: string; pageId?: string; rect?: Rect }
 export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: { a: number; b: number; label?: string }[] }
 

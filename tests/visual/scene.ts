@@ -91,3 +91,35 @@ export async function renderGl(): Promise<Record<string, string>> {
   }
   return out;
 }
+
+/** manim-style chart and 3D scenes; first in 2D (no three.js yet: the fallback), then in 3D */
+export async function renderScenes(): Promise<Record<string, string>> {
+  const S3 = await import('../../src/engine/scene3d');
+  const p = await buildScene({}, ['cut']);
+  const rects = [{ x: 30, y: 30, w: 740, h: 360 }, { x: 30, y: 420, w: 360, h: 360 }, { x: 410, y: 420, w: 360, h: 360 }, { x: 30, y: 810, w: 740, h: 360 }];
+  const items = rects.map((r, i) => ({ id: 'it' + i, label: ['Batman', 'Flash', 'Superman', 'Galactus'][i], sub: ['10', '1 000', '100 000', '1000000000'][i], pageId: 'pg' + (i % 3), rect: r }));
+  const kinds = ['scale', 'orbit', 'cosmos', 'tiers'] as const;
+  const W = 640, H = 360;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d')!;
+  const out: Record<string, string> = {};
+  const shoot = (tag: string) => {
+    for (const k of kinds) {
+      const proj = { ...p, shots: [{ ...p.shots[0], id: 'd', pageId: null, duration: 8, transition: 'cut' as const, transitionDur: 0, diagram: { kind: k, title: 'Échelle', items, links: [] } }] };
+      const rd = createRenderer(W, H);
+      for (const f of [0.15, 0.5, 0.9]) { rd.draw(ctx, proj, 8 * f); out[`${tag}-${k}-${Math.round(f * 100)}`] = c.toDataURL('image/png'); }
+    }
+  };
+  if (!S3.has3D()) shoot('fallback2d');
+  await S3.ensure3D();
+  shoot('scene');
+  // portrait (TikTok / Shorts)
+  c.width = 360; c.height = 640;
+  const p0 = p;
+  for (const k of ['orbit', 'cosmos', 'tiers'] as const) {
+    const proj = { ...p0, format: '9:16' as const, shots: [{ ...p0.shots[0], id: 'v', pageId: null, duration: 8, transition: 'cut' as const, transitionDur: 0, diagram: { kind: k, title: 'Échelle', items, links: [] } }] };
+    const rd = createRenderer(360, 640);
+    for (const f of [0.2, 0.9]) { rd.draw(ctx, proj, 8 * f); out[`portrait-${k}-${Math.round(f * 100)}`] = c.toDataURL('image/png'); }
+  }
+  return out;
+}

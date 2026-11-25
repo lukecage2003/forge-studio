@@ -7,6 +7,7 @@ import { filesToPages } from './engine/importers';
 import { classifyPage, medianAspect } from './engine/classify';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
+import { layoutShots } from './engine/timeline';
 import { toast } from './components/Toast';
 
 
@@ -215,11 +216,11 @@ export const patchFx = (id: string, patch: Partial<FxItem>, key?: string) =>
 
 export function addDiagram(kind: DiagramKind = 'timeline') {
   const p0 = getState().project;
-  const panels = p0.shots.filter((s) => s.pageId).slice(0, kind === 'versus' ? 2 : 4);
-  const items = panels.map((s, i) => ({ id: uid('di_'), label: kind === 'timeline' ? `Étape ${i + 1}` : `Personnage ${i + 1}`, sub: '', pageId: s.pageId!, rect: s.rect }));
-  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top' };
+  const panels = p0.shots.filter((s) => s.pageId).slice(0, kind === 'versus' ? 2 : kind === 'orbit' ? 6 : 4);
+  const items = panels.map((s, i) => ({ id: uid('di_'), label: kind === 'timeline' ? `Étape ${i + 1}` : `Personnage ${i + 1}`, sub: kind === 'scale' || kind === 'tiers' ? String((i + 1) * 10) : '', pageId: s.pageId!, rect: s.rect }));
+  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top', scale: 'Échelle de puissance', orbit: 'Les personnages', cosmos: 'Au-delà', tiers: 'Du plus faible au plus fort' };
   const shot = newShot(p0, {
-    pageId: null, duration: 6, transition: 'fade', transitionDur: 0.4, layout: 'full',
+    pageId: null, duration: kind === 'orbit' || kind === 'cosmos' || kind === 'tiers' ? 8 : 6, transition: 'fade', transitionDur: 0.4, layout: 'full',
     start: p0.aroll ? getState().ui.playhead : undefined,
     caption: { ...p0.defaultCaption, text: '' },
     diagram: { kind, title: titles[kind], items, links: [] },
@@ -229,7 +230,9 @@ export function addDiagram(kind: DiagramKind = 'timeline') {
     const i = sel?.kind === 'shot' ? p.shots.findIndex((s) => s.id === sel.id) + 1 : p.shots.length;
     return { ...p, shots: [...p.shots.slice(0, i), shot, ...p.shots.slice(i)] };
   });
-  setUI({ selection: { kind: 'shot', id: shot.id }, mode: 'preview' });
+  // show the new diagram right away
+  const at = layoutShots(getState().project).find((t) => t.shot.id === shot.id);
+  setUI({ selection: { kind: 'shot', id: shot.id }, mode: 'preview', ...(at ? { playhead: at.start + Math.min(1.5, at.shot.duration * 0.4) } : {}) });
 }
 
 export const togglePageSkip = (id: string) =>

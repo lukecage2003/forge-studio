@@ -314,3 +314,43 @@ Chaque profil (`src/engine/direction.ts`) fixe :
 **Tests** :
 - 10 tests vérifient l'analyse des phrases, le budget de chacun des 8 profils sur 2 min 24, l'absence de répétition, la palette, les durées et le son.
 - Test réel sur Watchmen n°3 avec un script de 17 phrases : 8 montages, de 1 effet fort par minute (Premium) à 3,4 (Action), aucune répétition, aucune erreur de rendu, export MP4 vérifié.
+
+## Moteur de production : phase 5 (3D et visualisation)
+
+Toutes ces scènes sont construites uniquement avec tes cases de comics : aucune image n'est générée.
+
+**Échelle** (2D, à la manière de manim) : les axes se tracent, les barres montent, les chiffres défilent. Mets une valeur dans « Détail » (10, 1 000, 1000000000). Si les valeurs vont du simple à plus de 40 fois plus, l'échelle devient logarithmique pour rester lisible. Sans valeur, l'ordre de la liste fait le classement.
+
+**Scènes 3D** (`src/engine/scene3d.ts`, three.js 0.187, licence MIT) :
+
+| Scène | Ce qu'on voit |
+|---|---|
+| Orbite 3D | les cases en cercle dans l'espace ; la caméra tourne puis passe de l'une à l'autre, les cases restent tournées vers elle |
+| Cosmos 3D | les cases flottent à différentes profondeurs, la caméra avance à travers les étoiles et finit sur la dernière |
+| Paliers 3D | échelle de puissance : des piliers montent du plus faible au plus fort, la caméra grimpe |
+
+Fonctionnement :
+- **Où les trouver :** bouton « Scène 3D » sous « Carton titre / Schéma », types dans l'inspecteur (2D et 3D), palette de commandes (Ctrl K).
+- **Chargement :** three.js est chargé seulement quand le projet contient une scène 3D (188 Ko compressés, dans un fichier séparé).
+- **Reproductible :** chaque image est une fonction du temps (étoiles semées, caméra lissée par les jetons de mouvement). L'aperçu et l'export sont identiques, et deux rendus donnent les mêmes pixels.
+- **Formats :** les caméras s'adaptent au vertical 9:16, avec des cases plus petites et une caméra qui suit la montée.
+- **Sans WebGL :** la scène se dessine en 2D (classement ou échelle), jamais d'écran vide.
+
+**Dans le montage auto** :
+- **Cinématique cosmique** peut transformer une phrase « cosmique » en scène Cosmos 3D.
+- **Échelle de puissance** peut transformer une comparaison en Paliers 3D.
+- La scène reprend la case de la phrase et ses voisines.
+- Au plus 2 scènes par vidéo, espacées de 90 s ; les autres profils n'en créent pas.
+
+**Corrections d'interface** :
+- La page ne défile plus sur le côté quand la frise est longue (grille de l'application bornée à l'écran).
+- Après l'ajout d'un schéma, l'aperçu saute dessus.
+
+**Tests** :
+- **Unitaires :** 27 tests au total. Les nouveaux vérifient la lecture des valeurs, et le profil cosmique (au plus 2 scènes, espacées, faites de cases, aucune pour les autres profils).
+- **Visuels :** 80 images de référence, dont l'échelle, les 3 scènes 3D en 16:9 et en 9:16, et leur version 2D de secours. Elles sont identiques d'un lancement à l'autre.
+- **Réel sur Watchmen n°3, avec script :**
+  - les profils Cosmique et Puissance placent chacun une scène 3D sur la bonne phrase ;
+  - environ 100 ms par image 3D en 1080p, sans carte graphique ;
+  - le bouton et l'inspecteur fonctionnent, sans erreur de page ;
+  - export MP4 1080p avec la scène vérifié.

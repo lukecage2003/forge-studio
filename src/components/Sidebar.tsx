@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, FileVideo, Eye, EyeOff, Network } from 'lucide-react';
+import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, FileVideo, Eye, EyeOff, Network, Orbit } from 'lucide-react';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
@@ -91,6 +91,7 @@ export function Sidebar() {
           <button className="btn ghost" onClick={() => addTitleCard()}><Type size={15} /> Carton titre</button>
           <button className="btn ghost" onClick={() => addDiagram('timeline')} title="Frise, réseau de personnages, duel ou classement, avec tes cases"><Network size={15} /> Schéma</button>
         </div>
+        <button className="btn ghost block" onClick={() => addDiagram('orbit')} title="Tes cases dans l’espace : orbite, cosmos ou paliers de puissance (3D)"><Orbit size={15} /> Scène 3D</button>
       </section>
 
       <section className="side-section">

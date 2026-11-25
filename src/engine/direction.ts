@@ -39,6 +39,8 @@ export interface Profile {
   sound: { volume: number; perMin: number };
   /** density: layouts allowed for comics-only edits */
   layouts: [Layout, number][];
+  /** 3D scene the profile may build from its panels on the right beat (at most one per 90 s) */
+  scene?: { kind: 'cosmos' | 'tiers' | 'orbit'; beat: Beat };
 }
 
 export const PROFILES: Profile[] = [
@@ -65,6 +67,7 @@ export const PROFILES: Profile[] = [
     look: { grade: 'cinema', vignette: 0.5, grain: 0.3, paper: 0, chroma: true, speedLines: false, balloonPop: true, parallax: true },
     sound: { volume: 0.55, perMin: 4 },
     layouts: [['full', 6], ['page', 1]],
+    scene: { kind: 'cosmos', beat: 'cosmic' },
   },
   {
     id: 'action', label: 'Action et combat', desc: 'Nerveux : whips, coupes BD, zooms flous et tremblements sur les coups.',
@@ -125,6 +128,7 @@ export const PROFILES: Profile[] = [
     look: { grade: 'punch', vignette: 0.3, grain: 0.1, paper: 0, chroma: true, speedLines: true, balloonPop: true, parallax: true },
     sound: { volume: 0.65, perMin: 8 },
     layouts: [['full', 5], ['grid', 1.6]],
+    scene: { kind: 'tiers', beat: 'compare' },
   },
   {
     id: 'editorial', label: 'Commentaire éditorial', desc: 'Ton avis face caméra : coupes sèches, poussées et volets, un flash pour souligner une opinion forte.',
@@ -145,7 +149,7 @@ export const PROFILE: Record<ProfileId, Profile> = Object.fromEntries(PROFILES.m
 /** which category of transition answers which beat */
 const BEAT_CAT: Partial<Record<Beat, string>> = { action: 'action', cosmic: 'cosmic', date: 'info', compare: 'action', list: 'info', emotion: 'cinematic' };
 
-export interface DirectionReport { profile: ProfileId; accents: number; strong: number; beats: Partial<Record<Beat, number>> }
+export interface DirectionReport { profile: ProfileId; accents: number; strong: number; scenes: number; beats: Partial<Record<Beat, number>> }
 
 /** shots in time order with their start time (works with and without a face cam) */
 function timeline(shots: Shot[]): { s: Shot; i: number; t: number }[] {
@@ -163,7 +167,7 @@ export function direct(shots: Shot[], prof: Profile): { shots: Shot[]; report: D
   const out = shots.map((s) => ({ ...s }));
   const rand = rng(hashSeed(prof.id + shots.length));
   const used: { t: number; level: 1 | 2 }[] = [];
-  const report: DirectionReport = { profile: prof.id, accents: 0, strong: 0, beats: {} };
+  const report: DirectionReport = { profile: prof.id, accents: 0, strong: 0, scenes: 0, beats: {} };
   let prevTr: Transition | null = null;
   let lastVisible: Transition | null = null;
   let sinceMark = 9;
@@ -210,6 +214,39 @@ export function direct(shots: Shot[], prof: Profile): { shots: Shot[]; report: D
     prevTr = tr;
     if (tr !== 'cut' && tr !== 'glide') lastVisible = tr;
   });
+  // 3D scenes from the panels themselves, on the beat the profile is about
+  if (prof.scene) {
+    let last = -1e9;
+    const panelsAround = (k: number) => {
+      const seen = new Set<string>();
+      const items: { s: Shot }[] = [];
+      for (const d of [0, 1, -1, 2, -2, 3]) {
+        const o = order[k + d]?.s;
+        if (!o?.pageId || o.diagram) continue;
+        const key = o.pageId + JSON.stringify(o.rect);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push({ s: o });
+        if (items.length >= 3) break;
+      }
+      return items;
+    };
+    order.forEach(({ s, t }, k) => {
+      if (report.scenes >= 2 || t - last < 90 || k === 0 || beats[k] !== prof.scene!.beat || !s.pageId || !s.auto || s.duration < 2.4) return;
+      const items = panelsAround(k);
+      if (items.length < 2) return;
+      if (prof.scene!.kind === 'tiers') items.sort((a, b) => order.findIndex((o) => o.s === a.s) - order.findIndex((o) => o.s === b.s));
+      s.diagram = {
+        kind: prof.scene!.kind, title: '', links: [],
+        items: items.map(({ s: o }, i) => ({ id: `d3_${s.id}_${i}`, label: o.nameTag ?? o.chars?.[0] ?? '', sub: '', pageId: o.pageId!, rect: o.rect })),
+      };
+      s.pageId = null;
+      s.layout = 'full';
+      s.shake = 0;
+      last = t;
+      report.scenes++;
+    });
+  }
   return { shots: out, report };
 }
 

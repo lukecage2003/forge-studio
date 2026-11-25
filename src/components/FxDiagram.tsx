@@ -160,7 +160,14 @@ export function LookSection() {
 
 /* ------------------------------------------------------------- diagrams */
 
-const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement']];
+const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement'], ['scale', 'Échelle']];
+const KINDS_3D: [DiagramKind, string][] = [['orbit', 'Orbite 3D'], ['cosmos', 'Cosmos 3D'], ['tiers', 'Paliers 3D']];
+const HELP_KIND: Partial<Record<DiagramKind, string>> = {
+  scale: 'Barres qui montent et chiffres qui défilent. Mets une valeur dans « Détail » (ex. 100, 1 000 000) ; sinon l’ordre de la liste fait le classement.',
+  orbit: 'Tes cases en cercle dans l’espace : la caméra tourne puis passe de l’une à l’autre.',
+  cosmos: 'Tes cases flottent à différentes profondeurs, la caméra avance à travers les étoiles.',
+  tiers: 'Échelle de puissance : des piliers montent du plus faible au plus fort, la caméra grimpe. Mets une valeur dans « Détail ».',
+};
 
 export function DiagramPanel({ shot }: { shot: Shot }) {
   useMediaVersion();
@@ -179,7 +186,9 @@ export function DiagramPanel({ shot }: { shot: Shot }) {
   return (
     <section className="insp-section">
       <div className="insp-head"><h3>Schéma</h3></div>
-      <div className="seg full">{KINDS.map(([k, l]) => <button key={k} className={d.kind === k ? 'on' : ''} onClick={() => set({ kind: k })}>{l}</button>)}</div>
+      <div className="seg full wrap">{KINDS.map(([k, l]) => <button key={k} className={d.kind === k ? 'on' : ''} onClick={() => set({ kind: k })}>{l}</button>)}</div>
+      <div className="seg full">{KINDS_3D.map(([k, l]) => <button key={k} className={d.kind === k ? 'on' : ''} onClick={() => set({ kind: k })}>{l}</button>)}</div>
+      {HELP_KIND[d.kind] && <p className="help">{HELP_KIND[d.kind]}</p>}
       <input className="input" placeholder="Titre du schéma" value={d.title} onChange={(e) => set({ title: e.target.value }, shot.id + 'dt')} />
       <div className="dia-items">
         {d.items.map((it, i) => (
@@ -187,7 +196,7 @@ export function DiagramPanel({ shot }: { shot: Shot }) {
             {it.pageId && it.rect ? <Crop pageId={it.pageId} rect={it.rect} h={44} /> : <div className="crop empty" style={{ width: 44, height: 44 }} />}
             <div className="dia-fields">
               <input className="input sm" placeholder={d.kind === 'timeline' ? 'Événement' : 'Nom'} value={it.label} onChange={(e) => setItem(i, { label: e.target.value }, it.id + 'l')} />
-              <input className="input sm" placeholder={d.kind === 'timeline' ? 'Date, numéro…' : 'Détail'} value={it.sub ?? ''} onChange={(e) => setItem(i, { sub: e.target.value }, it.id + 's')} />
+              <input className="input sm" placeholder={d.kind === 'timeline' ? 'Date, numéro…' : d.kind === 'scale' || d.kind === 'tiers' ? 'Valeur (ex. 100)' : 'Détail'} value={it.sub ?? ''} onChange={(e) => setItem(i, { sub: e.target.value }, it.id + 's')} />
             </div>
             <div className="dia-btns">
               <button className="icon-btn sm ghost" onClick={() => move(i, -1)} disabled={!i} aria-label="Monter"><ArrowUp size={13} /></button>

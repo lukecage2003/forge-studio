@@ -3,6 +3,8 @@ import { Pause, Play, SkipBack, SkipForward, ShieldCheck, Maximize, Repeat } fro
 import { FORMATS } from '../types';
 import { createRenderer, loadFonts } from '../engine/render';
 import { useMediaVersion } from '../lib/hooks';
+import { ensure3D, has3D } from '../engine/scene3d';
+import { DIAGRAM_3D } from '../types';
 import { setUI, useStore } from '../store';
 import { pause, seek, toggle } from '../engine/transport';
 import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
@@ -34,6 +36,10 @@ export function Preview() {
   const dur = videoDuration(project);
 
   useEffect(() => { void loadFonts().then(() => setFontsReady(true)); }, []);
+  // three.js is loaded only when the project has a 3D scene
+  const needs3D = project.shots.some((s) => s.diagram && DIAGRAM_3D.includes(s.diagram.kind));
+  const [ready3D, setReady3D] = useState(has3D());
+  useEffect(() => { if (needs3D && !ready3D) void ensure3D().then((m) => setReady3D(!!m)); }, [needs3D, ready3D]);
   const needsCutout = !!project.aroll && project.look?.cutout !== false && project.fx?.some((f) => f.kind !== 'callout');
   useEffect(() => {
     if (needsCutout && !segmenterReady()) void loadSegmenter().then(() => notifyMedia());
@@ -59,7 +65,7 @@ export function Preview() {
     }
     const face = ar ? () => arollPlayer.frame(ar.mediaId) : undefined;
     if (ctx) renderer.draw(ctx, project, t, face);
-  }, [renderer, project, t, mv, fontsReady, playing]);
+  }, [renderer, project, t, mv, fontsReady, playing, ready3D]);
 
   // 2.5D layers of the shot on screen (and the next one) are prepared on the fly
   useEffect(() => {

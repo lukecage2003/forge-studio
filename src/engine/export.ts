@@ -1,3 +1,4 @@
+import { DIAGRAM_3D } from '../types';
 import {
   ALL_FORMATS, AudioBufferSource, type WrappedCanvas, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
   QUALITY_HIGH, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
@@ -48,6 +49,11 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
       o.onProgress(0, `Relief 2.5D ${i + 1}/${full.length}…`);
       await ensureLayers(project, full[i]);
     }
+  }
+  if (project.shots.some((s) => s.diagram && DIAGRAM_3D.includes(s.diagram.kind))) {
+    o.onProgress(0, 'Chargement des scènes 3D…');
+    const { ensure3D } = await import('./scene3d');
+    await ensure3D();
   }
   const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });

@@ -699,7 +699,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     proj = applyProfileLook({ ...proj, shots: d.shots }, prof);
     const beats = Object.entries(d.report.beats).filter(([b]) => b !== 'plain' && b !== 'hook').sort((a, b) => b[1] - a[1]).slice(0, 3)
       .map(([b, n]) => `${n} ${BEAT_FR[b as keyof typeof BEAT_FR]}`).join(', ');
-    notes.push(`Direction « ${prof.label} » : ${d.report.strong} effet(s) fort(s), ${d.report.accents} accent(s), le reste en coupes franches.${beats ? ' Temps forts repérés : ' + beats + '.' : ''}`);
+    notes.push(`Direction « ${prof.label} » : ${d.report.strong} effet(s) fort(s), ${d.report.accents} accent(s)${d.report.scenes ? `, ${d.report.scenes} scène(s) 3D` : ''}, le reste en coupes franches.${beats ? ' Temps forts repérés : ' + beats + '.' : ''}`);
   }
 
   /* mix: music fitted to the edit, ducked under the voice */

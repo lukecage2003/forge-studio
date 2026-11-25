@@ -222,3 +222,35 @@ describe('phase 4 : direction créative', () => {
     for (let i = 1; i < b.length; i++) expect(b[i].t - b[i - 1].t).toBeGreaterThanOrEqual(1.2);
   });
 });
+
+import { itemValues } from '../src/engine/scene3d';
+import { PROFILE } from '../src/engine/direction';
+
+describe('phase 5 : schémas et scènes 3D', () => {
+  it('lit les valeurs des barres, sinon prend le rang', () => {
+    const d = (subs: string[]) => ({ kind: 'scale', title: '', links: [], items: subs.map((s, i) => ({ id: 'i' + i, label: '', sub: s })) }) as never;
+    expect(itemValues(d(['10', '1 000', '2,5']))).toEqual([10, 1000, 2.5]);
+    expect(itemValues(d(['fort', '', 'x']))).toEqual([1, 2, 3]);
+  });
+  it('le profil cosmique crée au plus 2 scènes 3D, espacées, à partir des cases', () => {
+    const shots = Array.from({ length: 80 }, (_, i) => ({
+      id: 's' + i, pageId: 'p' + (i % 7), rect: { x: i, y: 0, w: 10, h: 10 }, duration: 3, framing: 'fit', motion: 'auto', intensity: 0.6,
+      transition: 'cut', transitionDur: 0, shake: 0, layout: 'full', caption: { text: i % 5 === 2 ? 'Il voit tout l’univers' : 'Il marche', preset: 'tiktok', anim: 'pop', y: 0.8, size: 1 },
+      auto: { duration: 3, layout: 'full', motion: 'auto', style: 'cinematic' },
+    })) as never[];
+    const { shots: out, report } = direct(shots, PROFILE.cosmic);
+    const scenes = out.map((s: any, i: number) => ({ s, t: i * 3 })).filter((x: any) => x.s.diagram);
+    expect(report.scenes).toBe(scenes.length);
+    expect(scenes.length).toBeGreaterThan(0);
+    expect(scenes.length).toBeLessThanOrEqual(2);
+    for (const x of scenes) {
+      expect(x.s.diagram.kind).toBe('cosmos');
+      expect(x.s.pageId).toBeNull();
+      expect(x.s.diagram.items.length).toBeGreaterThanOrEqual(2);
+      for (const it of x.s.diagram.items) expect(it.pageId).toBeTruthy();
+    }
+    if (scenes.length === 2) expect(scenes[1].t - scenes[0].t).toBeGreaterThanOrEqual(90);
+    // the other profiles never build scenes
+    expect(direct(shots, PROFILE.premium).report.scenes).toBe(0);
+  });
+});
