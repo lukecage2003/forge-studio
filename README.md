@@ -100,6 +100,16 @@ Bouton **Schéma** : frise chronologique, réseau de personnages (liens nommés)
 
 Après chaque montage auto et avant chaque export, Forge vérifie et répare le projet : pages manquantes, durées invalides, cases hors page, chevauchements, audio au-delà de sa source, sous-titres vides.
 
+## 9. Qualité du rendu
+
+- **Zooms intelligents** : chaque case reçoit un point d’intérêt (zone la plus détaillée, bulles exclues) ; les zooms y vont au lieu du centre.
+- **Lecture guidée** des pages incertaines : cadrage serré qui longe chaque bande, texte lisible même en 9:16 ; bandeaux de sites de scans écartés.
+- **12 transitions** : cut, glissé caméra, fondu, poussée, whip, zoom, flash, coupe BD diagonale, iris, glitch, passage au noir, fondu flou ; chaque style varie ses transitions.
+- **Secousse en ressort** (position + rotation, sans bords visibles), **lignes de vitesse** manga sur les impacts, **caméra à l’épaule** réglable.
+- **Flou de mouvement** à l’export (4 sous-images, obturateur 180°) sur les mouvements rapides.
+- **Bruitages automatiques synthétisés** : souffle sur les transitions, impact sur les pleines pages et les mots chocs, volume réglable, toujours sous la voix.
+- **Durée respectée** : si trop de cases pour la durée demandée, Forge en choisit une sélection (couvertures et pleines pages gardées).
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

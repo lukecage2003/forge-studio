@@ -10,6 +10,7 @@ import { layoutShots, segmentsOf, videoDuration } from './timeline';
 import { ensureMedia, ensureVideo, mediaBlob } from './media';
 import { toSource } from './speech';
 import { validateProject } from './validate';
+import { sfxEvents } from './sfx';
 import { loadSegmenter } from './segment';
 
 export interface ExportOpts {
@@ -43,7 +44,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
   const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });
   if (!vcodec) throw new Error('Aucun encodeur vidéo disponible dans ce navigateur.');
-  const hasAudio = project.audio.length > 0 || !!project.aroll;
+  const hasAudio = project.audio.length > 0 || !!project.aroll || sfxEvents(project).length > 0;
   const acodec = hasAudio ? await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, quality }) : null;
 
   const canvas = document.createElement('canvas');
@@ -51,6 +52,10 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
   canvas.height = H;
   const ctx = canvas.getContext('2d', { alpha: false })!;
   const renderer = createRenderer(W, H);
+  const sub = document.createElement('canvas');
+  sub.width = W;
+  sub.height = H;
+  const subCtx = sub.getContext('2d', { alpha: false })!;
 
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
   const video = new CanvasSource(canvas, { codec: vcodec, quality, keyFrameInterval: 1 });
@@ -99,7 +104,16 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
         const r = await faceIter.next();
         faceFrame = (r.value?.canvas as CanvasImageSource) ?? null;
       }
-      renderer.draw(ctx, project, t, () => faceFrame);
+      if (project.look?.motionBlur !== false && renderer.fast(project, t)) {
+        // motion blur: average 4 sub-frames across the shutter (180°) on fast moves only
+        const n = 4;
+        for (let k = 0; k < n; k++) {
+          renderer.draw(subCtx, project, t + ((k + 0.5) / n - 0.5) * dt * 0.5, () => faceFrame);
+          ctx.globalAlpha = 1 / (k + 1);
+          ctx.drawImage(sub, 0, 0);
+        }
+        ctx.globalAlpha = 1;
+      } else renderer.draw(ctx, project, t, () => faceFrame);
       await video.add(t, dt);
       if (f % 6 === 0) o.onProgress(0.03 + 0.95 * (f / frames), `Rendu image ${f + 1} / ${frames}`);
     }

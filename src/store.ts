@@ -45,7 +45,8 @@ export function newProject(): Project {
     progressBar: false,
     accent: '#FF5A1F',
     fx: [],
-    look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true },
+    look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true, handheld: 0.3, speedLines: true, motionBlur: true },
+    autoSfx: { on: true, volume: 0.6 },
   };
 }
 
@@ -61,6 +62,7 @@ export function migrate(p: Project): Project {
     subtitles: p.subtitles ?? [],
     fx: p.fx ?? [],
     look: { ...base.look, ...(p.look ?? {}) },
+    autoSfx: p.autoSfx ?? base.autoSfx,
   };
 }
 

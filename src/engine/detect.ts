@@ -264,6 +264,7 @@ export function zonesFor(width: number, height: number, rtl = false, x0 = 0): Re
     return rtl ? [...right, ...left] : [...left, ...right];
   }
   const n = ar < 0.8 ? 3 : 2;
+  height *= 0.97; // keep clear of footer watermarks
   const step = height / n, ov = step * 0.08;
   return Array.from({ length: n }, (_, i) => ({
     x: Math.round(x0), y: Math.round(Math.max(0, i * step - ov)), w: Math.round(width),
@@ -322,6 +323,8 @@ export function cutPage(img: CanvasImageSource, width: number, height: number, r
   // two independent detectors must agree, otherwise the page is toured tier by tier
   const unreliable = !rects.length || coverage < 0.4 || rects.length > 16 || (rects.length === 1 && biggest > 0.5) || agree < 0.7;
   if (unreliable) {
+    // thin strips at the very top/bottom are scan watermarks or credits, not story
+    rowsGuess = rowsGuess.filter((r) => !(r.h < height * 0.07 && (r.y < height * 0.08 || r.y + r.h > height * 0.92)));
     const tierCover = rowsGuess.reduce((a, r) => a + area(r), 0) / page;
     const tiers = rowsGuess.length >= 2 && rowsGuess.length <= 5 && tierCover > 0.6 ? rowsGuess : zonesFor(width, height, rtl);
     return { rects: tiers, kind: 'zones', note: 'cases incertaines : animation bande par bande', diag };

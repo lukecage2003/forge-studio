@@ -51,8 +51,15 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
   const k = shot.intensity;
   const e = easeInOutSine(clamp(p, 0, 1));
   switch (motion) {
-    case 'zoom-in': return { ...v, vw: v.vw * lerp(1, 1 - 0.22 * k, e) };
-    case 'zoom-out': return { ...v, vw: v.vw * lerp(1 - 0.22 * k, 1, e) };
+    case 'zoom-in':
+    case 'zoom-out': {
+      // aim at the point of interest (faces, action) rather than the geometric centre
+      const f = shot.focus && r === shot.rect ? shot.focus : { x: 0.5, y: 0.5 };
+      const fx = r.x + f.x * r.w, fy = r.y + f.y * r.h;
+      const a = motion === 'zoom-in' ? e : 1 - e;
+      const vw = v.vw * lerp(1, 1 - 0.24 * k, a);
+      return { cx: lerp(v.cx, fx, a * 0.75), cy: lerp(v.cy, fy, a * 0.75), vw };
+    }
     case 'pan-left':
     case 'pan-right': {
       const span = r.w - v.vw;
@@ -764,6 +771,8 @@ function drawWatermark(ctx: Ctx, W: number, H: number, text: string) {
 export interface Renderer {
   W: number;
   H: number;
+  /** true when the frame moves fast (transitions, impacts): export renders it with motion blur */
+  fast(project: Project, t: number): boolean;
   draw(ctx: Ctx, project: Project, t: number, face?: FaceSource): void;
 }
 
@@ -774,10 +783,39 @@ function makeBuf(W: number, H: number) {
   return c;
 }
 
-function shakeOffset(shot: Shot, local: number, W: number) {
-  if (!shot.shake || local > 0.45) return [0, 0];
-  const d = Math.pow(1 - local / 0.45, 2) * shot.shake * W * 0.025;
-  return [Math.sin(local * 71) * d, Math.cos(local * 53) * d];
+/** impact shake: a damped spring (position + a touch of rotation), not random jitter */
+function shakeOffset(shot: Shot, local: number, W: number): [number, number, number] {
+  if (!shot.shake || local > 0.7) return [0, 0, 0];
+  const env = Math.exp(-local * 7.5) * shot.shake;
+  return [Math.cos(local * 41) * env * W * 0.028, Math.sin(local * 33 + 1) * env * W * 0.02, Math.sin(local * 29) * env * 0.025];
+}
+
+/** subtle hand-held drift: smooth, never repeating within a shot */
+function handheld(amount: number, t: number, W: number): [number, number] {
+  if (!amount) return [0, 0];
+  const a = amount * W * 0.004;
+  return [a * (Math.sin(t * 0.9) + 0.5 * Math.sin(t * 2.3 + 1.7)), a * (Math.cos(t * 0.7 + 0.4) + 0.5 * Math.sin(t * 1.9))];
+}
+
+/** manga speed lines on impacts, radiating from the frame edges */
+function speedLines(ctx: Ctx, W: number, H: number, local: number, strength: number) {
+  if (local > 0.55 || strength <= 0) return;
+  const a = (1 - local / 0.55) * Math.min(1, strength) * 0.55;
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  const R = Math.hypot(W, H) / 2;
+  ctx.fillStyle = `rgba(255,255,255,${a})`;
+  for (let i = 0; i < 70; i++) {
+    const ang = (i / 70) * Math.PI * 2 + Math.sin(i * 12.9898) * 0.05;
+    const inner = R * (0.55 + 0.25 * Math.abs(Math.sin(i * 78.233)));
+    const wid = 0.004 + 0.006 * Math.abs(Math.sin(i * 3.1));
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(ang - wid) * R * 1.1, Math.sin(ang - wid) * R * 1.1);
+    ctx.lineTo(Math.cos(ang) * inner, Math.sin(ang) * inner);
+    ctx.lineTo(Math.cos(ang + wid) * R * 1.1, Math.sin(ang + wid) * R * 1.1);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 type State = { kind: 'face' } | { kind: 'shot'; ts: TimedShot } | { kind: 'empty' };
@@ -801,12 +839,18 @@ export function createRenderer(W: number, H: number): Renderer {
     const rtl = project.readingOrder === 'rtl';
     const hasFace = !!project.aroll && segs.length > 0;
     const layoutKind = shot.pageId == null ? 'title' : effectiveLayout(shot, hasFace);
-    const [sx, sy] = shakeOffset(shot, local, W);
+    const [sx, sy, rot] = shakeOffset(shot, local, W);
+    const [hx, hy] = layoutKind === 'title' ? [0, 0] : handheld(project.look?.handheld ?? 0, t, W);
     const p = (local - motionStart) / Math.max(0.01, shot.duration - motionStart);
     ctx.save();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-    ctx.translate(sx, sy);
+    ctx.translate(W / 2 + sx + hx, H / 2 + sy + hy);
+    ctx.rotate(rot);
+    // a shaking frame is scaled a little so its edges never show
+    const pad = 1 + Math.abs(sx) / W * 2.2 + Math.abs(sy) / H * 2.2 + Math.abs(rot) * 1.2 + (hx || hy ? 0.012 : 0);
+    ctx.scale(pad, pad);
+    ctx.translate(-W / 2, -H / 2);
     const full: Box = { x: 0, y: 0, w: W, h: H };
 
     switch (layoutKind) {
@@ -910,8 +954,20 @@ export function createRenderer(W: number, H: number): Renderer {
         let view: View;
         if (shot.zone === 'zones') {
           // zone tour: frame the zone, gentle push-in, neighbours stay visible but dimmed
-          const z = baseView(shot.rect, W / H, 'fit', 1.12);
-          view = { cx: z.cx, cy: z.cy, vw: z.vw * lerp(1.08, 1, easeInOutSine(clamp(p, 0, 1))) };
+          // guided view: tighter than "fit" so text stays readable, travelling along the band
+          const A = W / H, r = shot.rect;
+          const fit = baseView(r, A, 'fit', 1.06), fill = baseView(r, A, 'fill');
+          const vw = Math.max(fill.vw, Math.sqrt(fit.vw * fill.vw));
+          const ep = easeInOutSine(clamp(p, 0, 1));
+          if (vw < r.w * 0.98) {
+            const x0 = r.x + vw / 2, x1 = r.x + r.w - vw / 2;
+            const rtl = project.readingOrder === 'rtl';
+            view = { cx: lerp(rtl ? x1 : x0, rtl ? x0 : x1, ep), cy: fit.cy, vw };
+          } else {
+            const vh = vw / A;
+            const y0 = r.y + Math.min(vh, r.h) / 2, y1 = r.y + r.h - Math.min(vh, r.h) / 2;
+            view = { cx: fit.cx, cy: vh < r.h ? lerp(y0, y1, ep) : fit.cy, vw: vw * lerp(1.06, 1, ep) };
+          }
         } else {
           const target = { cx: lerp(whole.cx, tight.cx, 0.55), cy: lerp(whole.cy, tight.cy, 0.55), vw: lerp(whole.vw, Math.max(tight.vw, whole.vw * 0.55), 1) };
           view = { cx: lerp(whole.cx, target.cx, e), cy: lerp(whole.cy, target.cy, e), vw: lerp(whole.vw, target.vw, e) };
@@ -922,6 +978,7 @@ export function createRenderer(W: number, H: number): Renderer {
       }
     }
     ctx.restore();
+    if (shot.shake > 0 && project.look?.speedLines !== false && layoutKind !== 'title') speedLines(ctx, W, H, local, shot.shake);
     if (shot.pageId == null) {
       drawCaption(ctx, W, H, shot.caption, local, shot.duration, true, undefined, project.accent);
     } else {
@@ -967,6 +1024,16 @@ export function createRenderer(W: number, H: number): Renderer {
 
   return {
     W, H,
+    fast(project, t) {
+      for (const ts of layoutShots(project)) {
+        const local = t - ts.start;
+        if (local < 0 || local > ts.shot.duration) continue;
+        const td = Math.min(ts.shot.transitionDur, ts.shot.duration * 0.9);
+        if (['whip', 'slide', 'zoom', 'slash', 'glide'].includes(ts.shot.transition) && local < td) return true;
+        if (ts.shot.shake > 0 && local < 0.35) return true;
+      }
+      return false;
+    },
     draw(ctx, project, t, face = noFace) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
@@ -1047,6 +1114,70 @@ export function createRenderer(W: number, H: number): Renderer {
           const s1 = lerp(0.8, 1, e);
           ctx.globalAlpha = e;
           ctx.drawImage(B, W / 2 - (W * s1) / 2, H / 2 - (H * s1) / 2, W * s1, H * s1);
+          break;
+        }
+        case 'slash': {
+          // diagonal comic-panel wipe with an accent edge
+          ctx.drawImage(A, 0, 0);
+          const k = e * (W + H * 0.6) * 1.05 - H * 0.3;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(-H * 0.3, 0); ctx.lineTo(k, 0); ctx.lineTo(k - H * 0.3, H); ctx.lineTo(-H * 0.3, H);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(B, 0, 0);
+          ctx.restore();
+          ctx.strokeStyle = project.accent;
+          ctx.lineWidth = Math.min(W, H) * 0.018;
+          ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k - H * 0.3, H); ctx.stroke();
+          break;
+        }
+        case 'iris': {
+          ctx.drawImage(A, 0, 0);
+          const rad = e * Math.hypot(W, H) * 0.55;
+          ctx.save();
+          ctx.beginPath(); ctx.arc(W / 2, H / 2, rad, 0, Math.PI * 2); ctx.clip();
+          ctx.drawImage(B, 0, 0);
+          ctx.restore();
+          if (e < 1) {
+            ctx.strokeStyle = project.accent;
+            ctx.lineWidth = Math.min(W, H) * 0.012;
+            ctx.beginPath(); ctx.arc(W / 2, H / 2, rad, 0, Math.PI * 2); ctx.stroke();
+          }
+          break;
+        }
+        case 'glitch': {
+          const src = a < 0.5 ? A : B;
+          ctx.drawImage(src, 0, 0);
+          const amt = 1 - Math.abs(a - 0.5) * 2;
+          const slices = 9;
+          for (let i = 0; i < slices; i++) {
+            const r1 = Math.abs(Math.sin((i + 1) * 91.7 + Math.floor(a * 12) * 13.1));
+            if (r1 < 0.45) continue;
+            const y = (i / slices) * H, sh = H / slices * (0.4 + r1 * 0.6);
+            const dx = (r1 - 0.7) * W * 0.12 * amt;
+            ctx.drawImage(a < 0.5 ? B : A, 0, y, W, sh, dx, y, W, sh);
+          }
+          ctx.globalAlpha = 0.35 * amt;
+          ctx.globalCompositeOperation = 'screen';
+          ctx.drawImage(src, W * 0.012 * amt, 0);
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.globalAlpha = 1;
+          break;
+        }
+        case 'dip': {
+          ctx.drawImage(a < 0.5 ? A : B, 0, 0);
+          ctx.fillStyle = `rgba(0,0,0,${1 - Math.abs(a - 0.5) * 2})`;
+          ctx.fillRect(0, 0, W, H);
+          break;
+        }
+        case 'blur': {
+          const bl = Math.round(Math.min(W, H) * 0.02 * Math.sin(Math.PI * a));
+          ctx.filter = bl > 0 ? `blur(${bl}px)` : 'none';
+          ctx.drawImage(A, 0, 0);
+          ctx.globalAlpha = easeInOutSine(a);
+          ctx.drawImage(B, 0, 0);
+          ctx.filter = 'none';
           break;
         }
         case 'flash':

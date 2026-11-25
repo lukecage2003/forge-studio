@@ -121,6 +121,15 @@ export function LookSection() {
         </div>
       )}
       <Slider label="Vignette" value={look.vignette} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ vignette: v }, 'vig')} />
+      <Slider label="Caméra à l’épaule" value={look.handheld ?? 0} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ handheld: v }, 'hh')} />
+      <label className="toggle">
+        <input type="checkbox" checked={look.speedLines !== false} onChange={(e) => set({ speedLines: e.target.checked })} />
+        <span className="switch" /><span>Lignes de vitesse sur les impacts</span>
+      </label>
+      <label className="toggle">
+        <input type="checkbox" checked={look.motionBlur !== false} onChange={(e) => set({ motionBlur: e.target.checked })} />
+        <span className="switch" /><span>Flou de mouvement à l’export<small>Sur les transitions rapides et les impacts</small></span>
+      </label>
       <Slider label="Grain" value={look.grain} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ grain: v }, 'grain')} />
       {hasFace && (
         <label className="toggle">

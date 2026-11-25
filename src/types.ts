@@ -46,7 +46,7 @@ export type Motion =
 
 export type Framing = 'fit' | 'fill';
 
-export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash';
+export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur';
 
 /**
  * How a comic shot is composed on screen.
@@ -94,6 +94,8 @@ export interface Shot {
   /** schema / timeline built from comic panels (title-card shots only) */
   diagram?: Diagram;
   titleBg?: string;
+  /** point of interest inside the panel (0..1 of rect): zooms aim here instead of the centre */
+  focus?: { x: number; y: number };
   /** set by the auto editor; used by Forge Brain to learn from corrections */
   auto?: { duration: number; layout: Layout; motion: Motion; style: string };
 }
@@ -111,7 +113,7 @@ export interface FxItem {
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
-export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean }
+export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
 
@@ -192,6 +194,8 @@ export interface Project {
   accent: string;
   fx: FxItem[];
   look: Look;
+  /** automatic sound design: whooshes on transitions, impacts on splashes */
+  autoSfx?: { on: boolean; volume: number };
 }
 
 export type Selection =

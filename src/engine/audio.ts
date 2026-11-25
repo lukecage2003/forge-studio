@@ -1,6 +1,7 @@
 import type { AudioClip, Project } from '../types';
 import { audioCtx, getAudio } from './media';
 import { segmentsOf } from './timeline';
+import { scheduleSfx } from './sfx';
 
 type KF = [number, number];
 
@@ -103,6 +104,7 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
       nodes.push(src);
     }
   }
+  nodes.push(...scheduleSfx(ctx, dest, p, t0, T0, until));
   return nodes;
 }
 

@@ -72,7 +72,8 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
 
 const TRANSITIONS: [Transition, string][] = [
   ['cut', 'Cut'], ['glide', 'Glisse caméra'], ['fade', 'Fondu'], ['slide', 'Poussée'],
-  ['whip', 'Whip'], ['zoom', 'Zoom'], ['flash', 'Flash'],
+  ['whip', 'Whip'], ['zoom', 'Zoom'], ['flash', 'Flash'], ['slash', 'Coupe BD (diagonale)'],
+  ['iris', 'Iris'], ['glitch', 'Glitch'], ['dip', 'Passage au noir'], ['blur', 'Fondu flou'],
 ];
 
 const PRESETS: { v: CaptionPreset; l: string }[] = [
@@ -292,6 +293,15 @@ function ProjectPanel() {
         )}
       </Section>
       <Section title="Audio">
+        <label className="toggle">
+          <input type="checkbox" checked={p.autoSfx?.on ?? true} onChange={(e) => set({ autoSfx: { volume: p.autoSfx?.volume ?? 0.6, on: e.target.checked } })} />
+          <span className="switch" />
+          <span>Bruitages automatiques<small>Souffle sur les transitions, impact sur les pleines pages</small></span>
+        </label>
+        {(p.autoSfx?.on ?? true) && (
+          <Slider label="Volume des bruitages" value={p.autoSfx?.volume ?? 0.6} min={0} max={1.5} step={0.05}
+            fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => set({ autoSfx: { on: true, volume: v } }, 'sfxv')} />
+        )}
         <label className="toggle">
           <input type="checkbox" checked={p.ducking} onChange={(e) => set({ ducking: e.target.checked })} />
           <span className="switch" />

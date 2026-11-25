@@ -47,6 +47,8 @@ interface StyleDef {
   faceLayouts: [Layout, number][];
   hook: number; faceDur: [number, number]; block: [number, number];
   enterTr: Transition; punchIn: number; drift: number; maxWords: number;
+  /** variety between pages */
+  pagePool?: Transition[];
 }
 
 export const STYLES: Record<AutoStyle, StyleDef> = {
@@ -56,7 +58,7 @@ export const STYLES: Record<AutoStyle, StyleDef> = {
     splashTr: 'zoom', splashShake: 0, preset: 'clean', anim: 'words', beatEvery: 4,
     soloLayouts: [['full', 6], ['page', 1.2], ['grid', 0.8]],
     faceLayouts: [['full', 6], ['page', 1.3], ['pip', 1.2], ['grid', 0.8], ['split', 0.3]],
-    hook: 3, faceDur: [2.2, 3.5], block: [12, 22], enterTr: 'fade', punchIn: 0.45, drift: 0.4, maxWords: 6,
+    hook: 3, faceDur: [2.2, 3.5], block: [12, 22], enterTr: 'fade', punchIn: 0.45, drift: 0.4, maxWords: 6, pagePool: ['fade', 'dip', 'blur', 'slide'],
   },
   energetic: {
     label: 'Énergique', desc: 'Face caméra très présente, zooms de coupe, écrans partagés, bulles et multi-cases.',
@@ -64,28 +66,28 @@ export const STYLES: Record<AutoStyle, StyleDef> = {
     splashTr: 'flash', splashShake: 0.75, preset: 'tiktok', anim: 'words', beatEvery: 2,
     soloLayouts: [['full', 5], ['grid', 1.5], ['page', 0.6]],
     faceLayouts: [['split', 3], ['pip', 2.2], ['full', 2.4], ['grid', 1.2], ['page', 0.6]],
-    hook: 2.2, faceDur: [1.8, 3.6], block: [4, 8], enterTr: 'zoom', punchIn: 0.95, drift: 0.5, maxWords: 3,
+    hook: 2.2, faceDur: [1.8, 3.6], block: [4, 8], enterTr: 'zoom', punchIn: 0.95, drift: 0.5, maxWords: 3, pagePool: ['whip', 'slash', 'glitch', 'iris'],
   },
   dynamic: {
     label: 'Dynamique', desc: 'TikTok / Shorts sans visage : rythme serré, coupes sur le beat, sous-titres mot à mot.',
     face: false, base: 1.7, min: 0.9, max: 3.4, intensity: 0.8, glide: 0.38, pageTr: 'whip', pageTrDur: 0.32,
     splashTr: 'flash', splashShake: 0.7, preset: 'tiktok', anim: 'words', beatEvery: 2,
     soloLayouts: [['full', 6], ['grid', 1]], faceLayouts: [['full', 1]],
-    hook: 2, faceDur: [2, 3], block: [5, 8], enterTr: 'whip', punchIn: 0.8, drift: 0.4, maxWords: 3,
+    hook: 2, faceDur: [2, 3], block: [5, 8], enterTr: 'whip', punchIn: 0.8, drift: 0.4, maxWords: 3, pagePool: ['whip', 'slash', 'zoom', 'glitch'],
   },
   cinematic: {
     label: 'Cinématique', desc: 'YouTube sans visage : mouvements lents, fondus, place à la lecture et à la narration.',
     face: false, base: 3.4, min: 2, max: 7, intensity: 0.45, glide: 0.8, pageTr: 'fade', pageTrDur: 0.7,
     splashTr: 'zoom', splashShake: 0, preset: 'cinema', anim: 'type', beatEvery: 4,
     soloLayouts: [['full', 6], ['page', 1]], faceLayouts: [['full', 1]],
-    hook: 3, faceDur: [2.5, 3.5], block: [12, 20], enterTr: 'fade', punchIn: 0.3, drift: 0.3, maxWords: 7,
+    hook: 3, faceDur: [2.5, 3.5], block: [12, 20], enterTr: 'fade', punchIn: 0.3, drift: 0.3, maxWords: 7, pagePool: ['fade', 'blur', 'dip', 'iris'],
   },
   manga: {
     label: 'Manga', desc: 'Lecture de droite à gauche, impacts, flashs et cadrages nerveux.',
     face: false, base: 2.1, min: 1, max: 4.2, intensity: 0.7, glide: 0.42, pageTr: 'slide', pageTrDur: 0.4,
     splashTr: 'flash', splashShake: 0.85, preset: 'comic', anim: 'pop', beatEvery: 2, rtl: true,
     soloLayouts: [['full', 5], ['grid', 1.4]], faceLayouts: [['full', 3], ['split', 2], ['pip', 1]],
-    hook: 2, faceDur: [2, 3], block: [5, 9], enterTr: 'flash', punchIn: 0.9, drift: 0.4, maxWords: 3,
+    hook: 2, faceDur: [2, 3], block: [5, 9], enterTr: 'flash', punchIn: 0.9, drift: 0.4, maxWords: 3, pagePool: ['slash', 'slide', 'flash', 'whip'],
   },
 };
 
@@ -103,6 +105,37 @@ function rng(seed: number) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * Point of interest in a panel: centroid of the strongest detail, ignoring
+ * flat balloons and the frame edges (where the eye goes: faces, hands, action).
+ */
+export function panelFocus(img: CanvasImageSource, r: Rect): { x: number; y: number } {
+  const S = 64;
+  const k = S / Math.max(r.w, r.h);
+  const w = Math.max(8, Math.round(r.w * k)), h = Math.max(8, Math.round(r.h * k));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d', { willReadFrequently: true })!;
+  x.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data;
+  const L = (i: number) => 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+  const sat = (i: number) => { const a = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]), b = Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]); return a ? (a - b) / a : 0; };
+  const vals: { x: number; y: number; v: number }[] = [];
+  for (let y = 2; y < h - 2; y++) for (let xx = 2; xx < w - 2; xx++) {
+    const i = y * w + xx;
+    if (L(i) > 235) continue; // balloons
+    const g = Math.abs(L(i + 1) - L(i - 1)) + Math.abs(L(i + w) - L(i - w));
+    vals.push({ x: xx / w, y: y / h, v: g * (0.6 + sat(i)) });
+  }
+  if (vals.length < 20) return { x: 0.5, y: 0.45 };
+  vals.sort((a, b) => b.v - a.v);
+  const top = vals.slice(0, Math.max(10, Math.floor(vals.length * 0.15)));
+  const sw = top.reduce((a, p) => a + p.v, 0) || 1;
+  const fx = top.reduce((a, p) => a + p.x * p.v, 0) / sw, fy = top.reduce((a, p) => a + p.y * p.v, 0) / sw;
+  // stay reasonable: never push the camera into a corner
+  return { x: clamp(0.5 + (fx - 0.5) * 0.85, 0.25, 0.75), y: clamp(0.5 + (fy - 0.5) * 0.85, 0.22, 0.75) };
 }
 
 /** How much there is to look at / read in a panel: edges + balloon-white area. */
@@ -281,8 +314,12 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     let motion: Motion = 'auto';
     if (!pn.pan) motion = pn.splash ? 'zoom-out' : flip ? 'zoom-out' : 'zoom-in';
     motion = preferredMotion(motion);
+    const pg = proj.pages.find((x) => x.id === s.pageId);
+    const a = pg && getImage(pg.mediaId);
+    const focus = s.focus ?? (a ? panelFocus(a.img, s.rect) : undefined);
     return {
       ...s,
+      focus,
       layout,
       motion,
       framing: 'fit',
@@ -399,7 +436,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
         if (!contiguous) { tr = st.enterTr; td = st.enterTr === 'fade' ? 0.35 : 0.28; }
         else if (pn.splash) { tr = st.splashTr; td = 0.3; }
         else if (prev.pageId === pn.shot.pageId && layout === 'full' && prev.layout === 'full') { tr = 'glide'; td = st.glide; }
-        else { tr = st.pageTr === 'fade' ? 'slide' : st.pageTr; td = st.pageTrDur; }
+        else { tr = st.pagePool ? st.pagePool[Math.floor(rand() * st.pagePool.length)] : st.pageTr; td = st.pageTrDur; }
         const shot = dress(pn, layout, flip);
         flip = !flip;
         shots.push({
@@ -463,6 +500,18 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (target && list.length && (target - hookDur - titleDur) / list.length < st.min * 0.85) {
       list = groupPanels(list, Math.ceil(list.length / 3));
     }
+    // still too many panels for the asked length: show a selection, never a slideshow of flashes
+    if (target && !followedVoice && list.length && (target - hookDur - titleDur) / list.length < st.min * 0.8) {
+      const keepN = Math.max(1, Math.floor((target - hookDur - titleDur) / (st.min * 0.95)));
+      const must = list.filter((x) => x.cover !== undefined || x.splash);
+      const rest = list.filter((x) => !must.includes(x));
+      const room = Math.max(0, keepN - must.length);
+      const pick = new Set(must);
+      for (let i = 0; i < room && rest.length; i++) pick.add(rest[Math.floor((i * rest.length) / room)]);
+      const before = list.length;
+      list = list.filter((x) => pick.has(x));
+      notes.push(`${list.length} cases choisies sur ${before} pour tenir en ${target} s.`);
+    }
     if (followedVoice) {
       const floor = list.length * st.min * 0.85 + hookDur + titleDur;
       if (target! < floor) {
@@ -495,7 +544,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       if (i === 0 && !hookDur && !titleCards.length) { tr = 'cut'; td = 0; }
       else if (pn.splash) { tr = st.splashTr; td = st.splashTr === 'flash' ? 0.3 : 0.5; }
       else if (prev && prev.shot.pageId === pn.shot.pageId && layout === 'full') { tr = 'glide'; td = st.glide; }
-      else { tr = st.pageTr; td = st.pageTrDur; }
+      else { tr = st.pagePool ? st.pagePool[Math.floor(rand() * st.pagePool.length)] : st.pageTr; td = tr === 'iris' || tr === 'blur' ? Math.max(st.pageTrDur, 0.45) : st.pageTrDur; }
       const s = dress(pn, layout, flip);
       flip = !flip;
       return { ...s, start: undefined, duration: +durs[i].toFixed(3), transition: tr, transitionDur: Math.min(td, durs[i] * 0.45), auto: { duration: durs[i], layout, motion: s.motion, style: o.style } };
