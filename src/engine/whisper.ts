@@ -1,3 +1,4 @@
+import { heavy, onRelease } from './jobs';
 import type { Word } from '../types';
 
 /**
@@ -42,7 +43,18 @@ self.onmessage = async (ev) => {
 
 let worker: Worker | null = null;
 
+onRelease('whisper', () => { worker?.terminate(); worker = null; });
+
 export function whisperTranscribe(
+  pcm: Float32Array,
+  model: WhisperModel,
+  language: 'fr' | 'en',
+  onProgress: (label: string, p: number) => void,
+): Promise<Word[]> {
+  return heavy('whisper', () => whisperNow(pcm, model, language, onProgress));
+}
+
+function whisperNow(
   pcm: Float32Array,
   model: WhisperModel,
   language: 'fr' | 'en',

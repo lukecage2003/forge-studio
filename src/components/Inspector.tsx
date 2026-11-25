@@ -360,6 +360,11 @@ function ProjectPanel() {
             fmt={(v) => (v < 0.34 ? 'Haut' : v > 0.66 ? 'Bas' : 'Centre')} onChange={(v) => set({ subtitleStyle: { ...p.subtitleStyle, y: v } }, 'suby')} />
           <Slider label="Taille" value={p.subtitleStyle.size} min={0.5} max={1.8} step={0.05}
             fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => set({ subtitleStyle: { ...p.subtitleStyle, size: v } }, 'subs')} />
+          <label className="toggle">
+            <input type="checkbox" checked={p.subtitleStyle.keywords !== false} onChange={(e) => set({ subtitleStyle: { ...p.subtitleStyle, keywords: e.target.checked } })} />
+            <span className="switch" /><span>Mots importants en couleur<small>Noms, lieux, concepts et chiffres, dans la couleur d’accent</small></span>
+          </label>
+          {p.subtitles.length > 0 && <SubtitleEditor />}
         </Section>
       )}
       <Section title="Textes des cases" aside={<button className="link-btn" onClick={applyDefaultCaptionToAll}>Appliquer partout</button>}>
@@ -485,5 +490,33 @@ function ReviewList() {
         ))}
       </div>
     </Section>
+  );
+}
+
+/** correct the subtitles line by line; the timing of each word is kept when the word count is unchanged */
+function SubtitleEditor() {
+  const subs = useStore((s) => s.project.subtitles);
+  const [open, setOpen] = useState(false);
+  const fix = (i: number, text: string) => update((p) => ({
+    ...p,
+    subtitles: p.subtitles.map((sb, j) => {
+      if (j !== i) return sb;
+      const ws = text.trim().split(/\s+/).filter(Boolean);
+      const words = ws.length === sb.words.length ? sb.words.map((w, k) => ({ ...w, w: ws[k] }))
+        : ws.map((w, k) => ({ w, s: sb.s + ((sb.e - sb.s) * k) / ws.length, e: sb.s + ((sb.e - sb.s) * (k + 1)) / ws.length }));
+      return { ...sb, text, words };
+    }),
+  }), 'subfix' + i);
+  if (!open) return <button className="btn sm ghost block" onClick={() => setOpen(true)}>Corriger les sous-titres ({subs.length} lignes)</button>;
+  return (
+    <div className="sub-editor">
+      {subs.map((sb, i) => (
+        <div key={i} className="sub-row">
+          <button className="link-btn" onClick={() => seek(sb.s)} title="Aller à cette ligne">{sb.s.toFixed(1)} s</button>
+          <input className="input sm" value={sb.text} onChange={(e) => fix(i, e.target.value)} />
+        </div>
+      ))}
+      <p className="help">« Régénérer » ou « Mots par ligne » refont les lignes depuis la transcription et effacent ces corrections.</p>
+    </div>
   );
 }

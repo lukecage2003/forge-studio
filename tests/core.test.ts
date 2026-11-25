@@ -311,3 +311,154 @@ describe('phase 7 : banc de mesure', () => {
     expect(fmtMin(349)).toBe('5 h 49');
   });
 });
+
+import { analyseNoise, cleanVoice, reductionFor } from '../src/engine/denoise';
+import { rng as rng2 } from '../src/engine/rng';
+
+describe('nettoyage de la voix', () => {
+  const sr = 48000;
+  // a "voice": harmonic syllables of 180 ms separated by 120 ms pauses, and 1 s silences
+  const voice = (secs: number) => Float32Array.from({ length: sr * secs }, (_, i) => {
+    const t = i / sr, ph = t % 2.2;
+    if (ph > 1.8) return 0;
+    const syl = (t % 0.3) < 0.18 ? Math.sin(Math.PI * ((t % 0.3) / 0.18)) : 0;
+    return 0.25 * syl * (Math.sin(2 * Math.PI * 160 * t) + 0.5 * Math.sin(2 * Math.PI * 320 * t) + 0.25 * Math.sin(2 * Math.PI * 640 * t + 1));
+  });
+  const withNoise = (x: Float32Array, level: number) => { const r = rng2(7); return Float32Array.from(x, (v) => v + level * (r() * 2 - 1)); };
+  it('ne touche pas une prise propre', () => {
+    const r = cleanVoice([voice(6)], sr, 'auto');
+    expect(r.report.applied).toBe(false);
+  });
+  it('réduit le bruit de fond sans écraser la voix', () => {
+    const clean = voice(8), noisy = withNoise(clean, 0.01);
+    const r = cleanVoice([noisy], sr, 'auto');
+    expect(r.report.applied).toBe(true);
+    expect(r.report.reductionDb).toBeLessThanOrEqual(18);
+    // the measured reduction matches the target chosen from the SNR (6 dB here, the take is fairly clean)
+    expect(r.report.noiseDb - r.report.noiseAfterDb).toBeGreaterThan(r.report.reductionDb - 1);
+    const strong = cleanVoice([noisy], sr, 'strong');
+    expect(strong.report.noiseDb - strong.report.noiseAfterDb).toBeGreaterThan(16);
+    const before = analyseNoise(noisy, sr).speechDb, after = analyseNoise(r.channels[0], sr).speechDb;
+    expect(Math.abs(before - after)).toBeLessThan(2.5);
+  });
+  it('la force suit le rapport signal/bruit et reste plafonnée', () => {
+    expect(reductionFor('auto', 45, -80)).toBe(0);
+    expect(reductionFor('auto', 30, -55)).toBe(6);
+    expect(reductionFor('auto', 12, -40)).toBe(14);
+    expect(reductionFor('auto', 3, -30)).toBe(18);
+    expect(reductionFor('off', 3, -30)).toBe(0);
+  });
+});
+
+import { cameraPath } from '../src/engine/faces';
+describe('recadrage vertical', () => {
+  const T = Array.from({ length: 40 }, (_, i) => i * 0.5);
+  it('ne suit pas les petits balancements', () => {
+    const raw = T.map((t) => ({ t, x: 0.5 + 0.02 * Math.sin(t * 3), y: 0.4, s: 0.1 }));
+    const cam = cameraPath(raw, T, T.map(() => false));
+    expect(Math.max(...cam.map((c) => Math.abs(c.x - cam[0].x)))).toBeLessThan(1e-9);
+  });
+  it('se déplace sans à-coup quand le visage change de place, et coupe net sur un changement de plan', () => {
+    const raw = T.map((t, i) => ({ t, x: i < 20 ? 0.3 : 0.7, y: 0.4, s: 0.1 }));
+    const cam = cameraPath(raw, T, T.map(() => false));
+    for (let i = 1; i < cam.length; i++) expect(Math.abs(cam[i].x - cam[i - 1].x)).toBeLessThanOrEqual(((9 / 16) / (16 / 9)) * 0.9 * 0.5 + 1e-6); // a 9:16 crop is 0.316 of a 16:9 frame; at most 0.9 crop-width per second
+    expect(cam[cam.length - 1].x).toBeCloseTo(0.7, 1);
+    const cut = cameraPath(raw, T, T.map((_, i) => i === 20));
+    expect(cut[20].x).toBeCloseTo(0.7, 5);
+    expect(cut[20].cut).toBe(true);
+  });
+  it('garde son cadre quand le visage disparaît un instant', () => {
+    const raw = T.map((t, i) => (i >= 10 && i < 14 ? null : { t, x: 0.6, y: 0.4, s: 0.1 }));
+    const cam = cameraPath(raw, T, T.map(() => false));
+    expect(cam[12].x).toBeCloseTo(0.6, 5);
+  });
+});
+
+import { analyseScript, figureValue, keywordsOf, keyToken } from '../src/engine/scriptIntel';
+import { exportAss } from '../src/engine/export';
+
+describe('analyse du script', () => {
+  const proj = (script: string) => ({ script, shots: [], audio: [], aroll: null, pages: [] }) as never;
+  const THOR = "Saviez-vous que Thor est bien plus puissant que ce que montrent les films ? Tout commence avec l'Odinforce, le pouvoir de son père Odin. En 2004, dans Thor #80, il hérite de cette force et devient roi d'Asgard. Mais en réalité, son vrai pouvoir s'appelle la Thorforce. Par exemple, quand il affronte Zeus, il le bat sans Mjolnir. Il est même plus fort que Hercule, et il soulève 10 millions de tonnes contre 2 millions pour Hulk. Comme il le dit : « Je suis le dieu du tonnerre, et je ne plierai pas ». En 2014, pendant Original Sin, il perd le droit de porter Mjolnir. Au fond, Thor reste le dieu le plus sous-estimé de Marvel.";
+  it('rôles, entités et visuels proposés pour Thor', () => {
+    const a = analyseScript(proj(THOR));
+    expect(a.passages[0].role).toBe('accroche');
+    expect(a.passages.at(-1)!.role).toBe('conclusion');
+    expect(a.passages.some((p) => p.role === 'revelation' && /Thorforce/.test(p.text))).toBe(true);
+    expect(a.passages.some((p) => p.role === 'preuve' && /#80/.test(p.text))).toBe(true);
+    const names = a.entities.map((e) => e.name);
+    for (const n of ['Thor', 'Odin', 'Odinforce', 'Thorforce', 'Zeus', 'Mjolnir', 'Asgard', '2004']) expect(names).toContain(n);
+    expect(names).not.toContain('réalité');
+    const kinds = a.suggestions.map((s) => s.kind);
+    for (const k of ['chronologie', 'reseau', 'echelle', 'citation', 'titre']) expect(kinds).toContain(k);
+    const sc = a.suggestions.find((s) => s.kind === 'echelle')!;
+    expect(sc.items.map((i) => Number(i.sub))).toEqual([10e6, 2e6]);
+    expect(a.suggestions.find((s) => s.kind === 'citation')!.needs).toBeTruthy();
+  });
+  it('le Wakanda : carte des lieux (à fournir), chronologie, relations', () => {
+    const a = analyseScript(proj("L'Empire intergalactique du Wakanda est l'une des idées les plus folles de Marvel. Dans le futur, le Wakanda conquiert des centaines de planètes. En 2018, Ta-Nehisi Coates raconte cette expansion dans Black Panther #1. T'Challa se réveille esclave dans les mines de vibranium, sur la planète Bast. Mais en réalité, ce T'Challa est un clone. L'empire affronte la Maaga, une alliance de rebelles menée par Nakia et N'Jadaka. En 2021, la série se termine sur Wakanda et Terre réunies. Bref, c'est un Wakanda qui ressemble à Star Wars."));
+    const kinds = a.suggestions.map((s) => s.kind);
+    expect(kinds).toContain('carte');
+    expect(kinds).toContain('chronologie');
+    expect(kinds).toContain('reseau');
+    expect(a.suggestions.find((s) => s.kind === 'carte')!.needs).toMatch(/invente/);
+  });
+  it('chiffres et mots-clés des sous-titres', () => {
+    expect(figureValue('2,5 milliards')).toBe(2.5e9);
+    const k = keywordsOf(['Thor utilise l’Odinforce depuis 2004']);
+    expect(k.has(keyToken('Thor'))).toBe(true);
+    expect(k.has(keyToken("l'Odinforce"))).toBe(true);
+    expect(k.has('2004')).toBe(true);
+    expect(k.has(keyToken('utilise'))).toBe(false);
+  });
+  it('export .ass : karaoké mot à mot et mot-clé en couleur', () => {
+    const p = { format: '9:16', accent: '#FFE500', subtitleStyle: { preset: 'tiktok', y: 0.9, size: 1 }, subtitles: [{ s: 1, e: 2, text: 'Thor arrive', words: [{ w: 'Thor', s: 1, e: 1.4 }, { w: 'arrive', s: 1.5, e: 2 }] }] } as never;
+    const ass = exportAss(p, new Set(['thor']), keyToken);
+    expect(ass).toContain('PlayResX: 1080');
+    expect(ass).toMatch(/Dialogue: 0,0:00:01\.00,0:00:02\.00,Forge,,0,0,0,,\{\\k50\}\{\\c&H0000E5FF&\}THOR\{\\c&H00FFFFFF&\} \{\\k50\}ARRIVE/);
+  });
+});
+
+import { transcriptQuality } from '../src/engine/transcriptCheck';
+import { scriptOnVoice } from '../src/engine/auto';
+describe('fiabilité de la transcription', () => {
+  const W = (txt: string) => txt.split(' ').map((w, i) => ({ w, s: i * 0.4, e: i * 0.4 + 0.3 }));
+  it('repère une boucle hallucinée de Whisper', () => {
+    const q = transcriptQuality(W('je ne sais pas ' + 'je ne me suis pas dit que '.repeat(20)), 40);
+    expect(q.ok).toBe(false);
+    expect(q.reason).toMatch(/boucle/);
+  });
+  it('accepte une vraie transcription, même avec une reprise', () => {
+    const q = transcriptQuality(W("Saviez-vous que Thor est bien plus puissant que les films ? Tout commence avec l'Odin tout commence avec l'Odinforce le pouvoir de son père Odin"), 10);
+    expect(q.ok).toBe(true);
+  });
+  it('pose le script sur les passages de voix', () => {
+    const ws = scriptOnVoice('Thor arrive. Il frappe fort.', [{ s: 0, e: 2, t: 0 }, { s: 5, e: 7, t: 2 }]);
+    expect(ws.map((w) => w.w)).toEqual(['Thor', 'arrive.', 'Il', 'frappe', 'fort.']);
+    expect(ws[0].s).toBe(0);
+    expect(ws.at(-1)!.e).toBeLessThanOrEqual(4);
+    for (let i = 1; i < ws.length; i++) expect(ws[i].s).toBeGreaterThanOrEqual(ws[i - 1].s);
+  });
+});
+
+import { alignScript, wordSim } from '../src/engine/align';
+describe('alignement script ↔ transcription', () => {
+  const SCRIPT = "Saviez-vous que Thor est bien plus puissant que ce que montrent les films ? Tout commence avec l'Odinforce, le pouvoir de son père Odin. En 2004, dans Thor numéro 80, il hérite de cette force et devient roi d'Asgard. Mais en réalité, son vrai pouvoir s'appelle la Thorforce.";
+  // real Whisper output (small model) on the synthetic voice of the 60 s test, timings spread 0.35 s apart
+  const HYP = "sa mienne ou que \u00e7a est bien plus puissant que ce que moutent les films. Tu commences avec l 'Odda. Tu commences avec l 'Odda Force, le pouvoir de Super Odda. En 2004, dans son num\u00e9ro quatre -vingt, il est h\u00e9rit\u00e9 cette force et devient ois d 'ascale. Mais en r\u00e9alit\u00e9, son r\u00e9pouvoir s 'appelle la Force.";
+  const words = HYP.split(/\s+/).filter(Boolean).map((w, i) => ({ w, s: i * 0.35, e: i * 0.35 + 0.3 }));
+  it('donne aux mots du script le minutage de la transcription, même mal reconnue', () => {
+    const r = alignScript(SCRIPT, words);
+    const text = r.words.map((w) => w.w).join(' ');
+    expect(text).toContain("l'Odinforce,");
+    expect(text).toContain('Thorforce.');
+    expect(r.coverage).toBeGreaterThan(0.5);
+    for (let i = 1; i < r.words.length; i++) expect(r.words[i].s).toBeGreaterThanOrEqual(r.words[i - 1].s);
+    const thor = r.words.find((w) => w.w === 'Thorforce.')!;
+    expect(thor.s).toBeGreaterThan(r.words.find((w) => w.w === 'Asgard.' || w.w === "d'Asgard.")!.s);
+  });
+  it('similarité des mots', () => {
+    expect(wordSim('Odinforce', 'Odda')).toBeLessThan(0.6);
+    expect(wordSim('moutent', 'montrent')).toBeGreaterThan(0.6);
+  });
+});

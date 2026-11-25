@@ -11,6 +11,7 @@ import { AutoModal } from './components/AutoModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CommandPalette } from './components/CommandPalette';
 import { ChannelModal } from './components/ChannelModal';
+import { ScriptModal } from './components/ScriptModal';
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
@@ -32,6 +33,7 @@ export default function App() {
   const settingsOpen = useStore((s) => s.ui.settingsOpen);
   const paletteOpen = useStore((s) => s.ui.paletteOpen);
   const channelOpen = useStore((s) => s.ui.channelOpen);
+  const scriptOpen = useStore((s) => !!s.ui.scriptOpen);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
   const hasRush = useStore((s) => !!s.project.aroll);
@@ -65,7 +67,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -153,6 +155,7 @@ export default function App() {
       {settingsOpen && <ErrorBoundary area="fenêtre"><SettingsModal /></ErrorBoundary>}
       {paletteOpen && <CommandPalette onClose={() => setUI({ paletteOpen: false })} />}
       {channelOpen && <ErrorBoundary area="fenêtre"><ChannelModal /></ErrorBoundary>}
+      {scriptOpen && <ErrorBoundary area="fenêtre"><ScriptModal /></ErrorBoundary>}
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">

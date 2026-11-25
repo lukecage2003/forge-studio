@@ -692,3 +692,27 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .bench { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .bench td { padding: 5px 0; border-top: 1px solid var(--border); color: var(--text-2); }
 .bench td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* script analysis */
+.script-modal { width: min(760px, 96vw); }
+.sc-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.role-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--surface-3); color: var(--text-2); white-space: nowrap; }
+.role-chip.r-accroche, .role-chip.r-revelation { background: var(--ember-soft); color: var(--ember); }
+.role-chip.r-preuve, .role-chip.r-comparaison { background: rgba(250, 204, 21, 0.14); color: #facc15; }
+.role-chip.r-conclusion { background: rgba(79, 209, 197, 0.14); color: var(--voice); }
+.sg-list { display: flex; flex-direction: column; gap: 6px; }
+.sg { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg-2); }
+.sg > svg { flex: none; margin-top: 2px; color: var(--ember); }
+.sg.no { opacity: 0.45; } .sg.ok { border-color: var(--ember-line); }
+.sg-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; color: var(--text-2); }
+.sg-body strong { color: var(--text); font-size: 13px; }
+.sg-items { color: var(--text); }
+.sg-needs { color: #fbbf24; display: inline-flex; gap: 4px; align-items: center; }
+.sg-btns { display: flex; gap: 4px; flex: none; }
+.ent-chip { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border-2); color: var(--text-2); }
+.ent-chip.k-personnage { color: var(--text); } .ent-chip.k-date { color: #facc15; } .ent-chip.k-lieu { color: var(--voice); } .ent-chip.k-concept, .ent-chip.k-objet { color: var(--ember); }
+.sc-passages { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; font-size: 12.5px; }
+.sc-passages li { display: grid; grid-template-columns: 150px 40px 1fr; gap: 8px; align-items: baseline; }
+@media (max-width: 640px) { .sc-passages li { grid-template-columns: 1fr; } .sg { flex-wrap: wrap; } }
+.sub-editor { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow: auto; }
+.sub-row { display: grid; grid-template-columns: 46px 1fr; gap: 6px; align-items: center; }

@@ -11,6 +11,21 @@ import { sfxEvents } from './sfx';
 import { voiceIntervals, type MixInfo } from './audio';
 import { TRANSITION } from './effects';
 import { PROFILE, type ProfileId } from './direction';
+import { noiseReport } from './media';
+
+function noiseRows(p: Project): Row[] {
+  const dn = p.mix?.denoise ?? 'auto';
+  const id = p.aroll?.mediaId ?? p.audio.find((c) => c.kind === 'voice')?.mediaId;
+  if (!id) return [];
+  if (dn === 'off') return [{ label: 'Réduction du bruit', value: 'désactivée', level: 'ok' }];
+  const r = noiseReport(id, dn);
+  if (!r) return [{ label: 'Réduction du bruit', value: 'non mesurée', level: 'warn' }];
+  const f1 = (v: number) => v.toFixed(1).replace('.', ',');
+  return [
+    { label: 'Bruit de fond de la prise', value: `${f1(r.noiseDb)} dBFS (voix à ${f1(r.snr)} dB au-dessus)`, level: r.snr < 15 ? 'warn' : 'ok', hint: 'Sous 15 dB d’écart, le bruit s’entend : rapproche le micro ou coupe la ventilation.' },
+    { label: 'Réduction du bruit', value: r.applied ? `−${r.reductionDb} dB visés, bruit ramené à ${f1(r.noiseAfterDb)} dBFS` : 'inutile : prise propre', level: 'ok' },
+  ];
+}
 
 export type Level = 'ok' | 'warn' | 'error';
 export interface Row { label: string; value: string; level: Level; hint?: string }
@@ -28,7 +43,8 @@ export function buildReport(p: Project, mix?: MixInfo | null): Report {
   const lens = timed.map((t) => t.shot.duration);
   const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
   const quiet = (tr: string) => tr === 'cut' || tr === 'glide';
-  const marked = timed.filter((t) => !quiet(t.shot.transition));
+  // soft dissolves are not counted as « marked » (same rule as the pre-export check)
+  const marked = timed.filter((t) => !quiet(t.shot.transition) && t.shot.transition !== 'fade');
   const repeats = timed.filter((t, i) => i > 0 && !quiet(t.shot.transition) && t.shot.transition === timed[i - 1].shot.transition).length;
   const hist: Record<string, number> = {};
   for (const t of timed) hist[t.shot.transition] = (hist[t.shot.transition] ?? 0) + 1;
@@ -67,6 +83,7 @@ export function buildReport(p: Project, mix?: MixInfo | null): Report {
       { label: 'Bruitages automatiques', value: `${sfx.length} (${f1(sfx.length / min)} par minute)`, level: lv(timed.length > 4 && sfx.length >= timed.length * 0.8), hint: 'Jamais un son sur chaque transition.' },
       { label: 'Musique baissée sous la voix', value: p.ducking ? 'oui' : 'non', level: lv(!p.ducking && p.audio.some((c) => c.kind === 'music') && voice > 0) },
       { label: 'Nettoyage de la voix', value: p.mix?.voiceClean !== false ? 'oui (coupe-bas, compresseur, présence)' : 'non', level: 'ok' },
+      ...noiseRows(p),
     ] },
     { title: 'Textes et lisibilité', rows: [
       { label: 'Sous-titres', value: String(subs.count), level: 'ok' },

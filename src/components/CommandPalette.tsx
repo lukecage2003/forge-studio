@@ -34,6 +34,7 @@ function commands(): Cmd[] {
     { id: 'd-net', label: 'Ajouter un réseau de personnages', group: 'Ajouter', run: () => addDiagram('network') },
     { id: 'd-vs', label: 'Ajouter un duel (VS)', group: 'Ajouter', run: () => addDiagram('versus') },
     { id: 'd-rank', label: 'Ajouter un classement', group: 'Ajouter', run: () => addDiagram('ranking') },
+    { id: 'script', label: 'Analyser le script (rôles, personnages, visuels proposés)', group: 'Ajouter', run: () => setUI({ scriptOpen: true }) },
     { id: 'd-scale', label: 'Ajouter une échelle de puissance (barres)', group: 'Ajouter', run: () => addDiagram('scale') },
     { id: 'd-orbit', label: 'Ajouter une scène 3D : orbite de cases', group: 'Ajouter', run: () => addDiagram('orbit') },
     { id: 'd-cosmos', label: 'Ajouter une scène 3D : cosmos', group: 'Ajouter', run: () => addDiagram('cosmos') },

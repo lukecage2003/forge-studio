@@ -1,6 +1,6 @@
 import { DIAGRAM_3D } from '../types';
 import {
-  ALL_FORMATS, AudioBufferSource, type WrappedCanvas, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
+  ALL_FORMATS, AudioBufferSource, BufferSource, type WrappedCanvas, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
   QUALITY_HIGH, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
 } from 'mediabunny';
 import type { Project } from '../types';
@@ -21,8 +21,27 @@ export interface ExportOpts {
   signal: AbortSignal;
   /** 2 = 4K (2160p) */
   scale?: 1 | 2;
+  /** false = subtitles not drawn in the picture (deliver them as .srt / .ass) */
+  burnSubtitles?: boolean;
+  /** sync check of the finished file: track lengths and the gap between picture and sound */
+  onCheck?: (c: SyncCheck) => void;
   /** loudness of the exported mix, once measured */
   onMix?: (info: MixInfo) => void;
+}
+
+export interface SyncCheck { video: number; audio: number | null; expected: number; startGap: number; ok: boolean }
+
+/** read the exported MP4 back and compare its tracks (the check a delivery department does) */
+export async function checkSync(buf: ArrayBuffer, expected: number): Promise<SyncCheck> {
+  const input = new Input({ source: new BufferSource(buf), formats: ALL_FORMATS });
+  const vt = await input.getPrimaryVideoTrack();
+  const at = await input.getPrimaryAudioTrack();
+  const video = vt ? await vt.computeDuration() : 0;
+  const audio = at ? await at.computeDuration() : null;
+  const startGap = vt && at ? Math.abs((await vt.getFirstTimestamp()) - (await at.getFirstTimestamp())) : 0;
+  const ok = Math.abs(video - expected) < 0.1 && (audio == null || (Math.abs(audio - video) < 0.1 && startGap < 0.05));
+  (input as unknown as { dispose?: () => void }).dispose?.();
+  return { video, audio, expected, startGap, ok };
 }
 
 /** pixel size of an export: the format at 1080p, or doubled for 4K */
@@ -32,7 +51,8 @@ export function exportSize(format: Project['format'], scale: 1 | 2 = 1) {
 }
 
 export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
-  const project = validateProject(input0).project;
+  const v = validateProject(input0).project;
+  const project = o.burnSubtitles === false ? { ...v, subtitleStyle: { ...v.subtitleStyle, on: false } } : v;
   if (project.aroll && project.look?.cutout !== false && project.fx?.some((f) => f.kind !== 'callout')) {
     o.onProgress(0, 'Chargement du détourage…');
     await loadSegmenter();
@@ -152,6 +172,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
     throw e;
   }
   const buf = (output.target as BufferTarget).buffer!;
+  if (o.onCheck) { o.onProgress(0.995, 'Vérification son / image…'); try { o.onCheck(await checkSync(buf, duration)); } catch { /* unreadable: reported as no check */ } }
   o.onProgress(1, 'Terminé');
   return new Blob([buf], { type: 'video/mp4' });
 }
@@ -196,4 +217,39 @@ export function youtubeChapters(project: Project): string {
   if (!out.length || out[0].t > 0) out.unshift({ t: 0, title: 'Introduction' });
   else out[0].t = 0;
   return out.length >= 3 ? out.map((m) => `${fmt(m.t)} ${m.title}`).join('\n') : '';
+}
+
+/**
+ * Subtitles as Advanced SubStation (.ass): word-by-word karaoke timing (\\k),
+ * keywords in the accent colour, the Forge style and position. Opens in
+ * DaVinci Resolve, Premiere (via plug-in), VLC, mpv, and burns in with FFmpeg.
+ */
+export function exportAss(project: Project, keys?: Set<string>, tok?: (w: string) => string): string {
+  const { w: W, h: H } = FORMATS[project.format];
+  const st = project.subtitleStyle;
+  const assColor = (hex: string) => { const h = hex.replace('#', '').padEnd(6, '0'); return `&H00${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase(); };
+  const ts = (x: number) => { const cs = Math.max(0, Math.round(x * 100)); const h = Math.floor(cs / 360000), m = Math.floor((cs % 360000) / 6000), s2 = Math.floor((cs % 6000) / 100); return `${h}:${String(m).padStart(2, '0')}:${String(s2).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`; };
+  const size = Math.round(Math.min(W, H) * 0.075 * (st.size || 1) * 0.85);
+  const y = project.format === '9:16' ? Math.min(0.78, Math.max(0.12, st.y)) : st.y;
+  const marginV = Math.round((1 - y) * H - size / 2);
+  const upper = ['tiktok', 'impact', 'neon', 'comic'].includes(st.preset);
+  const head = [
+    '[Script Info]', '; Forge', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'WrapStyle: 0', 'ScaledBorderAndShadow: yes', '',
+    '[V4+ Styles]',
+    'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+    `Style: Forge,Anton,${size},&H00FFFFFF,${assColor(project.accent)},&H00000000,&H64000000,0,0,0,0,100,100,1,0,1,${Math.max(2, Math.round(size * 0.09))},2,2,60,60,${marginV},1`,
+    '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+  ];
+  const lines = project.subtitles.map((sb) => {
+    const words = sb.words.length ? sb.words : sb.text.split(/\s+/).map((w, i, a) => ({ w, s: sb.s + ((sb.e - sb.s) * i) / a.length, e: sb.s + ((sb.e - sb.s) * (i + 1)) / a.length }));
+    const txt = words.map((w, i) => {
+      const next = words[i + 1]?.s ?? sb.e;
+      const k = Math.max(1, Math.round((next - w.s) * 100));
+      const word = upper ? w.w.toUpperCase() : w.w;
+      const hot = keys && tok && keys.has(tok(w.w));
+      return `{\\k${k}}${hot ? `{\\c${assColor(project.accent)}&}${word}{\\c&H00FFFFFF&}` : word}`;
+    }).join(' ');
+    return `Dialogue: 0,${ts(sb.s)},${ts(sb.e)},Forge,,0,0,0,,${txt}`;
+  });
+  return [...head, ...lines].join('\n') + '\n';
 }

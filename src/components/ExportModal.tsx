@@ -11,7 +11,7 @@ import { createRenderer, loadFonts } from '../engine/render';
 import { videoDuration } from '../engine/timeline';
 import { pause } from '../engine/transport';
 import { fmtShort } from '../lib/util';
-import { exportSize } from '../engine/export';
+import { exportSize, type SyncCheck } from '../engine/export';
 import type { MixInfo } from '../engine/audio';
 import { FileCheck2, Clapperboard } from 'lucide-react';
 
@@ -20,6 +20,8 @@ export function ExportModal() {
   const [quality, setQuality] = useState<'high' | 'max'>('high');
   const [fps, setFps] = useState(30);
   const [scale, setScale] = useState<1 | 2>(1);
+  const [burn, setBurn] = useState(true);
+  const [sync, setSync] = useState<SyncCheck | null>(null);
   const [mixInfo, setMixInfo] = useState<MixInfo | null>(null);
   const [side, setSide] = useState<string | null>(null);
   const mix = project.mix ?? { voiceClean: true, target: -14 };
@@ -48,7 +50,7 @@ export function ExportModal() {
     const t0 = performance.now();
     try {
       const blob = await exportMp4(getState().project, {
-        quality, fps, scale, signal: abort.current.signal, onMix: setMixInfo,
+        quality, fps, scale, burnSubtitles: burn, onCheck: setSync, signal: abort.current.signal, onMix: setMixInfo,
         onProgress: (p, label) => setProg({ p, label }),
       });
       setResult({ url: URL.createObjectURL(blob), size: blob.size, blob });
@@ -109,10 +111,24 @@ export function ExportModal() {
                 <button className={mix.target == null ? 'on' : ''} onClick={() => setMix({ target: null })} disabled={busy}>Tel quel</button>
               </div>
             </div>
+            <div className="field">
+              <label>Réduction du bruit de la voix</label>
+              <div className="seg full">
+                {([['auto', 'Auto · selon la prise'], ['light', 'Légère'], ['strong', 'Forte'], ['off', 'Aucune']] as const).map(([v, l]) => (
+                  <button key={v} className={(mix.denoise ?? 'auto') === v ? 'on' : ''} onClick={() => setMix({ denoise: v })} disabled={busy}>{l}</button>
+                ))}
+              </div>
+            </div>
             <label className="toggle">
               <input type="checkbox" checked={mix.voiceClean} onChange={(e) => setMix({ voiceClean: e.target.checked })} disabled={busy} />
               <span className="switch" /><span>Voix prioritaire<small>Coupe les graves parasites, égalise la voix, baisse musique et bruitages quand tu parles</small></span>
             </label>
+            {project.subtitles.length > 0 && (
+              <label className="toggle">
+                <input type="checkbox" checked={burn} onChange={(e) => setBurn(e.target.checked)} disabled={busy} />
+                <span className="switch" /><span>Sous-titres incrustés dans l’image<small>Sinon, livre-les à part (.srt ou .ass ci-dessous) et ajoute-les sur la plateforme</small></span>
+              </label>
+            )}
             <div className="field">
               <label>Images par seconde</label>
               <div className="seg full">
@@ -140,6 +156,11 @@ export function ExportModal() {
           <div className="result">
             <video src={result.url} controls playsInline className={`result-video r${project.format.replace(':', '-')}`} />
             <p className="muted">MP4 · {(result.size / 1048576).toFixed(1)} Mo — prêt pour TikTok, Shorts et YouTube.</p>
+            {sync && (
+              <p className={sync.ok ? 'muted' : 'error-box'}>
+                {sync.ok ? 'Son et image synchronisés' : 'Attention : son et image désynchronisés'} · image {sync.video.toFixed(2)} s{sync.audio != null ? ` · son ${sync.audio.toFixed(2)} s · décalage au départ ${(sync.startGap * 1000).toFixed(0)} ms` : ' · pas de son'}
+              </p>
+            )}
             {mixInfo && Number.isFinite(mixInfo.after) && (
               <p className="muted">Volume : {mixInfo.after.toFixed(1)} LUFS{mixInfo.target != null && Number.isFinite(mixInfo.before) ? ` (était ${mixInfo.before.toFixed(1)})` : ''} · crête {mixInfo.peakDb.toFixed(1)} dBFS</p>
             )}
@@ -160,6 +181,15 @@ export function ExportModal() {
                 catch { download(new Blob([ch], { type: 'text/plain' }), `${fileBase}-chapitres.txt`); }
               }}>
               <ListOrdered size={15} /> Chapitres YouTube
+            </button>
+            <button className="btn sm ghost" disabled={!project.subtitles.length} title="Sous-titres animés mot à mot (karaoké), mots-clés en couleur : DaVinci, VLC, FFmpeg"
+              onClick={async () => {
+                const [{ exportAss }, { keywordsOf, keyToken }] = await Promise.all([import('../engine/export'), import('../engine/scriptIntel')]);
+                const pr = getState().project;
+                const keys = pr.subtitleStyle.keywords === false ? undefined : keywordsOf(pr.subtitles.map((x) => x.text), pr.shots.flatMap((x) => x.chars ?? []));
+                download(new Blob([exportAss(pr, keys, keyToken)], { type: 'text/plain' }), `${fileBase}.ass`);
+              }}>
+              <Captions size={15} /> Sous-titres .ass
             </button>
             <button className="btn sm ghost" disabled={!!side || busy} title="Rythme, effets, volume mesuré, sous-titres, zones sûres : une page à garder"
               onClick={async () => {

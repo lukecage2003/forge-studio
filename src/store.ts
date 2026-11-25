@@ -20,6 +20,7 @@ export interface UIState {
   settingsOpen: boolean;
   paletteOpen: boolean;
   channelOpen: boolean;
+  scriptOpen?: boolean;
   loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';

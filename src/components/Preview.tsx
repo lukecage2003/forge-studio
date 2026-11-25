@@ -36,6 +36,10 @@ export function Preview() {
   const dur = videoDuration(project);
 
   useEffect(() => { void loadFonts().then(() => setFontsReady(true)); }, []);
+  // the cleaned voice is prepared in the background so the preview sounds like the export
+  const denoise = project.mix?.denoise ?? 'auto';
+  const voiceIds = [project.aroll?.mediaId, ...project.audio.filter((a) => a.kind === 'voice').map((a) => a.mediaId)].filter(Boolean).join(',');
+  useEffect(() => { if (voiceIds && denoise !== 'off') void import('../engine/audio').then((m) => m.prepareVoices(project)); }, [voiceIds, denoise]); // eslint-disable-line react-hooks/exhaustive-deps
   // three.js is loaded only when the project has a 3D scene
   const needs3D = project.shots.some((s) => s.diagram && DIAGRAM_3D.includes(s.diagram.kind));
   const [ready3D, setReady3D] = useState(has3D());

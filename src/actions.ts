@@ -8,6 +8,7 @@ import { classifyPage, medianAspect } from './engine/classify';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
 import { layoutShots } from './engine/timeline';
+import { fixRepeats, insertAtTime, suggestionElement } from './engine/suggest';
 import { toast } from './components/Toast';
 
 
@@ -218,7 +219,7 @@ export function addDiagram(kind: DiagramKind = 'timeline') {
   const p0 = getState().project;
   const panels = p0.shots.filter((s) => s.pageId).slice(0, kind === 'versus' ? 2 : kind === 'orbit' ? 6 : 4);
   const items = panels.map((s, i) => ({ id: uid('di_'), label: kind === 'timeline' ? `Étape ${i + 1}` : `Personnage ${i + 1}`, sub: kind === 'scale' || kind === 'tiers' ? String((i + 1) * 10) : '', pageId: s.pageId!, rect: s.rect }));
-  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top', scale: 'Échelle de puissance', orbit: 'Les personnages', cosmos: 'Au-delà', tiers: 'Du plus faible au plus fort' };
+  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top', scale: 'Échelle de puissance', orbit: 'Les personnages', cosmos: 'Au-delà', tiers: 'Du plus faible au plus fort', quote: 'Citation' };
   const shot = newShot(p0, {
     pageId: null, duration: kind === 'orbit' || kind === 'cosmos' || kind === 'tiers' ? 8 : 6, transition: 'fade', transitionDur: 0.4, layout: 'full',
     start: p0.aroll ? getState().ui.playhead : undefined,
@@ -434,4 +435,16 @@ export async function prepareMotion(opts: { quiet?: boolean } = {}) {
     await ensureLayers(getState().project, todo[i], (pr) => !opts.quiet && setUI({ busy: `Modèle de profondeur… ${Math.round(pr * 100)} %` }));
   }
   if (!opts.quiet) setUI({ busy: null });
+}
+
+/* ------------------------------------------------- script suggestions */
+
+export function acceptSuggestion(sg: import('./engine/scriptIntel').Suggestion, passageText = '') {
+  const p0 = getState().project;
+  const el = suggestionElement(p0, sg, passageText);
+  if (el.fx) { addFx('callout', el.fx); return; }
+  const shot = el.shot!;
+  update((p) => { const q = { ...p, shots: insertAtTime(p, shot, sg.at) }; return { ...q, shots: fixRepeats(q) }; }, 'accept-' + sg.id);
+  const at = layoutShots(getState().project).find((t) => t.shot.id === shot.id);
+  setUI({ selection: { kind: 'shot', id: shot.id }, ...(at ? { playhead: at.start + Math.min(1.2, at.shot.duration * 0.4) } : {}) });
 }

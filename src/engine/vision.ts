@@ -1,3 +1,4 @@
+import { heavy, onRelease } from './jobs';
 /**
  * Local vision models in a Web Worker (transformers.js):
  *  - depth (Depth Anything V2 small, Apache-2.0, ~27 MB): 2.5D parallax of the panels
@@ -42,7 +43,13 @@ let worker: Worker | null = null;
 let seq = 0;
 type Out = { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
 
+onRelease('vision', () => { worker?.terminate(); worker = null; });
+
 function run(task: 'depth' | 'cutout', blob: Blob, onLoad?: (p: number) => void): Promise<Out> {
+  return heavy('vision', () => runNow(task, blob, onLoad));
+}
+
+function runNow(task: 'depth' | 'cutout', blob: Blob, onLoad?: (p: number) => void): Promise<Out> {
   worker ??= new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), { type: 'module' });
   const id = ++seq;
   return new Promise((res, rej) => {

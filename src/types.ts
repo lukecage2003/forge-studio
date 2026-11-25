@@ -116,10 +116,16 @@ export interface Shot {
 
 export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking'
   // manim-style chart, and 3D scenes built from comic panels (three.js)
-  | 'scale' | 'orbit' | 'cosmos' | 'tiers';
+  | 'scale' | 'orbit' | 'cosmos' | 'tiers'
+  // a quotation from the comics, with its source
+  | 'quote';
 export const DIAGRAM_3D: DiagramKind[] = ['orbit', 'cosmos', 'tiers'];
 export interface DiagramItem { id: string; label: string; sub?: string; pageId?: string; rect?: Rect }
-export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: { a: number; b: number; label?: string }[] }
+/** how sure a relation is: shown differently so viewers can tell facts from opinions */
+export type Certainty = 'source' | 'interpretation' | 'hypothese';
+export type LinkKind = 'allie' | 'ennemi' | 'famille' | 'autre';
+export interface DiagramLink { a: number; b: number; label?: string; status?: Certainty; kind?: LinkKind }
+export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: DiagramLink[] }
 
 /** Effects on the face cam (need the person cut-out for the "behind me" ones). */
 export type FxKind = 'textBehind' | 'panelBehind' | 'callout' | 'bgBlur' | 'bgHalftone';
@@ -159,7 +165,7 @@ export type CutReason = 'silence' | 'hesitation' | 'filler' | 'retake' | 'manual
 export interface Cut { s: number; e: number; reason: CutReason; on: boolean; label?: string }
 
 /** face position in the rush at a source time: centre (eyes) and width, normalised */
-export interface FaceKey { t: number; x: number; y: number; s: number }
+export interface FaceKey { t: number; x: number; y: number; s: number; /** a change of shot happens at this key: the framing jumps */ cut?: boolean }
 
 export interface ARoll {
   mediaId: string;
@@ -175,6 +181,8 @@ export interface ARoll {
   cuts: Cut[];
   words: Word[];
   transcriptSource?: 'whisper' | 'gemini' | 'manual';
+  /** result of the reliability check (engine/transcriptCheck): an unreliable transcript is never used to cut */
+  transcriptCheck?: { ok: boolean; reason?: string };
   /** jump-cut punch-in zooms */
   punchIn: number; // 0..1 strength (0 = off)
   /** slow push-in on long takes */
@@ -213,7 +221,7 @@ export interface Project {
   audio: AudioClip[];
   aroll: ARoll | null;
   subtitles: Subtitle[];
-  subtitleStyle: Omit<Caption, 'text'> & { on: boolean; maxWords: number };
+  subtitleStyle: Omit<Caption, 'text'> & { on: boolean; maxWords: number; /** names, concepts and figures in the accent colour */ keywords?: boolean };
   defaultCaption: Omit<Caption, 'text'>;
   watermark: string;
   progressBar: boolean;
@@ -231,7 +239,7 @@ export interface Project {
   /** automatic sound design: whooshes on transitions, impacts on splashes */
   autoSfx?: { on: boolean; volume: number; /** whooshes allowed per minute (creative profile) */ perMin?: number };
   /** sound engine: voice clean-up and loudness target of the export (LUFS, null = untouched) */
-  mix?: { voiceClean: boolean; target: number | null };
+  mix?: { voiceClean: boolean; target: number | null; /** adaptive noise reduction of the voice (engine/denoise) */ denoise?: 'off' | 'auto' | 'light' | 'strong' };
   /** creative direction profile used by the last auto edit */
   direction?: { profile: string };
 }

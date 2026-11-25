@@ -7,6 +7,7 @@ import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
 import { resolveMotion } from './render';
 import { segmentsOf } from './timeline';
+import { alignScript } from './align';
 import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speech';
 import { validateProject } from './validate';
 import { narration } from './narration';
@@ -26,6 +27,14 @@ import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMo
  *    of layouts (full, split, bubble, multi-panel, whole page).
  */
 
+export type ProductionModel = 'face' | 'face-comics' | 'graphic' | 'reveal';
+export const MODELS: Record<ProductionModel, { label: string; desc: string; profile: ProfileId; uses: string[] }> = {
+  face: { label: 'Face caméra', desc: 'Toi avant tout : prise nettoyée, recadrée, sous-titrée, quelques illustrations et mots-clés.', profile: 'editorial', uses: ['titre'] },
+  'face-comics': { label: 'Face caméra + comics', desc: 'Analyse de personnages et d’histoires : ton visage et les cases en alternance, zooms et relief.', profile: 'premium', uses: [] },
+  graphic: { label: 'Explication graphique', desc: 'Concepts complexes : frises, relations, échelles et lieux tirés du script, avec tes cases.', profile: 'science', uses: ['chronologie', 'reseau', 'echelle', 'carte', 'titre'] },
+  reveal: { label: 'Révélation et comparaison', desc: 'Exploits et pouvoirs : preuves en grand, duels, échelles, citations sourcées, conclusion nette.', profile: 'power', uses: ['versus', 'echelle', 'citation', 'titre'] },
+};
+
 export type AutoStyle = 'explainer' | 'energetic' | 'dynamic' | 'cinematic' | 'manga';
 export type AutoLength = 'auto' | 'voice' | 15 | 30 | 60 | 90 | 180;
 
@@ -43,6 +52,8 @@ export interface AutoOptions {
   story?: 'auto' | 'local' | 'google' | false;
   /** creative direction profile (engine/direction): rhythm, palette, look, sound, budget */
   profile?: ProfileId;
+  /** production model: what the video is made of (see MODELS) */
+  model?: ProductionModel;
   onProgress?: (label: string, p: number) => void;
 }
 
@@ -184,13 +195,45 @@ export function panelThumb(project: Project, pageId: string, r: Rect, size = 384
   return c.toDataURL('image/jpeg', 0.8).split(',')[1];
 }
 
+/**
+ * The script laid on the kept voice: each word gets a share of the speaking
+ * time proportional to its length, through the spoken segments only.
+ */
+export function scriptOnVoice(script: string, segs: Seg[]): Word[] {
+  const toks = script.replace(/[«»"“”]/g, ' ').split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w));
+  const spans = segs.map((g) => [g.t, g.t + (g.e - g.s)] as [number, number]);
+  const total = spans.reduce((a, [s, e]) => a + e - s, 0);
+  const weight = toks.map((w) => w.length + 1);
+  const W = weight.reduce((a, b) => a + b, 0);
+  const at = (f: number) => {
+    let left = f * total;
+    for (const [s, e] of spans) { if (left <= e - s) return s + left; left -= e - s; }
+    return spans.length ? spans[spans.length - 1][1] : 0;
+  };
+  let acc = 0;
+  return toks.map((w, i) => {
+    const s = at(acc / W);
+    acc += weight[i];
+    return { w, s, e: Math.max(s + 0.05, at(acc / W) - 0.02) };
+  });
+}
+
 /** Transcript words placed on the edited timeline (cut words removed). */
 export function timelineWords(p: Project): Word[] {
   const ar = p.aroll;
   if (!ar) return [];
   const segs = segmentsOf(ar);
+  // an unreliable transcript is not shown: the pasted script is laid on the voice instead
+  if (ar.transcriptCheck && !ar.transcriptCheck.ok) return p.script?.trim() ? scriptOnVoice(p.script, segs) : [];
+  // with a script: its words (correct spelling, names) on the transcript's timing
+  let source = ar.words;
+  if (p.script?.trim()) {
+    // only what survives the cuts: a removed retake must not catch the script's words
+    const al = alignScript(p.script, ar.words.filter((w) => !w.filler && !isFiller(w.w) && keptShare(segs, w.s, w.e) >= 0.4));
+    if (al.coverage >= 0.35) source = al.words;
+  }
   const out: Word[] = [];
-  for (const w of ar.words) {
+  for (const w of source) {
     if (w.filler || isFiller(w.w)) continue;
     // transcript timestamps are approximate: a word stays if a good part of it survives,
     // or if it only fell into a removed *silence* (then it belongs to the next spoken segment)
@@ -241,10 +284,21 @@ export function buildSubtitles(words: Word[], maxWords: number): Subtitle[] {
   };
   words.forEach((w, i) => {
     const prev = words[i - 1];
-    if (cur.length && (cur.length >= maxWords || (prev && w.s - prev.e > 0.4) || /[.!?…,;:]$/.test(prev?.w ?? ''))) flush();
+    // a sentence end always breaks the line; a comma only when the line already says something
+    if (cur.length && (cur.length >= maxWords || (prev && w.s - prev.e > 0.4) || /[.!?…]$/.test(prev?.w ?? '') || (/[,;:]$/.test(prev?.w ?? '') && cur.length >= 3))) flush();
     cur.push(w);
   });
   flush();
+  // readability: a line too short to be read (< 0.8 s, or more than 20 characters per second) joins the next one of the same sentence
+  for (let i = 0; i < subs.length - 1; i++) {
+    const a = subs[i], b = subs[i + 1];
+    const d = a.e - a.s, cps = a.text.length / Math.max(0.05, d);
+    const sameSentence = !/[.!?…]$/.test(a.text) && b.s - a.e < 0.4;
+    if (sameSentence && (d < 0.8 || cps > 20) && a.words.length + b.words.length <= maxWords + 3) {
+      subs.splice(i, 2, { s: a.s, e: b.e, text: a.text + ' ' + b.text, words: [...a.words, ...b.words] });
+      i--;
+    }
+  }
   // hold each subtitle until the next one (max +0.5 s) so text doesn't flicker
   for (let i = 0; i < subs.length; i++) {
     const next = subs[i + 1];
@@ -263,7 +317,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     ...STYLES[o.style],
     base: prof.rhythm.base, min: prof.rhythm.min, max: prof.rhythm.max, intensity: prof.rhythm.intensity, maxWords: prof.rhythm.maxWords,
     preset: prof.type.preset, anim: prof.type.anim, splashShake: prof.camera.shake, soloLayouts: prof.layouts,
-  } : STYLES[o.style];
+  } : { ...STYLES[o.style] };
+  if (o.model === 'face') Object.assign(st, { block: [2.5, 4] as [number, number], faceDur: [12, 20] as [number, number] });
   const notes: string[] = [];
   await Promise.all([
     ...p.pages.map((pg) => ensureMedia(pg.mediaId, 'image')),
@@ -702,6 +757,41 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     notes.push(`Direction « ${prof.label} » : ${d.report.strong} effet(s) fort(s), ${d.report.accents} accent(s)${d.report.scenes ? `, ${d.report.scenes} scène(s) 3D` : ''}, le reste en coupes franches.${beats ? ' Temps forts repérés : ' + beats + '.' : ''}`);
   }
 
+  /* production model: visuals the script calls for, built from the user's panels */
+  if (o.model && MODELS[o.model].uses.length) {
+    const { analyseScript } = await import('./scriptIntel');
+    const { suggestionElement } = await import('./suggest');
+    const uses = MODELS[o.model].uses;
+    const sgs = analyseScript(proj).suggestions.filter((g) => uses.includes(g.kind));
+    let last = -1e9, added = 0;
+    let shotsNow = proj.shots;
+    const fx: FxItem[] = [...(proj.fx ?? [])];
+    for (const g of sgs) {
+      if (g.at - last < 15 || added >= Math.max(2, Math.round(total / 25))) continue;
+      const el = suggestionElement({ ...proj, shots: shotsNow }, g);
+      if (el.fx) { fx.push({ id: uid('fx_'), kind: 'callout', start: g.at, duration: 1.4, ...el.fx } as FxItem); last = g.at; added++; continue; }
+      const sh = el.shot!;
+      if (proj.aroll) { shotsNow = [...shotsNow, sh]; }
+      else {
+        // comics only: the visual replaces the shots it covers, so the voice stays in sync
+        let t = 0, i = 0;
+        while (i < shotsNow.length && t + shotsNow[i].duration <= g.at) { t += shotsNow[i].duration; i++; }
+        if (i >= shotsNow.length) continue;
+        let j = i, d = 0;
+        while (j < shotsNow.length && d < sh.duration * 0.7) { d += shotsNow[j].duration; j++; }
+        sh.duration = +d.toFixed(3);
+        sh.transition = shotsNow[i].transition === 'cut' ? 'fade' : shotsNow[i].transition;
+        sh.auto = { duration: d, layout: 'full', motion: 'auto', style: o.style };
+        shotsNow = [...shotsNow.slice(0, i), sh, ...shotsNow.slice(j)];
+      }
+      last = g.at; added++;
+    }
+    proj = { ...proj, shots: shotsNow, fx };
+    const { fixRepeats } = await import('./suggest');
+    proj = { ...proj, shots: fixRepeats(proj) };
+    if (added) notes.push(`Modèle « ${MODELS[o.model].label} » : ${added} visuel(s) tiré(s) du script (frise, relations, échelle, citation…), à vérifier.`);
+  }
+
   /* mix: music fitted to the edit, ducked under the voice */
   const music = proj.audio.find((c) => c.kind === 'music');
   proj = {
@@ -739,6 +829,12 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
 
   // punch-ins on the stressed moments of the voice
   try { proj = { ...proj, emphasis: await emphasisTimes(proj) }; } catch { /* no audio */ }
+  // the narration matched no panel with confidence (other comics, very short script…): never leave the edit empty
+  if (o.story && panels.length && !proj.shots.some((x) => x.pageId)) {
+    const again = await autoMontage(p, { ...o, story: false });
+    again.report.notes.unshift('Aucune case ne correspond clairement à la narration : alternance visage / cases classique à la place. Ajoute les bonnes planches ou corrige dans « À vérifier ».');
+    return again;
+  }
   noteMontage();
   const checked = validateProject(proj);
   proj = checked.project;

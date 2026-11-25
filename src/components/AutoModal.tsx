@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles } from 'lucide-react';
 import { PROFILE, PROFILES, type ProfileId } from '../engine/direction';
+import { MODELS, type ProductionModel } from '../engine/auto';
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
@@ -29,6 +30,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
     return 'premium';
   });
   const setProfile = (v: ProfileId | null) => { setProfileState(v); try { localStorage.setItem('forge.profile', v ?? 'none'); } catch { /* storage off */ } };
+  const [model, setModel] = useState<ProductionModel>('face-comics');
+  const pickModel = (m: ProductionModel) => { setModel(m); setProfile(MODELS[m].profile); };
   const [length, setLength] = useState<AutoLength>(hasVoice ? 'voice' : 'auto');
   const [hook, setHook] = useState('');
   const [hooks, setHooks] = useState<string[]>([]);
@@ -78,7 +81,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
+      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
       void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
@@ -112,6 +115,18 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
           </div>
           <button className="icon-btn ghost" onClick={onClose} disabled={!!busy} aria-label="Fermer"><X size={18} /></button>
         </header>
+
+        <div className="field">
+          <label>Modèle de production</label>
+          <div className="profile-cards models">
+            {(Object.keys(MODELS) as ProductionModel[]).filter((m) => hasFace || m !== 'face').map((m) => (
+              <button key={m} className={`profile-card ${model === m ? 'on' : ''}`} onClick={() => pickModel(m)} title={MODELS[m].desc}>
+                <strong>{m === 'face-comics' && !hasFace ? 'Comics + voix' : MODELS[m].label}</strong>
+              </button>
+            ))}
+          </div>
+          <p className="help">{MODELS[model].desc}</p>
+        </div>
 
         <div className="field">
           <label>Direction créative</label>

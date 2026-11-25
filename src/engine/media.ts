@@ -167,3 +167,40 @@ export const notifyMedia = () => emit();
 
 /** decode an image into the cache only, never saved (benchmark, previews) */
 export const registerTempImage = (id: string, blob: Blob) => decodeImage(id, blob);
+
+/* ----------------------------------------------- cleaned voice (denoise) */
+
+import type { DenoiseMode, NoiseReport } from './denoise';
+import { heavy } from './jobs';
+const cleaned = new Map<string, { buf: AudioBuffer; report: NoiseReport }>();
+const cleaning = new Map<string, Promise<NoiseReport | null>>();
+
+/** the voice as it will be heard: cleaned when the clean-up is ready, else the original */
+export function voiceBuffer(id: string, mode: DenoiseMode): AudioBuffer | undefined {
+  if (mode !== 'off') { const c = cleaned.get(id + ':' + mode); if (c) return c.buf; }
+  return audios.get(id);
+}
+export const noiseReport = (id: string, mode: DenoiseMode) => cleaned.get(id + ':' + mode)?.report ?? null;
+
+/** compute the cleaned voice once per take and mode (cached) */
+export function ensureClean(id: string, mode: DenoiseMode): Promise<NoiseReport | null> {
+  if (mode === 'off') return Promise.resolve(null);
+  const key = id + ':' + mode;
+  if (cleaned.has(key)) return Promise.resolve(cleaned.get(key)!.report);
+  if (cleaning.has(key)) return cleaning.get(key)!;
+  const job = heavy('audio', async () => {
+    const src = audios.get(id) ?? (await ensureMedia(id, 'audio').catch(() => null), audios.get(id));
+    if (!src) return null;
+    await new Promise((r) => setTimeout(r, 0));
+    const { cleanVoice } = await import('./denoise');
+    const ch = Array.from({ length: src.numberOfChannels }, (_, i) => src.getChannelData(i));
+    const { channels, report } = cleanVoice(ch, src.sampleRate, mode);
+    const buf = new AudioBuffer({ length: src.length, numberOfChannels: src.numberOfChannels, sampleRate: src.sampleRate });
+    channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+    cleaned.set(key, { buf, report });
+    emit();
+    return report;
+  });
+  cleaning.set(key, job);
+  return job.finally(() => cleaning.delete(key));
+}

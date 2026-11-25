@@ -11,6 +11,15 @@ import { TRANSITION, tp } from './effects';
 import { EASE } from './motion';
 import { drawGlTransition } from './gl';
 import { draw3D, itemValues } from './scene3d';
+import { keyToken, keywordsOf } from './scriptIntel';
+
+const keyCache = new WeakMap<object, Set<string>>();
+/** keywords of the subtitles, computed once per subtitle list */
+function subtitleKeys(p: Project): Set<string> {
+  let k = keyCache.get(p.subtitles);
+  if (!k) { k = keywordsOf(p.subtitles.map((s) => s.text), p.shots.flatMap((s) => s.chars ?? [])); keyCache.set(p.subtitles, k); }
+  return k;
+}
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
 import { toSource, type Seg } from './speech';
 
@@ -500,7 +509,59 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   const appear = (i: number) => clamp((local - 0.35 - (i * span) / n) / 0.45, 0, 1);
   const top = vertical ? H * 0.17 : H * 0.22, bottom = H * 0.93;
 
-  if (d.kind === 'scale') {
+  if (d.kind === 'quote') {
+    // a quotation: the words appear as they are read, then the source signs it
+    const it = d.items[0];
+    const words = (it.label || '').split(/\s+/).filter(Boolean);
+    const hasImg = !!(it.pageId && it.rect);
+    const box = vertical ? { x: W * 0.1, y: top + U * 2, w: W * 0.8, h: (bottom - top) * (hasImg ? 0.5 : 0.75) } : { x: hasImg ? W * 0.42 : W * 0.12, y: top + U, w: hasImg ? W * 0.5 : W * 0.76, h: bottom - top - U * 3 };
+    if (hasImg) {
+      const a = easeOutCubic(clamp((local - 0.1) / 0.6, 0, 1));
+      const iw = vertical ? W * 0.7 : W * 0.3, ih = vertical ? (bottom - top) * 0.36 : (bottom - top) * 0.8;
+      const ix = vertical ? (W - iw) / 2 : W * 0.07, iy = vertical ? bottom - ih - U : top + (bottom - top - ih) / 2;
+      ctx.save(); ctx.globalAlpha = a;
+      const pb: Box = { x: ix, y: iy + (1 - a) * U * 2, w: iw, h: ih };
+      drawPanelIn(ctx, project, it.pageId!, pb, baseView(it.rect!, pb.w / pb.h, 'fill'), it.rect!, { bg: false });
+      ctx.strokeStyle = accent; ctx.lineWidth = U * 0.18; ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
+      ctx.restore();
+    }
+    let fs = U * (words.length > 18 ? 1.5 : words.length > 10 ? 1.9 : 2.4);
+    ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`;
+    const lines: string[] = [];
+    const wrap = () => { lines.length = 0; let cur = ''; for (const w of words) { const t2 = cur ? cur + ' ' + w : w; if (ctx.measureText(t2).width > box.w && cur) { lines.push(cur); cur = w; } else cur = t2; } if (cur) lines.push(cur); };
+    wrap();
+    while (lines.length * fs * 1.25 > box.h * 0.8 && fs > U) { fs *= 0.9; ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`; wrap(); }
+    const per = Math.max(0.05, Math.min(0.22, (dur * 0.55) / Math.max(1, words.length)));
+    const shown = Math.floor(clamp((local - 0.3) / per, 0, words.length));
+    ctx.fillStyle = accent;
+    ctx.font = `700 ${fs * 2.6}px ${FONT_STACK.grotesk}`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = clamp(local / 0.3, 0, 1);
+    ctx.fillText('«', box.x - fs * 0.4, box.y - fs * 0.9);
+    ctx.globalAlpha = 1;
+    ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`;
+    let k = 0;
+    const y0 = box.y + fs * 1.4;
+    lines.forEach((ln, li) => {
+      let x = box.x;
+      for (const w of ln.split(' ')) {
+        const a = clamp((local - 0.3 - k * per) / 0.25, 0, 1);
+        if (a > 0) { ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.fillText(w, x, y0 + li * fs * 1.25 + (1 - a) * fs * 0.3); }
+        x += ctx.measureText(w + ' ').width;
+        k++;
+      }
+    });
+    ctx.globalAlpha = 1;
+    if (it.sub && shown >= words.length) {
+      const a = easeOutCubic(clamp((local - 0.3 - words.length * per - 0.2) / 0.4, 0, 1));
+      ctx.globalAlpha = a;
+      ctx.fillStyle = accent;
+      ctx.font = `700 ${fs * 0.55}px ${FONT_STACK.inter}`;
+      ctx.fillText('— ' + it.sub, box.x, y0 + lines.length * fs * 1.25 + fs * 0.5);
+      ctx.globalAlpha = 1;
+    }
+  } else if (d.kind === 'scale') {
     // manim-style chart: axes are drawn on, bars grow, the figures count up
     const vals = itemValues(d);
     const numeric = d.items.every((it) => Number.isFinite(parseFloat(String(it.sub ?? '').replace(/\s/g, '').replace(',', '.'))));
@@ -646,16 +707,21 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     });
     const cs = Math.min(W, H) * (n > 5 ? 0.2 : 0.25);
     const linkT = clamp((local - 0.35 - span) / 0.5, 0, 1);
-    const links: { a: number; b: number; label?: string }[] = d.links.length ? d.links : hub ? ring.map((_, k) => ({ a: 0, b: k + 1 })) : [];
+    const links: Diagram['links'] = d.links.length ? d.links : hub ? ring.map((_, k) => ({ a: 0, b: k + 1 })) : [];
     ctx.save();
-    ctx.strokeStyle = accent;
+    // colour = nature of the relation, line = how sure it is (fact, reading, hypothesis)
+    const KIND_COL: Record<string, string> = { allie: accent, ennemi: '#ff4d4d', famille: '#6cb8ff', autre: '#d9d9e0' };
+    const DASH: Record<string, number[]> = { source: [], interpretation: [U * 0.9, U * 0.5], hypothese: [U * 0.15, U * 0.45] };
     ctx.lineWidth = U * 0.2;
-    ctx.setLineDash([U * 0.6, U * 0.4]);
+    ctx.lineCap = 'round';
     for (const [li, l] of links.entries()) {
       const pa = pos[l.a], pb = pos[l.b];
       if (!pa || !pb) continue;
       const e = clamp(linkT * links.length - li * 0.5, 0, 1);
       if (e <= 0) continue;
+      ctx.strokeStyle = KIND_COL[l.kind ?? ''] ?? accent;
+      ctx.setLineDash(l.status ? DASH[l.status] : [U * 0.6, U * 0.4]);
+      ctx.globalAlpha = l.status === 'hypothese' ? 0.8 : 1;
       ctx.beginPath();
       ctx.moveTo(pa[0], pa[1]);
       ctx.lineTo(lerp(pa[0], pb[0], e), lerp(pa[1], pb[1], e));
@@ -673,9 +739,32 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
         ctx.fillStyle = '#140700';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(l.label.toUpperCase(), mx, my);
+        ctx.fillText(l.label.toUpperCase() + (l.status === 'hypothese' ? ' ?' : ''), mx, my);
         ctx.restore();
       }
+    }
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    // legend, only when the diagram mixes certainties
+    const used = [...new Set(links.map((l) => l.status).filter(Boolean))] as string[];
+    if (used.length && linkT > 0) {
+      const LBL: Record<string, string> = { source: 'Fait sourcé', interpretation: 'Interprétation', hypothese: 'Hypothèse' };
+      ctx.globalAlpha = clamp(linkT * 2, 0, 1);
+      ctx.font = `600 ${U * 0.62}px ${FONT_STACK.inter}`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      let lx = W * 0.05;
+      const ly = H - U * 1.6;
+      for (const k of ['source', 'interpretation', 'hypothese'].filter((x) => used.includes(x))) {
+        ctx.strokeStyle = '#fff';
+        ctx.setLineDash(DASH[k]);
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + U * 2, ly); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillText(LBL[k], lx + U * 2.4, ly);
+        lx += U * 2.8 + ctx.measureText(LBL[k]).width + U * 1.2;
+      }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
     d.items.forEach((it, i) => card(ctx, project, it, pos[i][0], pos[i][1], cs, cs * 1.15, appear(i), accent, U));
@@ -804,7 +893,7 @@ const PRESET = {
  * Draw a caption. `wordTimes` (seconds, relative to `local` origin) drives the
  * karaoke highlight precisely when the words come from a transcript.
  */
-export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local: number, dur: number, isTitle = false, wordTimes?: number[], accent = '#FF5A1F') {
+export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local: number, dur: number, isTitle = false, wordTimes?: number[], accent = '#FF5A1F', keys?: Set<string>) {
   const raw = cap.text.trim();
   if (!raw) return;
   const P = PRESET[cap.preset] ?? PRESET.tiktok;
@@ -916,7 +1005,9 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
         if (cap.preset === 'impact') { ctx.fillStyle = '#000'; ctx.fillText(w, size * 0.07, size * 0.07); }
         ctx.strokeText(w, 0, 0);
       }
-      ctx.fillStyle = isHi ? hiColor : P.fill;
+      // with keywords on, colour means « important word »: the spoken word only pops (scale), it does not change colour
+      const isKey = !!keys?.has(keyToken(words[wi]));
+      ctx.fillStyle = isKey ? accent : isHi && !keys ? hiColor : P.fill;
       ctx.fillText(w, 0, 0);
       ctx.restore();
       x += ww + space;
@@ -1234,9 +1325,11 @@ export function createRenderer(W: number, H: number): Renderer {
         const lay = st.kind === 'shot' && st.ts.shot.pageId ? effectiveLayout(st.ts.shot, !!project.aroll) : null;
         const hasShotCaption = st.kind === 'shot' && st.ts.shot.caption.text.trim();
         if (!hasShotCaption) {
-          const y = lay === 'split' && vertical ? 0.56 : project.subtitleStyle.y;
+          // vertical videos: never under the TikTok / Shorts buttons and description
+          const y0 = lay === 'split' && vertical ? 0.56 : project.subtitleStyle.y;
+          const y = project.format === '9:16' ? Math.min(0.78, Math.max(0.12, y0)) : y0;
           const cap: Caption = { ...project.subtitleStyle, text: sub.text, y };
-          drawCaption(ctx, W, H, cap, t - sub.s, sub.e - sub.s, false, sub.words.map((w) => w.s - sub.s), project.accent);
+          drawCaption(ctx, W, H, cap, t - sub.s, sub.e - sub.s, false, sub.words.map((w) => w.s - sub.s), project.accent, project.subtitleStyle.keywords === false ? undefined : subtitleKeys(project));
         }
       }
     }

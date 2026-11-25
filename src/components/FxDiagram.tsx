@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CATEGORIES, LOOK_EFFECTS, type Category } from '../engine/effects';
 import { ArrowDown, ArrowUp, Plus, Trash2, Type, Image as ImageIcon, Zap, Droplets, Grid3x3, X } from 'lucide-react';
-import type { Diagram, DiagramKind, FxItem, FxKind, Grade, Look, Rect, Shot } from '../types';
+import type { Diagram, DiagramKind, FxItem, FxKind, Grade, Look, Rect, Shot , Certainty, LinkKind } from '../types';
 import { patchShot, update, useStore } from '../store';
 import { addFx, deleteSelection, patchFx } from '../actions';
 import { getImage } from '../engine/media';
@@ -160,12 +160,13 @@ export function LookSection() {
 
 /* ------------------------------------------------------------- diagrams */
 
-const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement'], ['scale', 'Échelle']];
+const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement'], ['scale', 'Échelle'], ['quote', 'Citation']];
 const KINDS_3D: [DiagramKind, string][] = [['orbit', 'Orbite 3D'], ['cosmos', 'Cosmos 3D'], ['tiers', 'Paliers 3D']];
 const HELP_KIND: Partial<Record<DiagramKind, string>> = {
   scale: 'Barres qui montent et chiffres qui défilent. Mets une valeur dans « Détail » (ex. 100, 1 000 000) ; sinon l’ordre de la liste fait le classement.',
   orbit: 'Tes cases en cercle dans l’espace : la caméra tourne puis passe de l’une à l’autre.',
   cosmos: 'Tes cases flottent à différentes profondeurs, la caméra avance à travers les étoiles.',
+  quote: 'La première ligne est la citation, « Détail » sa source (numéro, page). Les mots apparaissent au rythme de la lecture. Ajoute la case du personnage qui parle.',
   tiers: 'Échelle de puissance : des piliers montent du plus faible au plus fort, la caméra grimpe. Mets une valeur dans « Détail ».',
 };
 
@@ -223,6 +224,12 @@ export function DiagramPanel({ shot }: { shot: Shot }) {
                 {d.items.map((it, i) => <option key={it.id} value={i}>{it.label || `Case ${i + 1}`}</option>)}
               </select>
               <input className="input sm" placeholder="Relation" value={l.label ?? ''} onChange={(e) => set({ links: d.links.map((x, j) => (j === li ? { ...x, label: e.target.value } : x)) }, shot.id + 'll' + li)} />
+              <select className="input sm" value={l.kind ?? 'autre'} title="Nature de la relation" onChange={(e) => set({ links: d.links.map((x, j) => (j === li ? { ...x, kind: e.target.value as LinkKind } : x)) })}>
+                <option value="allie">Allié</option><option value="ennemi">Ennemi</option><option value="famille">Famille</option><option value="autre">Autre</option>
+              </select>
+              <select className="input sm" value={l.status ?? ''} title="Certitude : les spectateurs doivent distinguer les faits des opinions" onChange={(e) => set({ links: d.links.map((x, j) => (j === li ? { ...x, status: (e.target.value || undefined) as Certainty | undefined } : x)) })}>
+                <option value="">—</option><option value="source">Fait sourcé</option><option value="interpretation">Interprétation</option><option value="hypothese">Hypothèse</option>
+              </select>
               <button className="icon-btn sm ghost" onClick={() => set({ links: d.links.filter((_, j) => j !== li) })} aria-label="Retirer le lien"><X size={13} /></button>
             </div>
           ))}

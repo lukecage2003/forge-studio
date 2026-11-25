@@ -436,3 +436,65 @@ Les tests de logique bloquent toujours la publication.
 - le parcours d'un montage et la carte des modules ;
 - comment ajouter une transition, un profil, une scène ou un réglage ;
 - les tests, les performances de référence et les licences.
+
+## Studio d'explication : script, voix, sous-titres, recadrage
+
+**Analyse du script** (bouton « Analyser le script », `src/engine/scriptIntel.ts`, locale, sans API) :
+- **Rôle de chaque passage :** accroche, contexte, argument, révélation, exemple, comparaison, preuve, conclusion, changement de rythme.
+- **Ce qui est cité :** personnages, événements, lieux, objets, concepts, dates et chiffres, grâce à un lexique Marvel / DC plus les noms propres.
+- **Visuels proposés,** chacun à accepter ou à ignorer :
+
+  | Visuel | Quand il est proposé |
+  |---|---|
+  | Frise | quand il y a plusieurs dates |
+  | Carte des relations | quand des personnages reviennent |
+  | Duel ou échelle | sur une comparaison |
+  | Citation | sur une réplique entre guillemets, avec un rappel de vérifier la source |
+  | Mot-clé en grand | sur une révélation |
+  | Lieux | seulement si tu fournis une image tirée des comics |
+
+- **Rien d'inventé :** les images viennent uniquement de tes cases. Ce qui manque est demandé, jamais fabriqué.
+
+**Modèles de production** (« Montage auto ») :
+- **Face caméra :** toi avant tout.
+- **Face caméra + comics.**
+- **Explication graphique :** frises, relations et échelles tirées du script.
+- **Révélation et comparaison :** duels, échelles, citations, mots-clés.
+
+Chaque modèle propose son profil de direction, et tout reste modifiable.
+
+**Relations sourcées** : dans les cartes de relations, chaque lien a :
+- une nature : allié, ennemi, famille ;
+- un degré de certitude : fait sourcé (trait plein), interprétation (tirets), hypothèse (pointillés, avec « ? »).
+
+Une légende apparaît dès que les degrés sont mélangés. Un nouveau schéma **Citation** fait apparaître la réplique au rythme de la lecture, puis sa source.
+
+**Nettoyage de la voix** (`src/engine/denoise.ts`, réglage dans l'export : Auto / Légère / Forte / Aucune) :
+1. Le bruit de fond est appris sur les moments calmes de la prise.
+2. La force est choisie selon l'écart voix / bruit : rien sur une prise propre, jamais plus de 18 dB.
+3. La réduction est un filtre de Wiener spectral, lissé pour éviter le son « sous l'eau ». Un plancher garde les respirations.
+4. L'aperçu entend la même voix nettoyée que l'export.
+5. Le rapport qualité indique le bruit avant et après.
+
+**Transcription vérifiée** (`src/engine/transcriptCheck.ts`) : une transcription qui tourne en boucle (hallucination de Whisper) ou au débit impossible n'est jamais utilisée pour couper. Les sous-titres prennent alors ton script, calé sur les passages de voix.
+
+**Sous-titres** :
+- mots importants dans la couleur d'accent ;
+- jamais sous les boutons TikTok / Shorts en 9:16 ;
+- correction ligne par ligne dans l'inspecteur ;
+- export **.ass** (karaoké mot à mot, mots-clés en couleur) en plus du .srt ;
+- choix entre incrustés dans l'image ou livrés à part.
+
+**Recadrage vertical** (`cameraPath` dans `src/engine/faces.ts`, logique reprise de vertical_video_convertor, MIT) :
+- la caméra reste immobile tant que le visage reste dans une zone de tolérance ;
+- elle se déplace à vitesse limitée ;
+- elle coupe net sur un changement de plan, détecté à la couleur ;
+- elle garde son cadre quand le visage est perdu un instant ;
+- un visage filmé de loin est cherché dans des zones agrandies.
+
+**Export** :
+- 1080 × 1920 en H.264, avec contrôle du débit (Haute / Maximale) ;
+- AAC quand le navigateur le permet ;
+- après le rendu, le MP4 est relu pour vérifier la synchronisation (durées des pistes et décalage au départ).
+
+**Ressources** (`src/engine/jobs.ts`) : un seul traitement lourd à la fois (Whisper, relief, détourage, nettoyage de la voix). Le modèle précédent est déchargé avant le suivant.

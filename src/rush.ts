@@ -1,7 +1,8 @@
+import { transcriptQuality } from './engine/transcriptCheck';
 import type { ARoll, Cut, Word } from './types';
 import { getState, setUI, update } from './store';
 import { getAudio, importVideo, ensureVideo } from './engine/media';
-import { analyse, defaultRoughCut, proposeCuts, toMono16k, keepSegments, segsDuration, type Analysis } from './engine/speech';
+import { analyse, defaultRoughCut, proposeCuts, toMono16k, keepSegments, segsDuration, voicedSeconds, type Analysis } from './engine/speech';
 import { hesitationBias, observeCutToggle, observeManualCut, retakeBias, tuneRoughCut } from './engine/brain';
 import { whisperTranscribe, type WhisperModel } from './engine/whisper';
 import { geminiTranscribe, getGoogle } from './engine/google';
@@ -55,7 +56,12 @@ export async function roughCut(silent = false) {
   setUI({ busy: 'Analyse de la voix…' });
   try {
     const { a } = await analysisOf(ar);
-    const auto = proposeCuts(a, ar.words, tuneRoughCut(ar.settings), { hesitation: hesitationBias(), retake: retakeBias() });
+    // a transcript is used for cuts (fillers, retakes) only when it passes the reliability check
+    const check = ar.words.length ? transcriptQuality(ar.words, voicedSeconds(a, ar.settings)) : null;
+    const words = check && !check.ok ? [] : ar.words;
+    if (check) setAroll((x) => ({ ...x, transcriptCheck: { ok: check.ok, reason: check.reason } }));
+    if (check && !check.ok) toast(`Transcription peu fiable (${check.reason}) : aucune coupe faite d’après le texte. Essaie le modèle « Précis » ou colle ton script.`, 'error');
+    const auto = proposeCuts(a, words, tuneRoughCut(ar.settings), { hesitation: hesitationBias(), retake: retakeBias() });
     const manual = ar.cuts.filter((c) => c.reason === 'manual');
     setAroll((x) => ({ ...x, cuts: [...auto, ...manual].sort((p, q) => p.s - q.s) }));
     const nx = getState().project.aroll!;

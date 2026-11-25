@@ -291,3 +291,11 @@ export function toTimeline(segs: Seg[], src: number): number | null {
 export const defaultRoughCut = (): RoughCutSettings => ({
   threshold: 14, minSilence: 0.38, padding: 0.09, hesitations: true, fillers: true, retakes: true,
 });
+
+/** seconds of voice in the take (frames above the voice threshold) */
+export function voicedSeconds(a: Analysis, st: RoughCutSettings): number {
+  const { mask } = voiceMask(a, st.threshold);
+  let n = 0;
+  for (let i = 0; i < mask.length; i++) n += mask[i];
+  return n * HOP;
+}

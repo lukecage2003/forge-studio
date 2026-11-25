@@ -1,5 +1,5 @@
 import type { AudioClip, Project } from '../types';
-import { audioCtx, getAudio } from './media';
+import { audioCtx, ensureClean, getAudio, voiceBuffer } from './media';
 import { segmentsOf } from './timeline';
 import { scheduleSfx } from './sfx';
 
@@ -78,8 +78,9 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
   const duck = p.ducking ? duckKfs(p) : null;
   const clean = p.mix?.voiceClean !== false;
   const voiceIn = clean ? voiceChain(ctx, dest) : dest;
+  const dn = p.mix?.denoise ?? 'auto';
   for (const c of p.audio) {
-    const buf = getAudio(c.mediaId);
+    const buf = c.kind === 'voice' ? voiceBuffer(c.mediaId, dn) : getAudio(c.mediaId);
     if (!buf) continue;
     const end = Math.min(c.start + c.duration, until);
     if (end <= t0) continue;
@@ -102,7 +103,7 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
   }
   // face-cam rush: each kept segment, with 6 ms micro-fades so jump cuts never click
   const ar = p.aroll;
-  const abuf = ar && getAudio(ar.mediaId);
+  const abuf = ar && voiceBuffer(ar.mediaId, dn);
   if (ar && abuf) {
     const bus = ctx.createGain();
     bus.gain.value = ar.volume;
@@ -160,8 +161,16 @@ export function stopPreviewAudio() {
   master = null;
 }
 
+/** clean every voice of the project (rush and voice-overs) before mixing */
+export async function prepareVoices(p: Project) {
+  const dn = p.mix?.denoise ?? 'auto';
+  const ids = [...(p.aroll ? [p.aroll.mediaId] : []), ...p.audio.filter((c) => c.kind === 'voice').map((c) => c.mediaId)];
+  return Promise.all(ids.map((id) => ensureClean(id, dn)));
+}
+
 /** Mix the full soundtrack offline. */
 export async function renderMix(p: Project, duration: number, sampleRate = 48000) {
+  await prepareVoices(p);
   const len = Math.max(1, Math.ceil(duration * sampleRate));
   const ctx = new OfflineAudioContext(2, len, sampleRate);
   schedule(ctx, ctx.destination, p, 0, 0, duration);
