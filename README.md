@@ -239,3 +239,36 @@ src/
 Le rendu est une fonction pure du temps : l'aperçu et l'export utilisent exactement le même moteur, donc ce qu'on voit est ce qu'on exporte.
 
 Identité visuelle : voir [BRAND.md](BRAND.md).
+
+## Moteur de production : phase 3 (fondations motion et effets)
+
+L'audit (phases 1 et 2) a conclu de garder l'architecture et de l'étendre par couches. La phase 3 pose ces fondations sans changer l'aspect des montages existants. Les 27 images de référence sans grain sont restées identiques au pixel près après la migration.
+
+- **Rendu déterministe** (`src/engine/rng.ts`) : le grain, la texture papier et le bruit des bruitages viennent d'un hasard semé. Même projet, même vidéo, à chaque ouverture et sur chaque machine. Chaque projet note la version du moteur qui l'a créé (`engine`).
+- **Jetons de mouvement** (`src/engine/motion.ts`) : durées (`DUR`), courbes (`EASE` : standard, soft, enter, pop, cinematic, snap) avec un solveur `cubicBezier` identique au CSS, intensités (`INTENSITY`) et ressort amorti (`spring`).
+- **Catalogue d'effets** (`src/engine/effects.ts`) : 22 transitions et 9 effets d'image classés en 5 catégories (Comics, Cinéma, Cosmique / SF, Action, Information). Chaque transition déclare :
+  - ses réglages (bornes et valeur par défaut) ;
+  - si elle déclenche le flou de mouvement ;
+  - le volume de son « whoosh » automatique (zéro pour les transitions muettes) ;
+  - sa durée minimale lisible.
+
+  L'inspecteur construit ses curseurs à partir de ce catalogue. Un réglage absent prend la valeur du catalogue, et la validation borne chaque valeur.
+- **Transitions GPU** (`src/engine/gl/`) : 9 shaders choisis dans [gl-transitions](https://github.com/gl-transitions/gl-transitions) (licence MIT, voir `LICENSE-gl-transitions`) :
+
+  | Transition | Catégorie |
+  |---|---|
+  | Zoom flou | Action |
+  | Volet déformé | Cinéma |
+  | Mise au point | Cinéma |
+  | Trame BD | Comics |
+  | Encre | Comics |
+  | Vitesse lumière | Cosmique / SF |
+  | Trou noir | Cosmique / SF |
+  | Glitch numérique | Cosmique / SF |
+  | Volet doux | Information |
+
+  Elles passent par une petite couche WebGL que l'aperçu et l'export partagent. Sans WebGL, elles retombent sur un fondu.
+- **Non-régression visuelle** :
+  - `npm run test:visual` rend 50 images d'une scène synthétique (toutes les transitions, mouvements et options d'image, sans image protégée) et les compare aux références de `tests/visual/baseline`.
+  - `npm run test:visual:update` régénère ces références.
+  - Les références dépendent du rendu des polices et du GPU de la machine : génère-les sur celle qui les vérifie.

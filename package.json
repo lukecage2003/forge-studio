@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:visual": "node tests/visual/run.cjs",
+    "test:visual:update": "node tests/visual/run.cjs --update"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

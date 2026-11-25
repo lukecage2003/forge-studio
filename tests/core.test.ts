@@ -119,3 +119,44 @@ describe('zooms d’accent', () => {
     expect(emphasisAt([2], 5)).toBe(0);
   });
 });
+
+import { parseUniforms } from '../src/engine/gl/parse';
+import { rng, hashSeed } from '../src/engine/rng';
+import { cubicBezier, EASE } from '../src/engine/motion';
+import { TRANSITIONS, tp } from '../src/engine/effects';
+
+describe('phase 3 : déterminisme, jetons, catalogue', () => {
+  it('lit les valeurs par défaut des uniformes GLSL, vecteurs compris', () => {
+    const u = parseUniforms('uniform vec4 c; // = vec4(0.78, 0.88, 1.0, 1.0)\nuniform vec2 center; // = vec2(0.5, 0.5)\nuniform float s; // = 0.4\nuniform float x;');
+    expect(u).toEqual([
+      { name: 'c', type: 'vec4', def: [0.78, 0.88, 1, 1] },
+      { name: 'center', type: 'vec2', def: [0.5, 0.5] },
+      { name: 's', type: 'float', def: [0.4] },
+    ]);
+  });
+  it('le hasard semé redonne la même suite', () => {
+    const a = rng(hashSeed('grain')), b = rng(hashSeed('grain'));
+    for (let i = 0; i < 100; i++) expect(a()).toBe(b());
+  });
+  it('les courbes bezier respectent leurs bornes et la courbe standard', () => {
+    const c = cubicBezier(0.65, 0, 0.35, 1);
+    expect(c(0)).toBe(0); expect(c(1)).toBe(1); expect(c(0.5)).toBeCloseTo(0.5, 3);
+    const lin = cubicBezier(0, 0, 1, 1);
+    for (const x of [0.1, 0.37, 0.8]) expect(lin(x)).toBeCloseTo(x, 4);
+    expect(EASE.standard(0.25)).toBeCloseTo(0.0625, 4);
+  });
+  it('chaque transition a une catégorie, une description et des réglages cohérents', () => {
+    const ids = new Set<string>();
+    for (const t of TRANSITIONS) {
+      expect(ids.has(t.id)).toBe(false); ids.add(t.id);
+      expect(t.desc.length).toBeGreaterThan(5);
+      for (const p of t.params) { expect(p.min).toBeLessThan(p.max); expect(p.def).toBeGreaterThanOrEqual(p.min); expect(p.def).toBeLessThanOrEqual(p.max); }
+    }
+    expect(ids.size).toBe(22);
+  });
+  it('un réglage absent prend la valeur du catalogue', () => {
+    const shot = { transition: 'whip', tp: { spread: 1.5 } } as never;
+    expect(tp(shot, 'trails')).toBe(6);
+    expect(tp(shot, 'spread')).toBe(1.5);
+  });
+});

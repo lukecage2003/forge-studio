@@ -6,6 +6,10 @@ import { emphasisAt } from './emphasis';
 import { brandOf, drawChapter, drawEndScreen, drawIntro } from './brand';
 import { clamp, easeInOutCubic, easeInOutSine, easeOutBack, easeOutCubic, lerp } from '../lib/util';
 import { getImage } from './media';
+import { hashSeed, rng } from './rng';
+import { TRANSITION, tp } from './effects';
+import { EASE } from './motion';
+import { drawGlTransition } from './gl';
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
 import { toSource, type Seg } from './speech';
 
@@ -621,9 +625,10 @@ function drawPaper(ctx: Ctx, W: number, H: number, amount: number) {
     paperTile.width = paperTile.height = 192;
     const x = paperTile.getContext('2d')!;
     const im = x.createImageData(192, 192);
+    const rnd = rng(hashSeed('paper'));
     for (let i = 0; i < im.data.length; i += 4) {
       const p = i / 4, px = p % 192, py = (p / 192) | 0;
-      const fibre = Math.sin(px * 0.9 + Math.sin(py * 0.13) * 6) * 8 + (Math.random() - 0.5) * 26;
+      const fibre = Math.sin(px * 0.9 + Math.sin(py * 0.13) * 6) * 8 + (rnd() - 0.5) * 26;
       const dot = ((px % 6) - 3) ** 2 + ((py % 6) - 3) ** 2 < 3 ? -18 : 0;
       const v = 236 + fibre + dot;
       im.data[i] = v; im.data[i + 1] = v - 6; im.data[i + 2] = v - 18; im.data[i + 3] = 255;
@@ -671,8 +676,9 @@ function drawLook(ctx: Ctx, project: Project, W: number, H: number, t: number) {
       grainTile.width = grainTile.height = 256;
       const x = grainTile.getContext('2d')!;
       const im = x.createImageData(256, 256);
+      const rnd = rng(hashSeed('grain'));
       for (let i = 0; i < im.data.length; i += 4) {
-        const v = Math.random() * 255;
+        const v = rnd() * 255;
         im.data[i] = im.data[i + 1] = im.data[i + 2] = v;
         im.data[i + 3] = 255;
       }
@@ -1183,7 +1189,7 @@ export function createRenderer(W: number, H: number): Renderer {
         const local = t - ts.start;
         if (local < 0 || local > ts.shot.duration) continue;
         const td = Math.min(ts.shot.transitionDur, ts.shot.duration * 0.9);
-        if (['whip', 'slide', 'zoom', 'slash', 'glide'].includes(ts.shot.transition) && local < td) return true;
+        if (TRANSITION[ts.shot.transition]?.moves && local < td) return true;
         if (ts.shot.shake > 0 && local < 0.35) return true;
       }
       return false;
@@ -1237,11 +1243,23 @@ export function createRenderer(W: number, H: number): Renderer {
       renderShot(bctx, project, cur.ts, t, face, segs);
       pageBlur(ctx, project, { x: 0, y: 0, w: W, h: H }, shot.pageId, shot.pageId ? shot.rect : null);
       const kind = shot.transition === 'glide' ? 'slide' : shot.transition;
-      const e = easeInOutCubic(a);
+      const def = TRANSITION[shot.transition];
+      const e = EASE.standard(a);
+      const amt = tp(shot, 'amount');
+      if (def?.gl) {
+        ctx.drawImage(A, 0, 0);
+        if (!drawGlTransition(ctx, def.gl, A, B, a, shot.tp ?? {})) {
+          ctx.globalAlpha = EASE.soft(a);
+          ctx.drawImage(B, 0, 0);
+        }
+        ctx.globalAlpha = 1;
+        overlays(ctx, project, t, total, cur);
+        return;
+      }
       switch (kind) {
         case 'fade':
           ctx.drawImage(A, 0, 0);
-          ctx.globalAlpha = easeInOutSine(a);
+          ctx.globalAlpha = EASE.soft(a);
           ctx.drawImage(B, 0, 0);
           break;
         case 'slide':
@@ -1249,9 +1267,10 @@ export function createRenderer(W: number, H: number): Renderer {
           else { ctx.drawImage(A, -e * W, 0); ctx.drawImage(B, (1 - e) * W, 0); }
           break;
         case 'whip': {
-          const n = 6;
+          const n = Math.max(1, Math.round(tp(shot, 'trails')));
+          const sp = 0.025 * tp(shot, 'spread');
           for (let i = 0; i < n; i++) {
-            const ee = clamp(e + (i - n / 2) * 0.025, 0, 1);
+            const ee = clamp(e + (i - n / 2) * sp, 0, 1);
             ctx.globalAlpha = 1 / (i + 1) + 0.15;
             const off = vertical ? [0, -ee * H, 0, (1 - ee) * H] : [-ee * W, 0, (1 - ee) * W, 0];
             ctx.drawImage(A, off[0], off[1]);
@@ -1261,10 +1280,10 @@ export function createRenderer(W: number, H: number): Renderer {
           break;
         }
         case 'zoom': {
-          const s0 = lerp(1, 1.6, e);
+          const s0 = lerp(1, 1 + 0.6 * amt, e);
           ctx.globalAlpha = 1 - e;
           ctx.drawImage(A, W / 2 - (W * s0) / 2, H / 2 - (H * s0) / 2, W * s0, H * s0);
-          const s1 = lerp(0.8, 1, e);
+          const s1 = lerp(1 - 0.2 * amt, 1, e);
           ctx.globalAlpha = e;
           ctx.drawImage(B, W / 2 - (W * s1) / 2, H / 2 - (H * s1) / 2, W * s1, H * s1);
           break;
@@ -1272,17 +1291,18 @@ export function createRenderer(W: number, H: number): Renderer {
         case 'slash': {
           // diagonal comic-panel wipe with an accent edge
           ctx.drawImage(A, 0, 0);
-          const k = e * (W + H * 0.6) * 1.05 - H * 0.3;
+          const sk = H * tp(shot, 'angle');
+          const k = e * (W + sk * 2) * 1.05 - sk;
           ctx.save();
           ctx.beginPath();
-          ctx.moveTo(-H * 0.3, 0); ctx.lineTo(k, 0); ctx.lineTo(k - H * 0.3, H); ctx.lineTo(-H * 0.3, H);
+          ctx.moveTo(-sk, 0); ctx.lineTo(k, 0); ctx.lineTo(k - sk, H); ctx.lineTo(-sk, H);
           ctx.closePath();
           ctx.clip();
           ctx.drawImage(B, 0, 0);
           ctx.restore();
           ctx.strokeStyle = project.accent;
-          ctx.lineWidth = Math.min(W, H) * 0.018;
-          ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k - H * 0.3, H); ctx.stroke();
+          ctx.lineWidth = Math.min(W, H) * 0.018 * tp(shot, 'edge');
+          if (ctx.lineWidth > 0) { ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k - sk, H); ctx.stroke(); }
           break;
         }
         case 'iris': {
@@ -1292,9 +1312,9 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.beginPath(); ctx.arc(W / 2, H / 2, rad, 0, Math.PI * 2); ctx.clip();
           ctx.drawImage(B, 0, 0);
           ctx.restore();
-          if (e < 1) {
+          if (e < 1 && tp(shot, 'edge') > 0) {
             ctx.strokeStyle = project.accent;
-            ctx.lineWidth = Math.min(W, H) * 0.012;
+            ctx.lineWidth = Math.min(W, H) * 0.012 * tp(shot, 'edge');
             ctx.beginPath(); ctx.arc(W / 2, H / 2, rad, 0, Math.PI * 2); ctx.stroke();
           }
           break;
@@ -1302,18 +1322,18 @@ export function createRenderer(W: number, H: number): Renderer {
         case 'glitch': {
           const src = a < 0.5 ? A : B;
           ctx.drawImage(src, 0, 0);
-          const amt = 1 - Math.abs(a - 0.5) * 2;
+          const gAmt = (1 - Math.abs(a - 0.5) * 2) * amt;
           const slices = 9;
           for (let i = 0; i < slices; i++) {
             const r1 = Math.abs(Math.sin((i + 1) * 91.7 + Math.floor(a * 12) * 13.1));
             if (r1 < 0.45) continue;
             const y = (i / slices) * H, sh = H / slices * (0.4 + r1 * 0.6);
-            const dx = (r1 - 0.7) * W * 0.12 * amt;
+            const dx = (r1 - 0.7) * W * 0.12 * gAmt;
             ctx.drawImage(a < 0.5 ? B : A, 0, y, W, sh, dx, y, W, sh);
           }
-          ctx.globalAlpha = 0.35 * amt;
+          ctx.globalAlpha = clamp(0.35 * gAmt, 0, 1);
           ctx.globalCompositeOperation = 'screen';
-          ctx.drawImage(src, W * 0.012 * amt, 0);
+          ctx.drawImage(src, W * 0.012 * gAmt, 0);
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1;
           break;
@@ -1324,14 +1344,14 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.globalAlpha = clamp((a - 0.35) / 0.3, 0, 1);
           ctx.drawImage(B, 0, 0);
           ctx.globalAlpha = 1;
-          const k = Math.sin(Math.PI * a);
+          const k = Math.sin(Math.PI * a) * amt;
           ctx.save();
           ctx.globalCompositeOperation = 'screen';
           const cx = lerp(-W * 0.2, W * 1.2, e), cy = H * (0.3 + 0.4 * Math.sin(a * 3));
           const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.75);
-          g.addColorStop(0, `rgba(255,236,190,${0.95 * k})`);
-          g.addColorStop(0.25, `rgba(255,140,40,${0.75 * k})`);
-          g.addColorStop(0.6, `rgba(200,40,20,${0.35 * k})`);
+          g.addColorStop(0, `rgba(255,236,190,${Math.min(1, 0.95 * k)})`);
+          g.addColorStop(0.25, `rgba(255,140,40,${Math.min(1, 0.75 * k)})`);
+          g.addColorStop(0.6, `rgba(200,40,20,${Math.min(1, 0.35 * k)})`);
           g.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.fillStyle = g;
           ctx.fillRect(0, 0, W, H);
@@ -1340,22 +1360,22 @@ export function createRenderer(W: number, H: number): Renderer {
         }
         case 'dip': {
           ctx.drawImage(a < 0.5 ? A : B, 0, 0);
-          ctx.fillStyle = `rgba(0,0,0,${1 - Math.abs(a - 0.5) * 2})`;
+          ctx.fillStyle = `rgba(0,0,0,${(1 - Math.abs(a - 0.5) * 2) * amt})`;
           ctx.fillRect(0, 0, W, H);
           break;
         }
         case 'blur': {
-          const bl = Math.round(Math.min(W, H) * 0.02 * Math.sin(Math.PI * a));
+          const bl = Math.round(Math.min(W, H) * 0.02 * amt * Math.sin(Math.PI * a));
           ctx.filter = bl > 0 ? `blur(${bl}px)` : 'none';
           ctx.drawImage(A, 0, 0);
-          ctx.globalAlpha = easeInOutSine(a);
+          ctx.globalAlpha = EASE.soft(a);
           ctx.drawImage(B, 0, 0);
           ctx.filter = 'none';
           break;
         }
         case 'flash':
           ctx.drawImage(a < 0.5 ? A : B, 0, 0);
-          ctx.globalAlpha = 1 - Math.abs(a - 0.5) * 2;
+          ctx.globalAlpha = (1 - Math.abs(a - 0.5) * 2) * clamp(amt, 0, 1);
           ctx.fillStyle = '#fff';
           ctx.fillRect(0, 0, W, H);
           break;

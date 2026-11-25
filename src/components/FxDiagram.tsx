@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { CATEGORIES, LOOK_EFFECTS, type Category } from '../engine/effects';
 import { ArrowDown, ArrowUp, Plus, Trash2, Type, Image as ImageIcon, Zap, Droplets, Grid3x3, X } from 'lucide-react';
 import type { Diagram, DiagramKind, FxItem, FxKind, Grade, Look, Rect, Shot } from '../types';
 import { patchShot, update, useStore } from '../store';
@@ -128,30 +129,24 @@ export function LookSection() {
           {GRADES.map(([g, l]) => <button key={g} className={look.grade === g ? 'on' : ''} onClick={() => set({ grade: g })}>{l}</button>)}
         </div>
       )}
-      <Slider label="Vignette" value={look.vignette} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ vignette: v }, 'vig')} />
-      <Slider label="Caméra à l’épaule" value={look.handheld ?? 0} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ handheld: v }, 'hh')} />
-      <label className="toggle">
-        <input type="checkbox" checked={look.speedLines !== false} onChange={(e) => set({ speedLines: e.target.checked })} />
-        <span className="switch" /><span>Lignes de vitesse sur les impacts</span>
-      </label>
-      <label className="toggle">
-        <input type="checkbox" checked={look.motionBlur !== false} onChange={(e) => set({ motionBlur: e.target.checked })} />
-        <span className="switch" /><span>Flou de mouvement à l’export<small>Sur les transitions rapides et les impacts</small></span>
-      </label>
-      <label className="toggle">
-        <input type="checkbox" checked={look.parallax !== false} onChange={(e) => set({ parallax: e.target.checked })} />
-        <span className="switch" /><span>Relief 2.5D (parallaxe)<small>Le personnage se détache du décor (IA de profondeur, locale)</small></span>
-      </label>
-      <label className="toggle">
-        <input type="checkbox" checked={!!look.balloonPop} onChange={(e) => set({ balloonPop: e.target.checked })} />
-        <span className="switch" /><span>Bulles qui apparaissent une à une</span>
-      </label>
-      <Slider label="Texture papier BD" value={look.paper ?? 0} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ paper: v }, 'paper')} />
-      <label className="toggle">
-        <input type="checkbox" checked={look.chroma !== false} onChange={(e) => set({ chroma: e.target.checked })} />
-        <span className="switch" /><span>Aberration chromatique sur les impacts</span>
-      </label>
-      <Slider label="Grain" value={look.grain} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ grain: v }, 'grain')} />
+      {(Object.keys(CATEGORIES) as Category[]).map((c) => {
+        const items = LOOK_EFFECTS.filter((e) => e.category === c);
+        if (!items.length) return null;
+        return (
+          <div key={c} className="fx-cat">
+            <span className="fx-cat-title">{CATEGORIES[c]}</span>
+            {items.map((e) => e.kind === 'amount' ? (
+              <Slider key={e.key} label={e.label} value={Number(look[e.key] ?? 0)} min={0} max={1} step={0.05}
+                fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ [e.key]: v } as Partial<Look>, 'look-' + e.key)} />
+            ) : (
+              <label key={e.key} className="toggle">
+                <input type="checkbox" checked={e.key === 'balloonPop' ? !!look[e.key] : look[e.key] !== false} onChange={(ev) => set({ [e.key]: ev.target.checked } as Partial<Look>)} />
+                <span className="switch" /><span>{e.label}<small>{e.desc}</small></span>
+              </label>
+            ))}
+          </div>
+        );
+      })}
       {hasFace && (
         <label className="toggle">
           <input type="checkbox" checked={look.cutout} onChange={(e) => set({ cutout: e.target.checked })} />

@@ -7,6 +7,7 @@ import { getState, patchCaption, patchShot, setUI, update, useStore } from '../s
 import { LAYOUT_FR } from '../engine/brain';
 import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
 import { Slider } from './Slider';
+import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engine/effects';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
 import { PanelPicker } from './FxDiagram';
@@ -64,11 +65,7 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
   { v: 'pan-down', l: 'Bas', i: <ArrowDown size={16} /> },
 ];
 
-const TRANSITIONS: [Transition, string][] = [
-  ['cut', 'Cut'], ['glide', 'Glisse caméra'], ['fade', 'Fondu'], ['slide', 'Poussée'],
-  ['whip', 'Whip'], ['zoom', 'Zoom'], ['flash', 'Flash'], ['slash', 'Coupe BD (diagonale)'],
-  ['iris', 'Iris'], ['glitch', 'Glitch'], ['dip', 'Passage au noir'], ['blur', 'Fondu flou'], ['burn', 'Brûlure pellicule'],
-];
+const TR_GROUPS = (Object.keys(CATEGORIES) as Category[]).map((c) => ({ c, label: CATEGORIES[c], items: TRANSITIONS.filter((t) => t.category === c) }));
 
 const PRESETS: { v: CaptionPreset; l: string }[] = [
   { v: 'tiktok', l: 'TikTok' }, { v: 'comic', l: 'Récitatif' }, { v: 'impact', l: 'Impact' },
@@ -194,14 +191,28 @@ function ShotPanel({ shot }: { shot: Shot }) {
       )}
 
       {(index > 0 || overlay) && (
-        <Section title="Transition d’entrée" aside={<button className="link-btn" title="Même transition pour tous les plans" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x, i) => (i === 0 && !p.aroll ? x : { ...x, transition: shot.transition, transitionDur: Math.min(shot.transitionDur, x.duration * 0.45) })) }))}>Appliquer à tous</button>}>
-          <select className="input" value={shot.transition} onChange={(e) => patchShot(shot.id, { transition: e.target.value as Transition })}>
-            {TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        <Section title="Transition d’entrée" aside={<button className="link-btn" title="Même transition pour tous les plans" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x, i) => (i === 0 && !p.aroll ? x : { ...x, transition: shot.transition, tp: shot.tp, transitionDur: Math.min(shot.transitionDur, x.duration * 0.45) })) }))}>Appliquer à tous</button>}>
+          <select className="input" value={shot.transition} onChange={(e) => {
+            const tr = e.target.value as Transition;
+            const min = TRANSITION[tr]?.minDur ?? 0;
+            patchShot(shot.id, { transition: tr, tp: undefined, transitionDur: Math.min(shot.duration * 0.45, Math.max(shot.transitionDur, min)) });
+          }}>
+            {TR_GROUPS.map((g) => (
+              <optgroup key={g.c} label={g.label}>
+                {g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </optgroup>
+            ))}
           </select>
+          {TRANSITION[shot.transition] && <p className="help">{TRANSITION[shot.transition].desc}</p>}
           {shot.transition !== 'cut' && (
             <Slider label="Durée" value={shot.transitionDur} min={0.1} max={1.5} step={0.05}
               fmt={(v) => v.toFixed(2) + ' s'} onChange={(v) => patchShot(shot.id, { transitionDur: v }, k('td'))} />
           )}
+          {TRANSITION[shot.transition]?.params.map((pa) => (
+            <Slider key={pa.key} label={pa.label} value={tp(shot, pa.key)} min={pa.min} max={pa.max} step={pa.step}
+              fmt={pa.fmt ?? ((v) => String(+v.toFixed(3)))}
+              onChange={(v) => patchShot(shot.id, { tp: { ...(shot.tp ?? {}), [pa.key]: v } }, k('tp' + pa.key))} />
+          ))}
         </Section>
       )}
 

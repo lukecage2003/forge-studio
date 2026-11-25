@@ -1,5 +1,6 @@
 import type { Project, Rect, Shot } from '../types';
 import { arollDuration } from './timeline';
+import { TRANSITION } from './effects';
 
 /**
  * Last line of defence: repairs anything that would make a frame fail or look
@@ -34,6 +35,13 @@ export function validateProject(p: Project): { project: Project; fixes: string[]
       }
     }
     if (!ok(shot.duration) || shot.duration < 0.3) { shot.duration = Math.max(0.3, ok(shot.duration) ? shot.duration : 2); fixes.push('durée corrigée'); }
+    if (!TRANSITION[shot.transition]) { shot.transition = 'fade'; shot.tp = undefined; fixes.push('transition inconnue remplacée par un fondu'); }
+    if (shot.tp) {
+      const def = TRANSITION[shot.transition];
+      const clean: Record<string, number> = {};
+      for (const pa of def.params) { const v = shot.tp[pa.key]; if (ok(v)) clean[pa.key] = Math.min(pa.max, Math.max(pa.min, v)); }
+      shot.tp = Object.keys(clean).length ? clean : undefined;
+    }
     if (!ok(shot.transitionDur) || shot.transitionDur < 0) shot.transitionDur = 0;
     shot.transitionDur = Math.min(shot.transitionDur, shot.duration * 0.45);
     if (!ok(shot.intensity)) shot.intensity = 0.5;

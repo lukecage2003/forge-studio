@@ -1,5 +1,7 @@
 import type { Project } from '../types';
 import { layoutShots } from './timeline';
+import { hashSeed, rng } from './rng';
+import { TRANSITION } from './effects';
 
 /**
  * Automatic sound design, synthesised (no sound files): an airy whoosh on
@@ -31,7 +33,8 @@ function make(ctx: BaseAudioContext, kind: Kind): AudioBuffer {
   const dur = kind === 'impact' ? 0.9 : kind === 'whoosh' ? 0.55 : 0.22;
   const n = Math.round(sr * dur);
   const buf = ctx.createBuffer(2, n, sr);
-  const noise = Float32Array.from({ length: n }, () => Math.random() * 2 - 1);
+  const rnd = rng(hashSeed(kind));
+  const noise = Float32Array.from({ length: n }, () => rnd() * 2 - 1);
   let out: Float32Array;
   if (kind === 'impact') {
     out = new Float32Array(n);
@@ -69,7 +72,6 @@ function make(ctx: BaseAudioContext, kind: Kind): AudioBuffer {
   return buf;
 }
 
-const MOVING = new Set(['whip', 'slide', 'zoom', 'slash', 'iris', 'glitch', 'burn']);
 
 export interface SfxEvent { t: number; kind: Kind; gain: number }
 
@@ -79,7 +81,8 @@ export function sfxEvents(p: Project): SfxEvent[] {
   const timed = layoutShots(p);
   for (const ts of timed) {
     const s = ts.shot;
-    if (MOVING.has(s.transition)) ev.push({ t: ts.start - 0.18, kind: 'whoosh', gain: s.transition === 'whip' ? 0.9 : 0.6 });
+    const whoosh = TRANSITION[s.transition]?.sfx ?? 0;
+    if (whoosh > 0) ev.push({ t: ts.start - 0.18, kind: 'whoosh', gain: whoosh });
     else if (s.transition === 'glide') ev.push({ t: ts.start - 0.05, kind: 'swish', gain: 0.25 });
     if (s.shake > 0.3 || s.transition === 'flash') ev.push({ t: ts.start, kind: 'impact', gain: 0.5 + 0.5 * Math.min(1, s.shake) });
   }

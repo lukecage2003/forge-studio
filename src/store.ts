@@ -1,4 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
+import { ENGINE_VERSION } from './engine/rng';
 import type { Caption, Project, Selection, Shot } from './types';
 import { observeShotDeleted, observeShotEdit } from './engine/brain';
 import { uid } from './lib/util';
@@ -29,6 +30,7 @@ export const defaultCaption = (): Omit<Caption, 'text'> => ({ preset: 'tiktok', 
 export function newProject(): Project {
   return {
     id: uid('p_'),
+    engine: ENGINE_VERSION,
     name: 'Sans titre',
     format: '9:16',
     fps: 30,
@@ -66,6 +68,7 @@ export function migrate(p: Project): Project {
     fx: p.fx ?? [],
     look: { ...base.look, ...(p.look ?? {}) },
     autoSfx: p.autoSfx ?? base.autoSfx,
+    engine: p.engine ?? 2,
   };
 }
 

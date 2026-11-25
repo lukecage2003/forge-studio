@@ -48,7 +48,9 @@ export type Motion =
 
 export type Framing = 'fit' | 'fill';
 
-export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur' | 'burn';
+export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur' | 'burn'
+  // GPU transitions (gl-transitions)
+  | 'crosszoom' | 'warp' | 'defocus' | 'halftone' | 'inkbleed' | 'warpspeed' | 'gravitylens' | 'glitchdisplace' | 'wipe';
 
 /**
  * How a comic shot is composed on screen.
@@ -90,6 +92,8 @@ export interface Shot {
   intensity: number; // 0..1
   transition: Transition; // transition INTO this shot
   transitionDur: number;
+  /** settings of the transition (see engine/effects), defaults when absent */
+  tp?: Record<string, number>;
   shake: number; // 0..1 impact shake at start
   caption: Caption;
   nameTag?: string; // e.g. character name, shown as a lower third
@@ -191,6 +195,8 @@ export type Background = 'blur' | 'color' | 'page' | 'halftone';
 
 export interface Project {
   id: string;
+  /** rendering engine version the project was made with (reproducibility) */
+  engine?: number;
   name: string;
   format: Format;
   fps: number;
