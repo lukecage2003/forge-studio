@@ -3,7 +3,9 @@ import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, File
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
-import { addDiagram, addTitleCard, importAudioFiles, importPages, removePage, togglePageSkip } from '../actions';
+import { addDiagram, addTitleCard, classifyWithGoogle, importAudioFiles, importPages, removePage, setPageKind, togglePageSkip } from '../actions';
+import { PAGE_KINDS, type PageKind } from '../types';
+import { hasGoogle } from '../engine/google';
 import { importRush } from '../rush';
 import { keepSegments, segsDuration } from '../engine/speech';
 import type { AudioKind } from '../types';
@@ -29,6 +31,9 @@ export function Sidebar() {
       <section className="side-section grow">
         <div className="side-head">
           <h2>Planches</h2>
+          {pages.length > 0 && hasGoogle() && (
+            <button className="link-btn" onClick={() => void classifyWithGoogle()} title="Google vérifie le type de chaque page (couverture, pub, texte…)">Classer avec Google</button>
+          )}
           <span className="count">{pages.length}</span>
         </div>
         <button className="btn block" onClick={() => pageRef.current?.click()}>
@@ -53,6 +58,12 @@ export function Sidebar() {
                 <div className="page-meta">
                   <span className="page-num">P.{String(i + 1).padStart(2, '0')}</span>
                   <span className="page-name" title={pg.name}>{pg.name}</span>
+                  {pg.kind && (
+                    <select className={`kind-chip k-${pg.kind}`} value={pg.kind} title={`Type de page${pg.kindWhy ? ' · ' + pg.kindWhy : ''}`}
+                      onClick={(e) => e.stopPropagation()} onChange={(e) => setPageKind(pg.id, e.target.value as PageKind)}>
+                      {(Object.keys(PAGE_KINDS) as PageKind[]).map((k) => <option key={k} value={k}>{PAGE_KINDS[k].label}</option>)}
+                    </select>
+                  )}
                   <span className="page-shots">{pg.skip ? 'exclue du montage' : `${n} ${pg.cut === 'zones' ? 'zones' : pg.cut === 'splash' ? 'pleine page' : n > 1 ? 'cases' : 'case'}`}</span>
                 </div>
                 <button className="icon-btn ghost sm" title={pg.skip ? 'Inclure dans le montage' : 'Exclure du montage (pub, crédits…)'}

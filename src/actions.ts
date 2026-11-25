@@ -4,6 +4,8 @@ import { getState, newShot, setUI, update } from './store';
 import { getImage, importAudio, importImage } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
+import { classifyPage, medianAspect } from './engine/classify';
+import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
 import { toast } from './components/Toast';
 
@@ -21,21 +23,36 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
       setUI({ busy: `Préparation des pages ${i + 1}/${imgs.length}…` });
       try {
         const { id, asset } = await importImage(imgs[i].blob);
-        pages.push({ id: uid('pg_'), name: imgs[i].name, mediaId: id, width: asset.width, height: asset.height });
+        pages.push({ id: uid('pg_'), name: imgs[i].name, mediaId: id, width: asset.width, height: asset.height, source: imgs[i].source, srcIndex: imgs[i].srcIndex, srcCount: imgs[i].srcCount, kindWhy: imgs[i].hint });
       } catch {
         toast(`${imgs[i].name} : image illisible, ignorée.`, 'error');
       }
     }
     let zones = 0;
+    const kinds: Partial<Record<PageKind, number>> = {};
     update((p) => {
       let next: Project = { ...p, pages: [...p.pages, ...pages] };
       if (opts.autoCut) {
+        const aspects = new Map<string, number>();
+        for (const src of new Set(pages.map((x) => x.source ?? ''))) aspects.set(src, medianAspect(pages.filter((x) => x.source === src)));
+        let prev: { source?: string; kind?: PageKind } = {};
         for (const pg of pages) {
           const a = getImage(pg.mediaId)!;
           const cut = cutPage(a.img, a.width, a.height, p.readingOrder === 'rtl');
+          const cls = classifyPage(a.img, a.width, a.height, cut, {
+            srcIndex: pg.srcIndex ?? 0, srcCount: pg.srcCount ?? 1, medianAspect: aspects.get(pg.source ?? '') ?? 0.65,
+            hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined,
+          });
+          prev = { source: pg.source, kind: cls.kind };
+          pg.kind = cls.kind;
+          pg.kindWhy = cls.why;
+          pg.skip = PAGE_KINDS[cls.kind].skip;
           pg.cut = cut.kind;
-          if (cut.kind === 'zones') zones++;
-          const shots = cut.rects.map((rect) => newShot(next, { pageId: pg.id, rect, zone: cut.kind === 'panels' ? undefined : cut.kind }));
+          kinds[cls.kind] = (kinds[cls.kind] ?? 0) + 1;
+          const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
+          if (!whole && cut.kind === 'zones') zones++;
+          const rects = whole ? [{ x: 0, y: 0, w: a.width, h: a.height }] : cut.rects;
+          const shots = rects.map((rect) => newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind }));
           next = { ...next, shots: [...next.shots, ...shots] };
         }
       }
@@ -43,7 +60,10 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
     });
     const n = getState().project.shots.length;
     setUI({ activePageId: pages[0]?.id ?? null, selection: pages[0] ? { kind: 'page', id: pages[0].id } : null });
-    toast(`${pages.length} page${pages.length > 1 ? 's' : ''} importée${pages.length > 1 ? 's' : ''} · ${n} plans${zones ? ` · ${zones} page${zones > 1 ? 's' : ''} animée${zones > 1 ? 's' : ''} par zones` : ''}`);
+    toast(`${pages.length} page${pages.length > 1 ? 's' : ''} importée${pages.length > 1 ? 's' : ''} · ${n} plans${zones ? ` · ${zones} page${zones > 1 ? 's' : ''} animée${zones > 1 ? 's' : ''} par bandes` : ''}`);
+    const skipped = Object.entries(kinds).filter(([k]) => PAGE_KINDS[k as PageKind].skip).map(([k, v]) => `${v} ${PAGE_KINDS[k as PageKind].label.toLowerCase()}`);
+    const covers = kinds.cover ?? 0;
+    toast(`Pages reconnues : ${covers} couverture${covers > 1 ? 's' : ''}, ${kinds.story ?? 0} planches${kinds.splash ? `, ${kinds.splash} pleines pages` : ''}${kinds.spread ? `, ${kinds.spread} doubles pages` : ''}${skipped.length ? ` · exclues : ${skipped.join(', ')}` : ''}`);
   } finally {
     setUI({ busy: null });
   }
@@ -247,4 +267,42 @@ export async function aiRecut(pageIds?: string[]) {
   setUI({ busy: null });
   if (done) toast(`${done} page${done > 1 ? 's' : ''} recoupée${done > 1 ? 's' : ''} par l’IA Google`);
   return done;
+}
+
+/** change what a page is; covers/splashes/text become one whole-page shot, story pages are cut again */
+export function setPageKind(id: string, kind: PageKind) {
+  const pg = getState().project.pages.find((x) => x.id === id);
+  const a = pg && getImage(pg.mediaId);
+  if (!pg || !a) return;
+  update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === id ? { ...x, kind, kindWhy: 'choisi à la main', skip: PAGE_KINDS[kind].skip } : x)) }));
+  if (kind === 'story' || kind === 'spread') redetect(id);
+  else replacePageShots(id, [{ x: 0, y: 0, w: a.width, h: a.height }], 'splash');
+}
+
+/** Classify every page with Google Gemini in one request per 40 pages. */
+export async function classifyWithGoogle() {
+  const { geminiClassify, hasGoogle } = await import('./engine/google');
+  if (!hasGoogle()) { setUI({ settingsOpen: true }); return; }
+  const pages = getState().project.pages;
+  try {
+    for (let k = 0; k < pages.length; k += 40) {
+      setUI({ busy: `Google classe les pages ${k + 1}–${Math.min(pages.length, k + 40)}…` });
+      const batch = pages.slice(k, k + 40);
+      const thumbs = batch.map((pg) => {
+        const a = getImage(pg.mediaId)!;
+        const c = document.createElement('canvas');
+        const s = 320 / Math.max(a.width, a.height);
+        c.width = Math.round(a.width * s); c.height = Math.round(a.height * s);
+        c.getContext('2d')!.drawImage(a.img, 0, 0, c.width, c.height);
+        return c.toDataURL('image/jpeg', 0.75).split(',')[1];
+      });
+      const kinds = await geminiClassify(thumbs);
+      batch.forEach((pg, i) => { const kd = kinds[i]; if (kd && kd !== pg.kind) setPageKind(pg.id, kd); });
+    }
+    toast('Pages classées par Google');
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  } finally {
+    setUI({ busy: null });
+  }
 }

@@ -1,4 +1,4 @@
-import type { Word } from '../types';
+import type { PageKind, Word } from '../types';
 import { SR } from './speech';
 
 /**
@@ -170,4 +170,25 @@ export async function geminiPanels(jpegB64: string, rtl: boolean, signal?: Abort
     .filter((b) => Array.isArray(b.box_2d) && b.box_2d.length === 4)
     .map(({ box_2d: [y0, x0, y1, x1] }) => ({ y0: y0 / 1000, x0: x0 / 1000, y1: y1 / 1000, x1: x1 / 1000 }))
     .filter((b) => b.x1 - b.x0 > 0.05 && b.y1 - b.y0 > 0.03);
+}
+
+const KINDS: PageKind[] = ['story', 'cover', 'variant', 'splash', 'spread', 'text', 'ad', 'blank'];
+
+/** One request for up to 40 page thumbnails: what each page is. */
+export async function geminiClassify(thumbs: string[], signal?: AbortSignal): Promise<(PageKind | null)[]> {
+  const parts: unknown[] = [{
+    text:
+      `Voici ${thumbs.length} pages d'un comics, dans l'ordre. Pour chacune, donne son type : ` +
+      `story (planche avec des cases), cover (couverture principale du numéro), variant (couverture variante, dos, illustration bonus), ` +
+      `splash (illustration pleine page dans l'histoire), spread (double page), text (crédits, résumé, texte, courrier), ` +
+      `ad (publicité, page d'un site de scans, annonce), blank (page vide). Réponds par un tableau de ${thumbs.length} types.`,
+  }];
+  thumbs.forEach((t, i) => { parts.push({ text: `Page ${i + 1} :` }); parts.push({ inline_data: { mime_type: 'image/jpeg', data: t } }); });
+  const text = await generate(parts, { type: 'ARRAY', items: { type: 'STRING', enum: KINDS } }, signal);
+  try {
+    const arr = JSON.parse(text) as string[];
+    return thumbs.map((_, i) => (KINDS.includes(arr[i] as PageKind) ? (arr[i] as PageKind) : null));
+  } catch {
+    return thumbs.map(() => null);
+  }
 }

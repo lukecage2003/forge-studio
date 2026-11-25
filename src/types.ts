@@ -17,9 +17,28 @@ export interface Page {
   height: number;
   /** excluded from the auto edit (ads, credits…) */
   skip?: boolean;
+  /** what the page is: story page, cover, ad… (auto-classified, editable) */
+  kind?: PageKind;
+  kindWhy?: string;
+  /** file it came from (PDF/CBZ), its position and page count there */
+  source?: string;
+  srcIndex?: number;
+  srcCount?: number;
   /** how the page was cut: real panels, a full-page splash, or reading-order zones */
   cut?: 'panels' | 'splash' | 'zones';
 }
+
+export type PageKind = 'story' | 'cover' | 'variant' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';
+export const PAGE_KINDS: Record<PageKind, { label: string; skip: boolean }> = {
+  story: { label: 'Planche', skip: false },
+  cover: { label: 'Couverture', skip: false },
+  variant: { label: 'Couverture variante', skip: true },
+  splash: { label: 'Pleine page', skip: false },
+  spread: { label: 'Double page', skip: false },
+  text: { label: 'Texte / crédits', skip: true },
+  ad: { label: 'Publicité', skip: true },
+  blank: { label: 'Page vide', skip: true },
+};
 
 export type Motion =
   | 'auto' | 'static' | 'zoom-in' | 'zoom-out'

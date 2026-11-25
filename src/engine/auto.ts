@@ -211,7 +211,7 @@ export function buildSubtitles(words: Word[], maxWords: number): Subtitle[] {
 
 /* --------------------------------------------------------------- main */
 
-interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean }
+interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean; cover?: string }
 
 export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project: Project; report: AutoReport }> {
   const st = STYLES[o.style];
@@ -256,7 +256,11 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     const pan = resolveMotion({ ...s, motion: 'auto' }, aspect, readingOrder === 'rtl').motion.startsWith('pan');
     let w = 0.65 + panelLoad(a.img, s.rect) * 0.9 + Math.sqrt(area) * 0.6;
     if (pan) w *= 1.3;
-    return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones') };
+    const isCover = pg.kind === 'cover';
+    const sources = new Set(proj.pages.filter((x) => !x.skip).map((x) => x.source)).size;
+    const cover = isCover ? (sources > 1 ? prettySource(pg.source ?? pg.name) : '') : undefined;
+    if (isCover) w *= 1.5;
+    return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones'), cover };
   });
 
   const minRead = (s: Shot) => {
@@ -269,6 +273,11 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     const s = pn.shot;
     // unreliable panels: travel the page zone by zone with the spotlight, always readable
     if (s.zone === 'zones' && layout !== 'split' && layout !== 'pip') layout = 'page';
+    // covers: the whole cover, slow reveal, the issue name when several issues are edited together
+    if (pn.cover !== undefined) {
+      return { ...s, layout: layout === 'pip' ? 'pip' : 'full', motion: 'zoom-out', framing: 'fit', intensity: 0.55, shake: 0, nameTag: pn.cover || s.nameTag,
+        caption: o.captionStyle ? { ...s.caption, preset: st.preset, anim: st.anim } : s.caption };
+    }
     let motion: Motion = 'auto';
     if (!pn.pan) motion = pn.splash ? 'zoom-out' : flip ? 'zoom-out' : 'zoom-in';
     motion = preferredMotion(motion);
@@ -289,7 +298,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     let merged = 0;
     for (let i = 0; i < list.length; i++) {
       const a = list[i], b = list[i + 1], c = list[i + 2];
-      if (merged < maxGroups && b && a.shot.pageId === b.shot.pageId && !a.splash && !b.splash && !a.shot.zone && !b.shot.zone) {
+      if (merged < maxGroups && b && a.shot.pageId === b.shot.pageId && !a.splash && !b.splash && !a.shot.zone && !b.shot.zone && a.cover === undefined && b.cover === undefined) {
         const take = c && c.shot.pageId === a.shot.pageId && !c.splash && rand() < 0.4 ? [b, c] : [b];
         out.push({
           ...a,
@@ -552,4 +561,14 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       bpm: null, followedVoice, faceShare, subtitles: proj.subtitles.length, notes,
     },
   };
+}
+
+/** "Before_Watchmen_Dr._Manhattan_Issue_3" → "Before Watchmen Dr. Manhattan #3" */
+export function prettySource(src: string) {
+  return src
+    .replace(/^[0-9a-f]{6,}-/i, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s*(issue|num(é|e)ro|no\.?|#)\s*0*(\d+)/i, ' #$3')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

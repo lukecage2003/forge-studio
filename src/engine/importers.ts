@@ -4,7 +4,7 @@ import { unzipSync } from 'fflate';
  * Turns whatever the user drops into page images: PDF (every page rendered),
  * CBZ/ZIP comic archives, or plain images. Everything happens locally.
  */
-export interface PageImage { name: string; blob: Blob }
+export interface PageImage { name: string; blob: Blob; source: string; srcIndex: number; srcCount: number; hint?: string }
 
 const natural = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 const IMG = /\.(jpe?g|png|webp|gif|bmp|avif)$/i;
@@ -53,7 +53,7 @@ async function pdfPages(file: File, onPage: (i: number, n: number) => void): Pro
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, c.width, c.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      out.push({ name: `${base} p${String(i).padStart(2, '0')}`, blob: await toBlob(c) });
+      out.push({ name: `${base} p${String(i).padStart(2, '0')}`, blob: await toBlob(c), source: base, srcIndex: i - 1, srcCount: doc.numPages });
       page.cleanup();
       c.width = c.height = 0;
     } catch {
@@ -64,16 +64,30 @@ async function pdfPages(file: File, onPage: (i: number, n: number) => void): Pro
   return out;
 }
 
+/** ComicInfo.xml (Anansi standard used by Komga, Kavita, ComicRack): page types when the archive has them */
+function comicInfoTypes(xml: string): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const m of xml.matchAll(/<Page\b([^>]*)\/?>/g)) {
+    const img = /Image="(\d+)"/.exec(m[1]), type = /Type="([^"]+)"/.exec(m[1]);
+    if (img && type) out[+img[1]] = type[1];
+  }
+  return out;
+}
+
 function archivePages(buf: Uint8Array, name: string): PageImage[] {
-  const files = unzipSync(buf, { filter: (f) => IMG.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name) });
+  const files = unzipSync(buf, { filter: (f) => (IMG.test(f.name) || /comicinfo\.xml$/i.test(f.name)) && !/(^|\/)(__MACOSX|\.)/.test(f.name) });
   const base = name.replace(/\.(cbz|zip)$/i, '');
-  return Object.keys(files)
-    .sort(natural.compare)
-    .map((k, i) => {
-      const ext = k.split('.').pop()!.toLowerCase();
-      const type = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
-      return { name: `${base} p${String(i + 1).padStart(2, '0')}`, blob: new Blob([files[k] as BlobPart], { type }) };
-    });
+  const infoKey = Object.keys(files).find((k) => /comicinfo\.xml$/i.test(k));
+  const types = infoKey ? comicInfoTypes(new TextDecoder().decode(files[infoKey])) : {};
+  const keys = Object.keys(files).filter((k) => IMG.test(k)).sort(natural.compare);
+  return keys.map((k, i) => {
+    const ext = k.split('.').pop()!.toLowerCase();
+    const type = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+    return {
+      name: `${base} p${String(i + 1).padStart(2, '0')}`, blob: new Blob([files[k] as BlobPart], { type }),
+      source: base, srcIndex: i, srcCount: keys.length, hint: types[i],
+    };
+  });
 }
 
 export async function filesToPages(files: File[], progress: (label: string) => void): Promise<{ pages: PageImage[]; errors: string[] }> {
@@ -90,7 +104,7 @@ export async function filesToPages(files: File[], progress: (label: string) => v
         if (!p.length) errors.push(`${f.name} : aucune image dans l’archive.`);
         pages.push(...p);
       } else if (isImage(f)) {
-        pages.push({ name: f.name.replace(/\.[^.]+$/, ''), blob: f });
+        pages.push({ name: f.name.replace(/\.[^.]+$/, ''), blob: f, source: 'images', srcIndex: 0, srcCount: 1 });
       }
     } catch (e) {
       errors.push((e as Error).message);

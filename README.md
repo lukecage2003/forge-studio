@@ -66,6 +66,23 @@ Glisse un ou plusieurs **PDF**, **CBZ/ZIP** ou images. Chaque page est rendue en
 
 Testé sur deux numéros complets de *Before Watchmen: Dr. Manhattan* (55 pages) : import en 8 s, montage auto sans erreur.
 
+### Reconnaissance des pages
+
+Chaque page est classée, comme dans les serveurs de comics (Komga, Kavita) et le standard ComicInfo.xml des CBZ (lu quand il est présent) :
+
+| Type | Comment il est reconnu | Au montage |
+|---|---|---|
+| Couverture | première page du fichier, une illustration | ouvre le numéro, recul lent, nom du numéro (« #3 ») si plusieurs numéros |
+| Couverture variante | suit la couverture ou fin du numéro | exclue (réactivable) |
+| Planche | cases ou bandes détectées | découpée et animée case par case |
+| Pleine page | une seule image dans l’histoire | recul et impact |
+| Double page | environ deux fois la largeur d’une page du numéro | traversée en panoramique |
+| Texte / crédits | lignes de texte régulières sur fond uni | exclue |
+| Publicité | format différent du reste du numéro (pages de sites de scans) | exclue |
+| Page vide | image unie | exclue |
+
+Le type se change d’un clic dans la liste des planches, et **Classer avec Google** fait vérifier toutes les pages par Gemini (une requête pour 40 pages).
+
 ## 6. Effets face caméra
 
 Ton visage est détouré en local (Google MediaPipe). À placer à la tête de lecture ou ajoutés par le montage auto :
