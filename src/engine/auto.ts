@@ -595,8 +595,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       list = groupPanels(list, Math.ceil(list.length / 3));
     }
     // still too many panels for the asked length: show a selection, never a slideshow of flashes
-    if (target && !followedVoice && list.length && (target - hookDur - titleDur) / list.length < st.min * 0.8) {
-      const keepN = Math.max(1, Math.floor((target - hookDur - titleDur) / (st.min * 0.95)));
+    if (target && !followedVoice && list.length && (target - hookDur - titleDur) / list.length < Math.max(0.9, st.min)) {
+      const keepN = Math.max(1, Math.floor((target - hookDur - titleDur) / Math.max(1, st.min * 1.1)));
       const must = list.filter((x) => x.cover !== undefined || x.splash);
       const rest = list.filter((x) => !must.includes(x));
       const room = Math.max(0, keepN - must.length);
@@ -621,9 +621,10 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       const k = avail / durs.reduce((a, b) => a + b, 0);
       durs = durs.map((d) => d * k);
       const lo = Math.min(st.min, avail / list.length), hi = Math.max(st.max, (avail / list.length) * 1.6);
-      durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot)), lo * 0.75, hi));
+      durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot)), Math.max(0.85, lo * 0.75), hi));
       const s2 = durs.reduce((a, b) => a + b, 0);
-      durs = durs.map((d) => d * (avail / s2));
+      // rescale to the target but never under 0.8 s: a panel must stay readable
+      durs = durs.map((d) => Math.max(0.8, d * (avail / s2)));
     } else {
       durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot)), st.min, st.max * (list[i].shot.group ? 1.6 : 1)));
     }

@@ -14,8 +14,8 @@ let seg: Segmenter | null = null;
 let loading: Promise<boolean> | null = null;
 let failed = false;
 const IN = 256;
-const input = document.createElement('canvas');
-const mask = document.createElement('canvas');
+let input: HTMLCanvasElement | null = null;
+let mask: HTMLCanvasElement | null = null;
 let last: { key: unknown; ok: boolean } = { key: null, ok: false };
 
 export const segmenterReady = () => !!seg;
@@ -49,6 +49,8 @@ export function loadSegmenter(): Promise<boolean> {
  */
 export function personMask(img: CanvasImageSource, key?: unknown): HTMLCanvasElement | null {
   if (!seg) return null;
+  input ??= document.createElement('canvas');
+  mask ??= document.createElement('canvas');
   if (key !== undefined && key === last.key) return last.ok ? mask : null;
   const iw = (img as HTMLVideoElement).videoWidth || (img as HTMLCanvasElement).width;
   const ih = (img as HTMLVideoElement).videoHeight || (img as HTMLCanvasElement).height;

@@ -1,0 +1,80 @@
+import type { Project } from '../types';
+import { FORMATS } from '../types';
+import { getImage, getVideo } from './media';
+import { layoutShots, videoDuration } from './timeline';
+import { resolveMotion } from './render';
+
+/**
+ * Pre-export check: everything that would look or sound wrong once on
+ * TikTok/YouTube, each with a one-click fix when one exists.
+ */
+export interface Issue { level: 'error' | 'warn'; text: string; fix?: { label: string; apply: (p: Project) => Project }; at?: number }
+
+export function checkProject(p: Project): Issue[] {
+  const out: Issue[] = [];
+  const { w: W, h: H } = FORMATS[p.format];
+  const timed = layoutShots(p);
+  const dur = videoDuration(p);
+
+  // media actually available
+  const missingPages = p.pages.filter((pg) => !pg.skip && !getImage(pg.mediaId));
+  if (missingPages.length) out.push({ level: 'error', text: `${missingPages.length} page(s) introuvable(s) : réimporte les fichiers.` });
+  if (p.aroll && !getVideo(p.aroll.mediaId)) out.push({ level: 'error', text: 'Le rush face caméra est introuvable : réimporte-le.' });
+  if (dur <= 0) out.push({ level: 'error', text: 'La vidéo est vide.' });
+
+  // shots too short to be read
+  const short = timed.filter((t) => t.shot.pageId && t.shot.duration < 0.7 && !t.shot.match);
+  if (short.length) out.push({
+    level: 'warn', text: `${short.length} plan(s) de moins de 0,7 s : trop court pour être lu.`, at: short[0].start,
+    fix: { label: 'Passer à 1 s', apply: (x) => ({ ...x, shots: x.shots.map((s) => (short.some((t) => t.shot.id === s.id) ? { ...s, duration: 1 } : s)) }) },
+  });
+
+  // panels enlarged beyond their resolution: blurry on screen
+  const blurry = timed.filter((t) => {
+    const s = t.shot;
+    if (!s.pageId || s.layout !== 'full') return false;
+    const pg = p.pages.find((x) => x.id === s.pageId);
+    if (!pg) return false;
+    const { framing } = resolveMotion(s, W / H, p.readingOrder === 'rtl');
+    const vw = framing === 'fill' ? Math.min(s.rect.w, s.rect.h * (W / H)) : Math.max(s.rect.w, s.rect.h * (W / H)) * 1.08;
+    const zoom = 1 - 0.24 * s.intensity;
+    return W / (vw * zoom) > 2.2; // more than 2.2 screen pixels per comic pixel
+  });
+  if (blurry.length) out.push({
+    level: 'warn', text: `${blurry.length} case(s) très agrandie(s) : l’image sera un peu floue. Une page en meilleure résolution aiderait.`, at: blurry[0].start,
+    fix: { label: 'Zoomer moins', apply: (x) => ({ ...x, shots: x.shots.map((s) => (blurry.some((t) => t.shot.id === s.id) ? { ...s, intensity: Math.min(s.intensity, 0.3), framing: 'fit' } : s)) }) },
+  });
+
+  // subtitles under the TikTok/Shorts interface
+  if (p.format === '9:16') {
+    if (p.subtitles.length && p.subtitleStyle.on && p.subtitleStyle.y > 0.78) out.push({
+      level: 'warn', text: 'Les sous-titres sont dans la zone cachée par l’interface TikTok/Shorts.',
+      fix: { label: 'Remonter', apply: (x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, y: 0.7 } }) },
+    });
+    const low = p.shots.filter((s) => s.caption.text.trim() && s.caption.y > 0.8 && s.pageId);
+    if (low.length) out.push({
+      level: 'warn', text: `${low.length} texte(s) de case sous l’interface TikTok/Shorts.`,
+      fix: { label: 'Remonter', apply: (x) => ({ ...x, shots: x.shots.map((s) => (low.includes(s) ? { ...s, caption: { ...s.caption, y: 0.72 } } : s)) }) },
+    });
+    if (dur > 180) out.push({ level: 'warn', text: `Vidéo de ${Math.round(dur)} s : au-delà de 3 min, ce n’est plus un Short sur YouTube.` });
+  }
+
+  // sound: music too loud against the voice, or overall clipping risk
+  const music = p.audio.filter((c) => c.kind === 'music');
+  const hasVoice = !!p.aroll || p.audio.some((c) => c.kind === 'voice');
+  if (hasVoice && music.some((m) => m.volume > 0.85) && !p.ducking) out.push({
+    level: 'warn', text: 'La musique risque de couvrir ta voix.',
+    fix: { label: 'Baisser sous la voix', apply: (x) => ({ ...x, ducking: true, duckLevel: Math.min(x.duckLevel, 0.25) }) },
+  });
+  const loud = p.audio.filter((c) => c.volume > 1.2);
+  if (loud.length) out.push({
+    level: 'warn', text: `${loud.length} piste(s) au-dessus de 120 % : risque de saturation.`,
+    fix: { label: 'Ramener à 100 %', apply: (x) => ({ ...x, audio: x.audio.map((c) => (c.volume > 1.2 ? { ...c, volume: 1 } : c)) }) },
+  });
+
+  // story placements still to check
+  const review = p.shots.filter((s) => s.match && s.match.conf < 0.5).length;
+  if (review) out.push({ level: 'warn', text: `${review} case(s) associée(s) avec peu de certitude : vérifie-les (inspecteur du projet → « À vérifier »).` });
+
+  return out;
+}

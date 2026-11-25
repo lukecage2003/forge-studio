@@ -22,6 +22,8 @@ import { ensureMedia, ensureVideo } from './engine/media';
 import { seek, toggle } from './engine/transport';
 import type { Project } from './types';
 import { Mark } from './brand/Logo';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { installGlobalHandlers } from './lib/errors';
 
 export default function App() {
   const mode = useStore((s) => s.ui.mode);
@@ -35,6 +37,8 @@ export default function App() {
   const hasRush = useStore((s) => !!s.project.aroll);
   const [dragging, setDragging] = useState(false);
   const [booted, setBooted] = useState(false);
+
+  useEffect(() => installGlobalHandlers((m) => toast(m, 'error')), []);
 
   // restore last session
   useEffect(() => {
@@ -126,7 +130,7 @@ export default function App() {
     <div className="app">
       <TopBar />
       <div className="workspace">
-        <Sidebar />
+        <ErrorBoundary area="planches"><Sidebar /></ErrorBoundary>
         <main className="center">
           <div className="mode-tabs" role="tablist">
             <button role="tab" aria-selected={mode === 'rush'} className={mode === 'rush' ? 'on' : ''} onClick={() => setUI({ mode: 'rush' })}>
@@ -139,16 +143,16 @@ export default function App() {
               <MonitorPlay size={15} /> Aperçu
             </button>
           </div>
-          {mode === 'rush' ? <RushEditor /> : !hasPages && !hasRush ? <Welcome /> : mode === 'cut' ? <PageEditor /> : <Preview />}
+          <ErrorBoundary area={mode}>{mode === 'rush' ? <RushEditor /> : !hasPages && !hasRush ? <Welcome /> : mode === 'cut' ? <PageEditor /> : <Preview />}</ErrorBoundary>
         </main>
-        <Inspector />
+        <ErrorBoundary area="inspecteur"><Inspector /></ErrorBoundary>
       </div>
-      <Timeline />
-      {exportOpen && <ExportModal />}
-      {autoOpen && <AutoModal onClose={() => setUI({ autoOpen: false })} />}
-      {settingsOpen && <SettingsModal />}
+      <ErrorBoundary area="timeline"><Timeline /></ErrorBoundary>
+      {exportOpen && <ErrorBoundary area="fenêtre"><ExportModal /></ErrorBoundary>}
+      {autoOpen && <ErrorBoundary area="fenêtre"><AutoModal onClose={() => setUI({ autoOpen: false })} /></ErrorBoundary>}
+      {settingsOpen && <ErrorBoundary area="fenêtre"><SettingsModal /></ErrorBoundary>}
       {paletteOpen && <CommandPalette onClose={() => setUI({ paletteOpen: false })} />}
-      {channelOpen && <ChannelModal />}
+      {channelOpen && <ErrorBoundary area="fenêtre"><ChannelModal /></ErrorBoundary>}
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">

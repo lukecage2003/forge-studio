@@ -164,7 +164,6 @@ export function ThumbnailStudio() {
       </div>
 
       <button className="btn primary lg" onClick={save} disabled={!chars.length || !!busy}><Download size={16} /> Télécharger la miniature</button>
-      <p className="help">Utilise des images que tu as le droit d’utiliser (artwork officiel, fan-art autorisé…).</p>
     </div>
   );
 }

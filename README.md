@@ -172,6 +172,14 @@ Bouton couronne (ou Ctrl+K → « Ma chaîne ») :
 
 Le logo et ses variantes sont dans `brand-kit/` (SVG).
 
+## 17. Fiabilité
+
+- **Aucune boucle d’affichage possible** : les lectures de l’état qui renvoient les mêmes valeurs sont réutilisées (cause du seul plantage rencontré).
+- **Filets de sécurité** : chaque zone de l’interface est isolée ; si l’une a un problème, elle se réaffiche sans toucher au projet (sauvegardé en continu). Les erreurs sont évitées et notées dans un **journal** (Réglages → Journal des erreurs, copiable).
+- **Contrôle qualité avant export** : plans trop courts, cases trop agrandies (floues), sous-titres sous l’interface TikTok, musique qui couvre la voix, saturation, médias manquants, associations à vérifier — avec correction en un clic.
+- **Montage auto** : jamais de case affichée moins de 0,8 s.
+- **Tests automatiques** (`npm test`) : dérushage (silences, hésitations, reprises), correction des noms, contrôle anti-erreurs, minutage du script, association script ↔ cases, zooms d’accent. Lancés par GitHub à chaque modification ; un test qui échoue bloque la mise en ligne.
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

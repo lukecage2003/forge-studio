@@ -3,6 +3,7 @@ import { Brain, KeyRound, Loader2, Settings2, X, CheckCircle2, Eye, EyeOff } fro
 import { DEFAULT_MODEL, getGoogle, setGoogle, testGoogle } from '../engine/google';
 import { brain, brainSummary, onBrain, resetBrain } from '../engine/brain';
 import { setUI } from '../store';
+import { clearJournal, journal } from '../lib/errors';
 import { toast } from './Toast';
 
 export function SettingsModal() {
@@ -74,6 +75,20 @@ export function SettingsModal() {
             {test === 'ok' && <span className="ok-text"><CheckCircle2 size={14} /> Connecté à Google</span>}
           </div>
           {test !== 'idle' && test !== 'ok' && test !== 'busy' && <p className="error-box">{test}</p>}
+        </section>
+
+        <section className="set-section">
+          <h3>Journal des erreurs</h3>
+          {journal().length ? (
+            <>
+              <p className="help">Les problèmes rencontrés sont évités et notés ici. Copie ce journal si tu veux me le transmettre.</p>
+              <pre className="journal">{journal().slice(0, 8).map((e) => `${e.t.slice(0, 19).replace('T', ' ')} · ${e.where} · ${e.message}`).join('\n')}</pre>
+              <div className="row-btns gap">
+                <button className="btn sm" onClick={() => { void navigator.clipboard?.writeText(JSON.stringify(journal(), null, 1)).then(() => toast('Journal copié')).catch(() => {}); }}>Copier le journal</button>
+                <button className="btn sm ghost" onClick={() => { clearJournal(); bump((x) => x + 1); }}>Vider</button>
+              </div>
+            </>
+          ) : <p className="muted">Aucune erreur enregistrée.</p>}
         </section>
 
         <section className="set-section">

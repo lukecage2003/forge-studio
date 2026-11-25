@@ -4,6 +4,9 @@ import { FORMATS } from '../types';
 import { getState, setUI, useStore } from '../store';
 import { download, exportMp4, exportSrt, youtubeChapters } from '../engine/export';
 import { toast } from './Toast';
+import { checkProject } from '../engine/qc';
+import { update } from '../store';
+import { AlertTriangle, XCircle, CheckCheck } from 'lucide-react';
 import { createRenderer, loadFonts } from '../engine/render';
 import { videoDuration } from '../engine/timeline';
 import { pause } from '../engine/transport';
@@ -70,6 +73,8 @@ export function ExportModal() {
           </div>
           <button className="icon-btn ghost" onClick={close} aria-label="Fermer"><X size={18} /></button>
         </header>
+
+        {!result && !prog && <QualityCheck />}
 
         {!result && (
           <>
@@ -142,6 +147,24 @@ export function ExportModal() {
           )}
         </footer>
       </div>
+    </div>
+  );
+}
+
+function QualityCheck() {
+  const project = useStore((s) => s.project);
+  const issues = checkProject(project);
+  if (!issues.length) return <p className="qc-ok"><CheckCheck size={15} /> Contrôle qualité : tout est bon.</p>;
+  return (
+    <div className="qc">
+      <span className="qc-title">Contrôle qualité · {issues.length} point{issues.length > 1 ? 's' : ''}</span>
+      {issues.map((i, k) => (
+        <div key={k} className={`qc-row ${i.level}`}>
+          {i.level === 'error' ? <XCircle size={15} /> : <AlertTriangle size={15} />}
+          <span>{i.text}</span>
+          {i.fix && <button className="btn sm" onClick={() => update(i.fix!.apply)}>{i.fix.label}</button>}
+        </div>
+      ))}
     </div>
   );
 }

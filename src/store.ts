@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 import type { Caption, Project, Selection, Shot } from './types';
 import { observeShotDeleted, observeShotEdit } from './engine/brain';
 import { uid } from './lib/util';
@@ -166,7 +166,24 @@ export function loadProject(p: Project) {
 }
 
 export const getState = () => state;
-export const useStore = <T,>(sel: (s: State) => T) => useSyncExternalStore(subscribe, () => sel(state));
+/** same values in a new array/object (filter, map…) are treated as unchanged: a selector can never loop React */
+function shallowEqual(a: unknown, b: unknown) {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  const ka = Object.keys(a as object), kb = Object.keys(b as object);
+  return ka.length === kb.length && ka.every((k) => Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+export function useStore<T>(sel: (s: State) => T): T {
+  const last = useRef<{ v: T } | null>(null);
+  const get = () => {
+    const v = sel(state);
+    if (last.current && shallowEqual(last.current.v, v)) return last.current.v;
+    last.current = { v };
+    return v;
+  };
+  return useSyncExternalStore(subscribe, get);
+}
 export const useProject = () => useStore((s) => s.project);
 export const useUI = () => useStore((s) => s.ui);
 export const useHistory = () => ({

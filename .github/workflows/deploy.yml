@@ -18,6 +18,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Tests (une erreur bloque la mise en ligne)
+        run: npm test
       - run: npm run build
       - name: Publier dist/ sur la branche gh-pages
         run: |
