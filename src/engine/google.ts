@@ -145,3 +145,29 @@ export async function geminiHooks(transcript: string, signal?: AbortSignal): Pro
   }], { type: 'ARRAY', items: { type: 'STRING' } }, signal);
   try { return JSON.parse(text); } catch { return []; }
 }
+
+/**
+ * Panel boxes on a comic page with Gemini's object detection
+ * (box_2d = [ymin, xmin, ymax, xmax] normalised to 0–1000), in reading order.
+ */
+export async function geminiPanels(jpegB64: string, rtl: boolean, signal?: AbortSignal): Promise<{ y0: number; x0: number; y1: number; x1: number }[]> {
+  const text = await generate([
+    { inline_data: { mime_type: 'image/jpeg', data: jpegB64 } },
+    {
+      text:
+        `Détecte chaque case (panel) de cette page de bande dessinée. Une case = un cadre d'image distinct, ` +
+        `pas une bulle ni un récitatif. Si la page est une seule illustration, renvoie une seule case. ` +
+        `Donne box_2d = [ymin, xmin, ymax, xmax] normalisés de 0 à 1000, dans l'ordre de lecture ` +
+        `(${rtl ? 'manga : de droite à gauche' : 'de gauche à droite'}, de haut en bas).`,
+    },
+  ], {
+    type: 'ARRAY',
+    items: { type: 'OBJECT', properties: { box_2d: { type: 'ARRAY', items: { type: 'NUMBER' } } }, required: ['box_2d'] },
+  }, signal);
+  let arr: { box_2d: number[] }[] = [];
+  try { arr = JSON.parse(text); } catch { throw new Error('Réponse de Google illisible pour la détection des cases.'); }
+  return arr
+    .filter((b) => Array.isArray(b.box_2d) && b.box_2d.length === 4)
+    .map(({ box_2d: [y0, x0, y1, x1] }) => ({ y0: y0 / 1000, x0: x0 / 1000, y1: y1 / 1000, x1: x1 / 1000 }))
+    .filter((b) => b.x1 - b.x0 > 0.05 && b.y1 - b.y0 > 0.03);
+}

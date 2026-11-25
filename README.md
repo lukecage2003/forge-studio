@@ -57,6 +57,15 @@ Glisse un ou plusieurs **PDF**, **CBZ/ZIP** ou images. Chaque page est rendue en
 - **Pleine page** (splash) : recul et secousse d’impact.
 - Un clic sur l’œil d’une page l’**exclut** du montage (pub, crédits…).
 
+### Comment la découpe fonctionne
+
+1. **Gouttières remplies depuis les bords** (blanches, noires ou couleur du bord, la meilleure est retenue). Les bulles enfermées dans une case n’y sont jamais rattachées.
+2. **Chaque bloc restant forme une case**, puis vient un nettoyage repris de Kumiko (njean42/kumiko) : fragments proches regroupés, petites zones retirées, chevauchements corrigés, cases étendues jusqu’à la gouttière voisine.
+3. **Contrôle par consensus** : un second détecteur indépendant (découpe XY) doit trouver les mêmes cases. Sinon la page est animée **bande par bande** (ses vraies rangées), jamais n’importe comment.
+4. **Option IA Google** : bouton « IA Google » dans Découpe, ou case à cocher dans le montage auto pour recouper les pages incertaines avec Gemini.
+
+Testé sur deux numéros complets de *Before Watchmen: Dr. Manhattan* (55 pages) : import en 8 s, montage auto sans erreur.
+
 ## 6. Effets face caméra
 
 Ton visage est détouré en local (Google MediaPipe). À placer à la tête de lecture ou ajoutés par le montage auto :
@@ -105,7 +114,7 @@ Puis ouvrir l'adresse affichée. Navigateur recommandé : **Chrome** ou **Edge**
 
 ## Mettre en ligne
 
-Le workflow `.github/workflows/deploy.yml` publie Forge sur GitHub Pages à chaque push sur `main`. Il suffit d'activer *Settings → Pages → Source : GitHub Actions* sur le dépôt. Le dossier `dist/` produit par `npm run build` peut aussi être déposé tel quel sur Netlify, Vercel ou tout hébergeur statique.
+Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages` à chaque push sur `main`. Adresse : https://lukecage2003.github.io/forge-studio/ (si elle ne répond pas : *Settings → Pages → Source : Deploy from a branch → gh-pages / root*). Le dossier `dist/` produit par `npm run build` peut aussi être déposé tel quel sur Netlify, Vercel ou tout hébergeur statique.
 
 ## Architecture
 

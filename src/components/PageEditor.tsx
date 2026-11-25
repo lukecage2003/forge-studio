@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Eraser, Maximize, ScanSearch, MousePointerSquareDashed } from 'lucide-react';
+import { Eraser, Maximize, ScanSearch, MousePointerSquareDashed, Sparkles } from 'lucide-react';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { patchShot, setUI, update, useStore } from '../store';
-import { addShotRect, clearPage, redetect, wholePage } from '../actions';
+import { addShotRect, aiRecut, clearPage, redetect, wholePage } from '../actions';
 import type { Rect } from '../types';
 import { clamp } from '../lib/util';
 
@@ -118,6 +118,9 @@ export function PageEditor() {
       <div className="stage-toolbar">
         <button className="btn sm" onClick={() => redetect(page.id)} title="Re-détecte les cases de cette planche (remplace les cases existantes)">
           <ScanSearch size={15} /> Détection auto
+        </button>
+        <button className="btn sm google" onClick={() => void aiRecut([page.id])} title="Détection précise des cases par Google Gemini (clé dans les réglages)">
+          <Sparkles size={15} /> IA Google
         </button>
         <button className="btn sm ghost" onClick={() => wholePage(page.id)} title="Une seule case = la planche entière">
           <Maximize size={15} /> Planche entière

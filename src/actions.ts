@@ -214,3 +214,37 @@ export function addDiagram(kind: DiagramKind = 'timeline') {
 
 export const togglePageSkip = (id: string) =>
   update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === id ? { ...x, skip: !x.skip } : x)) }));
+
+/** Re-cut pages with Google Gemini (precise boxes); pages animated by zones by default. */
+export async function aiRecut(pageIds?: string[]) {
+  const { geminiPanels, hasGoogle } = await import('./engine/google');
+  if (!hasGoogle()) { setUI({ settingsOpen: true }); toast('Ajoute ta clé Google dans les réglages pour la détection IA.', 'error'); return 0; }
+  const p0 = getState().project;
+  const ids = pageIds ?? p0.pages.filter((pg) => pg.cut === 'zones' && !pg.skip).map((pg) => pg.id);
+  let done = 0;
+  for (const [k, id] of ids.entries()) {
+    const pg = getState().project.pages.find((x) => x.id === id);
+    const a = pg && getImage(pg.mediaId);
+    if (!pg || !a) continue;
+    setUI({ busy: `Détection IA des cases ${k + 1}/${ids.length}…` });
+    try {
+      const c = document.createElement('canvas');
+      const s = Math.min(1, 1400 / Math.max(a.width, a.height));
+      c.width = Math.round(a.width * s); c.height = Math.round(a.height * s);
+      c.getContext('2d')!.drawImage(a.img, 0, 0, c.width, c.height);
+      const boxes = await geminiPanels(c.toDataURL('image/jpeg', 0.85).split(',')[1], getState().project.readingOrder === 'rtl');
+      if (!boxes.length) continue;
+      const rects = boxes.map((b) => ({ x: Math.round(b.x0 * a.width), y: Math.round(b.y0 * a.height), w: Math.round((b.x1 - b.x0) * a.width), h: Math.round((b.y1 - b.y0) * a.height) }));
+      const kind = rects.length === 1 && rects[0].w * rects[0].h > a.width * a.height * 0.7 ? 'splash' : 'panels';
+      update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === id ? { ...x, cut: kind } : x)) }));
+      replacePageShots(id, rects, kind === 'splash' ? 'splash' : undefined);
+      done++;
+    } catch (e) {
+      toast((e as Error).message, 'error');
+      break;
+    }
+  }
+  setUI({ busy: null });
+  if (done) toast(`${done} page${done > 1 ? 's' : ''} recoupée${done > 1 ? 's' : ''} par l’IA Google`);
+  return done;
+}

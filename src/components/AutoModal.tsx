@@ -3,6 +3,7 @@ import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles }
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
+import { aiRecut } from '../actions';
 import { toast } from './Toast';
 import { FORMATS } from '../types';
 
@@ -29,6 +30,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const [captionStyle, setCaptionStyle] = useState(true);
   const [subtitles, setSubtitles] = useState(true);
   const [aiMatch, setAiMatch] = useState(hasGoogle() && hasWords);
+  const unsure = useStore((s) => s.project.pages.filter((p) => p.cut === 'zones' && !p.skip).length);
+  const [aiCut, setAiCut] = useState(hasGoogle() && unsure > 0);
   const [busy, setBusy] = useState<string | null>(null);
   const google = hasGoogle();
 
@@ -43,6 +46,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const run = async () => {
     try {
       let matches: Record<string, number> | undefined;
+      if (aiCut && google && unsure) { setBusy('Google recoupe les pages incertaines…'); await aiRecut(); }
       const p0 = getState().project;
       if (aiMatch && google && hasFace && hasWords) {
         setBusy('Google associe les cases au script…');
@@ -136,6 +140,10 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
             </>
           ) : (
             <Toggle on={beatSync} set={setBeatSync} disabled={!hasMusic} label="Couper sur le beat de la musique" hint={hasMusic ? undefined : 'Ajoute une musique pour l’activer'} />
+          )}
+          {unsure > 0 && (
+            <Toggle on={aiCut} set={setAiCut} disabled={!google} label={`Recouper avec Google les ${unsure} page${unsure > 1 ? 's' : ''} incertaine${unsure > 1 ? 's' : ''}`}
+              hint={google ? 'Sinon elles sont animées bande par bande' : 'Ajoute une clé Google dans les réglages'} />
           )}
           <Toggle on={captionStyle} set={setCaptionStyle} label="Appliquer le style de textes du preset" />
           <Toggle on={redetect} set={setRedetect} label="Re-détecter toutes les cases" hint="Sinon, tes découpes manuelles sont conservées" />
