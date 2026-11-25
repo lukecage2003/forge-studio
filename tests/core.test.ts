@@ -301,3 +301,13 @@ describe('phase 6 : priorité à la voix', () => {
     expect(valueAt(k, 3)).toBe(0.25);
   });
 });
+
+import { fmtMin } from '../src/engine/bench';
+describe('phase 7 : banc de mesure', () => {
+  it('affiche les durées lisiblement', () => {
+    expect(fmtMin(0.2)).toBe('1 min');
+    expect(fmtMin(12.4)).toBe('12 min');
+    expect(fmtMin(84)).toBe('1 h 24');
+    expect(fmtMin(349)).toBe('5 h 49');
+  });
+});

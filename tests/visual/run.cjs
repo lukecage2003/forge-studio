@@ -9,16 +9,19 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const root = path.resolve(__dirname, '../..');
-const base = path.join(__dirname, 'baseline');
+// FORGE_ROOT: render another checkout (CI: the previous version, to make the references)
+// VISUAL_BASELINE: where the references live; VISUAL_PORT: dev server port
+const root = process.env.FORGE_ROOT ? path.resolve(process.cwd(), process.env.FORGE_ROOT) : path.resolve(__dirname, '../..');
+const base = process.env.VISUAL_BASELINE ? path.resolve(process.cwd(), process.env.VISUAL_BASELINE) : path.join(__dirname, 'baseline');
 const outDir = path.join(__dirname, 'out');
 const update = process.argv.includes('--update');
-const PORT = 5197;
+const PORT = Number(process.env.VISUAL_PORT) || 5197;
 
 function png(dataUrl) { return Buffer.from(dataUrl.split(',')[1], 'base64'); }
 
 (async () => {
-  const vite = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore' });
+  const vite = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: root, stdio: 'ignore', detached: true });
+  const stop = () => { try { process.kill(-vite.pid, 'SIGTERM'); } catch { /* already gone */ } };
   let code = 1;
   try {
     for (let i = 0; i < 60; i++) { try { await fetch(`http://localhost:${PORT}/`); break; } catch { await new Promise((r) => setTimeout(r, 500)); } }
@@ -64,6 +67,6 @@ function png(dataUrl) { return Buffer.from(dataUrl.split(',')[1], 'base64'); }
     await cmp.close();
     console.log(`${checked} images comparées, ${failed} différences, ${added} références écrites`);
     code = failed ? 1 : 0;
-  } finally { vite.kill(); }
+  } finally { stop(); }
   process.exit(code);
 })();

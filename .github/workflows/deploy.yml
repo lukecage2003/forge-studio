@@ -9,7 +9,41 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  # Non-régression visuelle : la version précédente sert de référence, rendue sur la
+  # même machine que la nouvelle (mêmes polices, même GPU logiciel), puis les 80 images
+  # sont comparées. Un changement voulu de l'image passe avec [visuel] dans le message de commit.
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Références = version précédente
+        run: |
+          if git rev-parse -q --verify HEAD~1 >/dev/null; then
+            git worktree add ../prev HEAD~1
+            (cd ../prev && npm ci --no-audit --no-fund)
+            FORGE_ROOT=../prev VISUAL_BASELINE=$RUNNER_TEMP/base node tests/visual/run.cjs --update || echo "Version précédente non rendable : comparaison ignorée"
+          fi
+      - name: Comparaison image par image
+        if: ${{ !contains(github.event.head_commit.message, '[visuel]') }}
+        run: |
+          if [ -d "$RUNNER_TEMP/base" ]; then VISUAL_BASELINE=$RUNNER_TEMP/base node tests/visual/run.cjs; else echo "Pas de références"; fi
+      - name: Images différentes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-differentes
+          path: tests/visual/out/
   build:
+    needs: visual
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -164,3 +164,6 @@ export function ensureVideo(id: string): Promise<unknown> {
 }
 
 export const notifyMedia = () => emit();
+
+/** decode an image into the cache only, never saved (benchmark, previews) */
+export const registerTempImage = (id: string, blob: Blob) => decodeImage(id, blob);

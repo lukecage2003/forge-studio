@@ -7,6 +7,8 @@
 
 Forge est une application web de montage pour les vidéos qui expliquent des comics, en face caméra ou en voix off. Tu importes ton rush et tes planches. Forge coupe les silences, les « euh » et les reprises, alterne ton visage avec les cases, ajoute les zooms et les sous-titres, puis exporte un MP4 prêt pour TikTok, Shorts et YouTube. Tout tourne dans le navigateur : tes fichiers ne quittent pas ton ordinateur, sauf si tu actives Google AI.
 
+> Documentation technique (architecture, extension, tests, performance, licences) : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## 1. Dérushage du face caméra (onglet Rush)
 
 | Ce qui est coupé | Comment |
@@ -404,3 +406,33 @@ Les cases arrivent comme leur page en plan fixe ; le cadrage, le mouvement et la
   - export 4K 2160×3840 vérifié ;
   - boutons testés jusqu'au téléchargement.
 - **Non-régression :** les 80 images de référence sont inchangées.
+
+## Moteur de production : phase 7 (mesures, non-régression, documentation)
+
+**Banc de mesure** : *Réglages → Performance de cet ordinateur*, moins d'une minute.
+- **Ce qu'il mesure :**
+  - le temps d'une image 1080p et 4K ;
+  - les transitions GPU ;
+  - la 3D ;
+  - un vrai export MP4 de 3 s ;
+  - les encodeurs disponibles.
+- **Ce qu'il traduit en clair :**
+  - « aperçu fluide » ou non ;
+  - durée d'export de 10 min de vidéo en 1080p et en 4K ;
+  - repli sans WebGL ;
+  - son en AAC ou en Opus.
+- Ton projet n'est pas touché, car les pages de test ne sont jamais enregistrées.
+
+**Non-régression visuelle à chaque mise en ligne** :
+1. GitHub rend la version précédente et la nouvelle sur la même machine.
+2. Il compare les 80 images.
+3. Une différence bloque la publication et joint les images fautives au rapport.
+4. Un changement voulu passe avec `[visuel]` dans le message de commit.
+
+Les tests de logique bloquent toujours la publication.
+
+**Documentation** : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Elle couvre :
+- les principes (local, non destructif, aperçu = rendu final, déterministe, sobre) ;
+- le parcours d'un montage et la carte des modules ;
+- comment ajouter une transition, un profil, une scène ou un réglage ;
+- les tests, les performances de référence et les licences.

@@ -29,12 +29,13 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "0.187.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.90.0",
+    "playwright": "1.63.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.6",
-    "vitest": "^3.2.4",
-    "@types/three": "0.187.0"
+    "vitest": "^3.2.4"
   },
   "description": "Forge — studio de montage comics pour TikTok, Shorts et YouTube"
 }

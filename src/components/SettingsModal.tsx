@@ -5,6 +5,8 @@ import { brain, brainSummary, onBrain, resetBrain } from '../engine/brain';
 import { setUI } from '../store';
 import { clearJournal, journal } from '../lib/errors';
 import { toast } from './Toast';
+import { Gauge } from 'lucide-react';
+import { lastBench, type BenchResult } from '../engine/bench';
 
 export function SettingsModal() {
   const [g, setG] = useState(getGoogle());
@@ -34,7 +36,7 @@ export function SettingsModal() {
         <header className="modal-head">
           <div className="modal-title">
             <span className="modal-ico"><Settings2 size={18} /></span>
-            <div><h2 id="set-title">Réglages</h2><p>Google AI et l’apprentissage de Forge.</p></div>
+            <div><h2 id="set-title">Réglages</h2><p>Google AI, performance et apprentissage de Forge.</p></div>
           </div>
           <button className="icon-btn ghost" onClick={close} aria-label="Fermer"><X size={18} /></button>
         </header>
@@ -77,6 +79,8 @@ export function SettingsModal() {
           {test !== 'idle' && test !== 'ok' && test !== 'busy' && <p className="error-box">{test}</p>}
         </section>
 
+        <BenchSection />
+
         <section className="set-section">
           <h3>Journal des erreurs</h3>
           {journal().length ? (
@@ -118,5 +122,48 @@ export function SettingsModal() {
         </section>
       </div>
     </div>
+  );
+}
+
+function BenchSection() {
+  const [r, setR] = useState<BenchResult | null>(lastBench());
+  const [run, setRun] = useState<{ label: string; p: number } | null>(null);
+  const start = async () => {
+    setRun({ label: 'Préparation…', p: 0 });
+    try {
+      const { runBench } = await import('../engine/bench');
+      setR(await runBench((label, p) => setRun({ label, p })));
+    } catch (e) { toast('Mesure impossible : ' + (e as Error).message, 'error'); }
+    setRun(null);
+  };
+  const ms = (v: number | null) => (v == null ? 'indisponible' : `${Math.round(v)} ms`);
+  return (
+    <section className="set-section">
+      <h3><Gauge size={15} /> Performance de cet ordinateur</h3>
+      <p className="help">Forge mesure le rendu, les transitions GPU, la 3D et un vrai export MP4 de 3 s, sur des pages de test. Ton projet n’est pas touché. Moins d’une minute.</p>
+      {run ? (
+        <div className="progress-wrap">
+          <div className="progress"><div style={{ width: `${run.p * 100}%` }} /></div>
+          <div className="progress-label"><Loader2 size={15} className="spin" /><span>{run.label}</span></div>
+        </div>
+      ) : <button className="btn sm" onClick={start}>{r ? 'Mesurer à nouveau' : 'Mesurer'}</button>}
+      {r && !run && (
+        <>
+          <ul className="learned">{r.verdict.map((v) => <li key={v}>{v}</li>)}</ul>
+          <table className="bench">
+            <tbody>
+              <tr><td>Image 1080p</td><td>{ms(r.frame1080)}</td></tr>
+              <tr><td>Image 4K</td><td>{ms(r.frame4k)}</td></tr>
+              <tr><td>Transition GPU</td><td>{ms(r.frameGl)}</td></tr>
+              <tr><td>Scène 3D</td><td>{ms(r.frame3d)}</td></tr>
+              <tr><td>Export (temps / durée vidéo)</td><td>{r.exportFactor == null ? 'impossible' : `× ${r.exportFactor.toFixed(2).replace('.', ',')}`}</td></tr>
+              <tr><td>Encodeur H.264 · 4K · AAC</td><td>{[r.h264, r.h264_4k, r.aac].map((x) => (x ? 'oui' : 'non')).join(' · ')}</td></tr>
+              <tr><td>Processeurs · WebGL · WebGPU</td><td>{r.cores || '?'} · {r.webgl ? 'oui' : 'non'} · {r.webgpu ? 'oui' : 'non'}</td></tr>
+            </tbody>
+          </table>
+          <p className="muted">Mesuré le {new Date(r.date).toLocaleString('fr-FR')}.</p>
+        </>
+      )}
+    </section>
   );
 }

@@ -687,3 +687,8 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 /* diagram kinds: wrap instead of widening the inspector (Phase 5) */
 .seg.full.wrap { flex-wrap: wrap; }
 .seg.full.wrap button { flex: 1 1 30%; min-width: 0; }
+
+/* performance check (Phase 7) */
+.bench { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.bench td { padding: 5px 0; border-top: 1px solid var(--border); color: var(--text-2); }
+.bench td:last-child { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
