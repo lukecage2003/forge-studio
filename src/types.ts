@@ -102,6 +102,8 @@ export interface Shot {
   chars?: string[];
   /** placed by the story matcher: the sentence it illustrates, confidence, alternatives (shot ids) */
   match?: { sentence: string; conf: number; alts: string[]; source: 'local' | 'google' };
+  /** speech balloons inside the panel (page px), for the pop-in animation */
+  balloons?: Rect[];
   /** point of interest inside the panel (0..1 of rect): zooms aim here instead of the centre */
   focus?: { x: number; y: number };
   /** set by the auto editor; used by Forge Brain to learn from corrections */
@@ -121,7 +123,7 @@ export interface FxItem {
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
-export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number }
+export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number; parallax?: boolean; balloonPop?: boolean }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
 
@@ -213,6 +215,10 @@ export interface Project {
   research?: { title: string; summary: string; characters: { name: string; aliases?: string[]; role?: string }[]; facts: string[]; sources?: string[] };
   /** optional script pasted by the user (narration text) */
   script?: string;
+  /** channel identity (colours, logo, intro/outro) */
+  brand?: { bg?: string; ink?: string; logo?: string; intro?: boolean; outro?: boolean };
+  /** stressed moments of the voice (timeline seconds): slight punch-ins */
+  emphasis?: number[];
   /** automatic sound design: whooshes on transitions, impacts on splashes */
   autoSfx?: { on: boolean; volume: number };
 }

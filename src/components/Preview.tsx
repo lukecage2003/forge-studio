@@ -11,6 +11,8 @@ import { toSource } from '../engine/speech';
 import { fmtTime } from '../lib/util';
 import { loadSegmenter, segmenterReady } from '../engine/segment';
 import { notifyMedia } from '../engine/media';
+import { ensureLayers } from '../engine/layers';
+import { shotAt } from '../engine/timeline';
 
 const PREVIEW_SCALE = 0.5;
 
@@ -58,6 +60,15 @@ export function Preview() {
     const face = ar ? () => arollPlayer.frame(ar.mediaId) : undefined;
     if (ctx) renderer.draw(ctx, project, t, face);
   }, [renderer, project, t, mv, fontsReady, playing]);
+
+  // 2.5D layers of the shot on screen (and the next one) are prepared on the fly
+  useEffect(() => {
+    if (project.look?.parallax === false) return;
+    const tl = layoutShots(project);
+    const cur = shotAt(tl, t, !!project.aroll);
+    const i = cur ? tl.indexOf(cur) : -1;
+    for (const ts of [cur, tl[i + 1]]) if (ts?.shot.pageId && !ts.shot.zone && ts.shot.layout === 'full') void ensureLayers(project, ts.shot);
+  }, [project, Math.floor(t)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const timed = layoutShots(project);
   const idx = timed.findIndex((x) => t >= x.start && t < x.end);

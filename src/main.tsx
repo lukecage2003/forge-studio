@@ -12,7 +12,8 @@ import { pageStats } from './engine/classify';
 import { getState } from './store';
 
 // small hook for automated tests and power users (no effect on the app)
-(window as unknown as { __forge: unknown }).__forge = { pageStats, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
+import { layersFor } from './engine/layers';
+(window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

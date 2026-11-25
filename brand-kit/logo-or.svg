@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF27A"/><stop offset="0.5" stop-color="#FFE500"/><stop offset="1" stop-color="#FFB300"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="#111"/>
+  <g fill="url(#g)">
+    <path d="M188 360 C180 290 196 190 240 96 C246 84 266 88 263 102 C242 200 234 290 234 360 Z"/>
+    <path d="M236 134 C294 114 352 104 404 106 C418 107 418 126 404 128 C350 136 298 150 244 172 Z"/>
+    <path d="M226 258 C272 242 318 234 360 236 C374 237 373 256 360 258 C318 264 274 276 224 298 Z"/>
+    <!-- refined gold: the stem melts into a drop -->
+    <path d="M188 352 L234 352 C236 380 238 392 230 410 C220 432 202 446 211 466 C186 450 180 424 186 404 C190 390 188 372 188 352 Z"/>
+  </g>
+  <rect x="150" y="452" width="120" height="10" rx="5" fill="#FFE500" opacity="0.55"/>
+</svg>

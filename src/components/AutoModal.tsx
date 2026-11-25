@@ -3,7 +3,7 @@ import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles }
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
-import { aiRecut, analyzeComics, researchComics } from '../actions';
+import { aiRecut, analyzeComics, prepareMotion, researchComics } from '../actions';
 import { narration } from '../engine/narration';
 import { toast } from './Toast';
 import { FORMATS } from '../types';
@@ -75,6 +75,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
+      void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
       const bits = [`${report.shots} cases`, `${report.duration.toFixed(1)} s`];
       if (report.faceShare != null) bits.push(`visage ${Math.round(report.faceShare * 100)} %`);
       if (report.subtitles) bits.push(`${report.subtitles} sous-titres`);

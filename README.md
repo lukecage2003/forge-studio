@@ -150,6 +150,24 @@ Forge lit et comprend les comics tout seul ; Google n’est qu’un bonus.
 - **Lexique des noms** : personnages tirés des cases, du script, des mots récurrents et de la recherche. Il sert à étiqueter les cases avec leurs personnages et à **corriger les noms mal transcrits** (comparaison phonétique : « Laury » → « Laurie », « Ostermann » → « Osterman »).
 - **Recherche Google en arrière-plan** (optionnelle) : identifie le numéro, les personnages et leurs autres noms (identité civile, surnoms), le résumé et des faits clés, avec sources. Ces infos enrichissent le lexique, les étiquettes et l’association par Google.
 
+## 14. Motion comic 2.5D
+
+- **Relief** : un modèle de profondeur local (Depth Anything V2 small, Apache-2.0, ~27 Mo) sépare le personnage du décor ; le trou laissé dans le décor est comblé par un flou des alentours. Pendant le mouvement de caméra, le décor glisse peu, le personnage glisse plus et avance légèrement : effet « motion comic ». Calculé en arrière-plan après le montage auto, à la volée dans l’aperçu, et toujours avant l’export.
+- **Bulles qui apparaissent une à une** dans l’ordre de lecture (pop), à partir du repérage des bulles.
+
+## 15. Montage calé sur la voix
+
+Les temps forts de ta voix (mot appuyé, montée d’énergie) sont repérés sur le rush et les voix off ; l’image fait un léger zoom d’accent à ces instants, sur les cases comme sur ton visage.
+
+## 16. Ma chaîne
+
+Bouton couronne (ou Ctrl+K → « Ma chaîne ») :
+- **Identité** : fond jaune, titres noirs, logo (le logo Forge « creuset griffé » par défaut, ou le tien).
+- **Intro logo** (1,2 s), **carton de chapitre** aux couleurs de la chaîne avant chaque numéro, **écran de fin YouTube** (10 s, deux emplacements pour tes vidéos, en 16:9).
+- **Miniatures YouTube** dans ta DA : grand titre noir espacé, personnages détourés avec contour blanc façon sticker (BiRefNet lite, MIT, local), logo en bas à gauche ; variantes duo, solo et ton visage + personnage. PNG 1280×720.
+
+Le logo et ses variantes sont dans `brand-kit/` (SVG).
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

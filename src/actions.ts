@@ -399,3 +399,36 @@ export async function researchComics() {
     setUI({ busy: null });
   }
 }
+
+/* ------------------------------------------------ 2.5D + balloon prep */
+
+const balloonCache = new Map<string, Rect[]>();
+
+/** balloons per panel (for the pop-in) and depth layers (for the 2.5D parallax) of the edit's shots */
+export async function prepareMotion(opts: { quiet?: boolean } = {}) {
+  const { findBalloons } = await import('./engine/understand');
+  const { ensureLayers } = await import('./engine/layers');
+  const p = getState().project;
+  // balloons: one detection per page
+  const withBalloons = new Map<string, Rect[]>();
+  for (const s of p.shots) {
+    if (!s.pageId || s.zone) continue;
+    const pg = p.pages.find((x) => x.id === s.pageId);
+    const a = pg && getImage(pg.mediaId);
+    if (!pg || !a) continue;
+    if (!balloonCache.has(pg.id)) balloonCache.set(pg.id, findBalloons(a.img, a.width, a.height));
+    const inside = balloonCache.get(pg.id)!.filter((b) => {
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      return cx > s.rect.x && cx < s.rect.x + s.rect.w && cy > s.rect.y && cy < s.rect.y + s.rect.h;
+    }).slice(0, 5);
+    withBalloons.set(s.id, inside);
+  }
+  update((x) => ({ ...x, shots: x.shots.map((s) => (withBalloons.has(s.id) ? { ...s, balloons: withBalloons.get(s.id) } : s)) }), 'balloons');
+  if (p.look?.parallax === false) return;
+  const todo = getState().project.shots.filter((s) => s.pageId && !s.zone && s.layout === 'full').slice(0, 120);
+  for (let i = 0; i < todo.length; i++) {
+    if (!opts.quiet) setUI({ busy: `Relief 2.5D ${i + 1}/${todo.length}…` });
+    await ensureLayers(getState().project, todo[i], (pr) => !opts.quiet && setUI({ busy: `Modèle de profondeur… ${Math.round(pr * 100)} %` }));
+  }
+  if (!opts.quiet) setUI({ busy: null });
+}

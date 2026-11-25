@@ -1,6 +1,9 @@
 import { FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { personMask } from './segment';
 import { faceAt } from './faces';
+import { layersFor, type Layers } from './layers';
+import { emphasisAt } from './emphasis';
+import { brandOf, drawChapter, drawEndScreen, drawIntro } from './brand';
 import { clamp, easeInOutCubic, easeInOutSine, easeOutBack, easeOutCubic, lerp } from '../lib/util';
 import { getImage } from './media';
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
@@ -182,7 +185,7 @@ function drawBackground(ctx: Ctx, project: Project, box: Box, pageId: string | n
   }}
 
 /** Draw a panel of a page inside `box`, seen through `view`, clipped to `clip`. */
-function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number } = {}) {
+function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number; layers?: { L: Layers; dx: number; dy: number; s: number }; balloons?: BalloonAnim } = {}) {
   const page = project.pages.find((p) => p.id === pageId);
   const asset = page && getImage(page.mediaId);
   ctx.save();
@@ -208,7 +211,15 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   ctx.rect(clip.x, clip.y, clip.w, clip.h);
   ctx.clip();
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(asset.img, 0, 0);
+  if (opts.layers) {
+    // 2.5D: background drifts a little, the subject drifts more and comes forward
+    const { L, dx, dy, s: sc } = opts.layers;
+    const g = 1.04;
+    ctx.drawImage(L.bg, clip.x - (clip.w * (g - 1)) / 2 - dx * 0.35, clip.y - (clip.h * (g - 1)) / 2 - dy * 0.35, clip.w * g, clip.h * g);
+    const fw = clip.w * g * sc, fh = clip.h * g * sc;
+    ctx.drawImage(L.fg, clip.x + clip.w / 2 - fw / 2 + dx * 0.65, clip.y + clip.h / 2 - fh / 2 + dy * 0.65, fw, fh);
+  } else ctx.drawImage(asset.img, 0, 0);
+  if (opts.balloons) drawBalloons(ctx, asset, opts.balloons);
   ctx.restore();
   if (opts.border) {
     ctx.lineWidth = opts.border / s;
@@ -216,6 +227,41 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
     ctx.strokeRect(clip.x, clip.y, clip.w, clip.h);
   }
   ctx.restore();
+}
+
+/* -------------------------------------------- balloons popping in order */
+
+interface BalloonAnim { rects: Rect[]; local: number; dur: number }
+
+/** before its turn a balloon is hidden under a soft patch of its surroundings, then it pops in */
+function drawBalloons(ctx: Ctx, asset: { img: CanvasImageSource; blur: HTMLCanvasElement; width: number; height: number }, b: BalloonAnim) {
+  const n = b.rects.length;
+  if (!n) return;
+  const span = Math.max(0.6, b.dur * 0.6);
+  b.rects.forEach((r, i) => {
+    const t0 = 0.12 + (i * span) / n;
+    const a = clamp((b.local - t0) / 0.28, 0, 1);
+    if (a >= 1) return; // fully shown: it's already in the art
+    const pad = Math.max(r.w, r.h) * 0.06;
+    const bx = (r.x - pad) / asset.width * asset.blur.width, by = (r.y - pad) / asset.height * asset.blur.height;
+    const bw = (r.w + pad * 2) / asset.width * asset.blur.width, bh = (r.h + pad * 2) / asset.height * asset.blur.height;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(r.x + r.w / 2, r.y + r.h / 2, r.w / 2 + pad, r.h / 2 + pad, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(asset.blur, bx, by, bw, bh, r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+    ctx.restore();
+    if (a > 0) {
+      const e = easeOutBack(a);
+      const sc = lerp(0.55, 1, e);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, a * 1.6);
+      ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+      ctx.scale(sc, sc);
+      ctx.drawImage(asset.img, r.x, r.y, r.w, r.h, -r.w / 2, -r.h / 2, r.w, r.h);
+      ctx.restore();
+    }
+  });
 }
 
 const GRADE: Record<Grade, string> = {
@@ -247,6 +293,7 @@ function placeFace(project: Project, box: Box, face: FaceSource, segs: Seg[], t:
     const faceW = fk.s * vw * base;
     z = Math.min(z, Math.max(1, (box.w * 0.45) / faceW));
   }
+  z *= 1 + 0.05 * emphasisAt(project.emphasis, t);
   const sc = Math.max(box.w / vw, box.h / vh) * z;
   const dw = vw * sc, dh = vh * sc;
   const focus = fk ?? ar.focus;
@@ -926,7 +973,7 @@ export function createRenderer(W: number, H: number): Renderer {
     ctx.translate(W / 2 + sx + hx, H / 2 + sy + hy);
     ctx.rotate(rot);
     // a shaking frame is scaled a little so its edges never show
-    const pad = 1 + Math.abs(sx) / W * 2.2 + Math.abs(sy) / H * 2.2 + Math.abs(rot) * 1.2 + (hx || hy ? 0.012 : 0);
+    const pad = (1 + Math.abs(sx) / W * 2.2 + Math.abs(sy) / H * 2.2 + Math.abs(rot) * 1.2 + (hx || hy ? 0.012 : 0)) * (layoutKind === 'title' ? 1 : 1 + 0.035 * emphasisAt(project.emphasis, t));
     ctx.scale(pad, pad);
     ctx.translate(-W / 2, -H / 2);
     const full: Box = { x: 0, y: 0, w: W, h: H };
@@ -941,13 +988,31 @@ export function createRenderer(W: number, H: number): Renderer {
           g.addColorStop(1, 'rgba(0,0,0,0.15)');
           ctx.fillStyle = g;
           ctx.fillRect(0, 0, W, H);
+        } else if (shot.titleBg === 'brand') {
+          drawChapter(ctx, W, H, brandOf(project), shot.caption.text, local);
+        } else if (shot.titleBg === 'intro') {
+          drawIntro(ctx, W, H, brandOf(project), local);
+        } else if (shot.titleBg === 'outro') {
+          drawEndScreen(ctx, W, H, brandOf(project), local);
         } else if (shot.diagram) {
           drawDiagram(ctx, project, W, H, shot.diagram, local, shot.duration);
         } else drawTitleCard(ctx, W, H, shot, local, project.accent);
         break;
       case 'full': {
         const view = override?.view ?? cameraAt(shot, p, W / H, rtl);
-        drawPanelIn(ctx, project, shot.pageId!, full, view, override?.clip ?? shot.rect, { dimPage: project.background === 'page' ? 0.72 : 0 });
+        const L = !override && project.look?.parallax !== false && !shot.zone ? layersFor(project, shot) : null;
+        let layers;
+        if (L) {
+          const e = easeInOutSine(clamp(p, 0, 1));
+          const A = shot.rect.w * 0.03 * (0.5 + shot.intensity);
+          const m = resolveMotion(shot, W / H, rtl).motion;
+          const dx = m === 'pan-right' ? (0.5 - e) * A * 2 : m === 'pan-left' ? (e - 0.5) * A * 2 : (e - 0.5) * A * 0.8;
+          const dy = m === 'pan-down' ? (0.5 - e) * A * 2 : m === 'pan-up' ? (e - 0.5) * A * 2 : 0;
+          const sc = m === 'zoom-in' ? 1 + 0.045 * e : m === 'zoom-out' ? 1.045 - 0.045 * e : 1.015;
+          layers = { L, dx, dy, s: sc };
+        }
+        const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration } : undefined;
+        drawPanelIn(ctx, project, shot.pageId!, full, view, override?.clip ?? shot.rect, { dimPage: project.background === 'page' ? 0.72 : 0, layers, balloons });
         break;
       }
       case 'pip': {
@@ -1059,7 +1124,7 @@ export function createRenderer(W: number, H: number): Renderer {
     if (layoutKind !== 'title') drawPaper(ctx, W, H, project.look?.paper ?? 0);
     if (shot.shake > 0 && project.look?.speedLines !== false && layoutKind !== 'title') speedLines(ctx, W, H, local, shot.shake);
     if (shot.pageId == null) {
-      drawCaption(ctx, W, H, shot.caption, local, shot.duration, true, undefined, project.accent);
+      if (!['brand', 'intro', 'outro'].includes(shot.titleBg ?? '')) drawCaption(ctx, W, H, shot.caption, local, shot.duration, true, undefined, project.accent);
     } else {
       drawCaption(ctx, W, H, shot.caption, local, shot.duration, false, undefined, project.accent);
       if (shot.nameTag) drawNameTag(ctx, W, H, shot.nameTag, local, shot.duration, project.accent);

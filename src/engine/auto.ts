@@ -11,6 +11,8 @@ import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speec
 import { validateProject } from './validate';
 import { narration } from './narration';
 import { planStory } from './story';
+import { emphasisTimes } from './emphasis';
+import { brandOf } from './brand';
 import type { FxItem } from '../types';
 import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMotion } from './brain';
 
@@ -691,6 +693,33 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   };
   if (music && music.sourceDuration - music.offset < total - 0.5) notes.push('La musique est plus courte que la vidéo.');
   if (st.rtl && p.readingOrder !== 'rtl') notes.push('Sens de lecture passé en manga (droite → gauche).');
+  // channel identity: intro sting, a chapter card before each issue, YouTube end screen
+  const br = brandOf(proj);
+  const card = (titleBg: string, text: string, duration: number, start?: number): Shot => ({
+    ...newShot(proj, { pageId: null }), id: 'brand_' + uid(), titleBg, duration, start, layout: 'full', transition: 'cut', transitionDur: 0,
+    caption: { ...proj.defaultCaption, text },
+  });
+  const overlay = !!proj.aroll;
+  let sh = proj.shots.filter((x) => !x.id.startsWith('brand_'));
+  if (!overlay) {
+    const out: Shot[] = [];
+    for (const x of sh) {
+      if (x.nameTag && proj.pages.find((pg) => pg.id === x.pageId)?.kind === 'cover') out.push(card('brand', x.nameTag, 1.6));
+      out.push(x);
+    }
+    sh = out;
+    if (br.intro) sh = [card('intro', '', 1.2), ...sh];
+    if (br.outro && proj.format === '16:9') sh = [...sh, { ...card('outro', '', 10), transition: 'fade', transitionDur: 0.5 }];
+    if (sh[1] && br.intro) sh[1] = { ...sh[1], transition: 'zoom', transitionDur: 0.35 };
+  } else {
+    if (br.intro) sh = [card('intro', '', 1.2, 0), ...sh];
+    const end = Math.max(segsDuration(segmentsOf(proj.aroll!)), ...sh.map((x) => (x.start ?? 0) + x.duration));
+    if (br.outro && proj.format === '16:9') sh = [...sh, { ...card('outro', '', 10, end), transition: 'fade', transitionDur: 0.5 }];
+  }
+  proj = { ...proj, shots: sh, accent: br.bg };
+
+  // punch-ins on the stressed moments of the voice
+  try { proj = { ...proj, emphasis: await emphasisTimes(proj) }; } catch { /* no audio */ }
   noteMontage();
   const checked = validateProject(proj);
   proj = checked.project;

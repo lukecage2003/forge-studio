@@ -137,6 +137,14 @@ export function LookSection() {
         <input type="checkbox" checked={look.motionBlur !== false} onChange={(e) => set({ motionBlur: e.target.checked })} />
         <span className="switch" /><span>Flou de mouvement à l’export<small>Sur les transitions rapides et les impacts</small></span>
       </label>
+      <label className="toggle">
+        <input type="checkbox" checked={look.parallax !== false} onChange={(e) => set({ parallax: e.target.checked })} />
+        <span className="switch" /><span>Relief 2.5D (parallaxe)<small>Le personnage se détache du décor (IA de profondeur, locale)</small></span>
+      </label>
+      <label className="toggle">
+        <input type="checkbox" checked={!!look.balloonPop} onChange={(e) => set({ balloonPop: e.target.checked })} />
+        <span className="switch" /><span>Bulles qui apparaissent une à une</span>
+      </label>
       <Slider label="Texture papier BD" value={look.paper ?? 0} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ paper: v }, 'paper')} />
       <label className="toggle">
         <input type="checkbox" checked={look.chroma !== false} onChange={(e) => set({ chroma: e.target.checked })} />

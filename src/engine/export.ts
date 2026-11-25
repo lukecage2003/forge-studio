@@ -41,6 +41,14 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
     ...(project.aroll ? [ensureVideo(project.aroll.mediaId)] : []),
   ]);
 
+  if (project.look?.parallax !== false) {
+    const { ensureLayers } = await import('./layers');
+    const full = project.shots.filter((s) => s.pageId && !s.zone && s.layout === 'full');
+    for (let i = 0; i < full.length; i++) {
+      o.onProgress(0, `Relief 2.5D ${i + 1}/${full.length}…`);
+      await ensureLayers(project, full[i]);
+    }
+  }
   const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });
   if (!vcodec) throw new Error('Aucun encodeur vidéo disponible dans ce navigateur.');

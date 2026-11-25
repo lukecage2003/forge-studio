@@ -82,3 +82,43 @@ export function personMask(img: CanvasImageSource, key?: unknown): HTMLCanvasEle
   last = { key, ok };
   return ok ? mask : null;
 }
+
+/* ------------------------------------------------ point-prompted cut-out */
+
+const MT_MODEL = 'https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite';
+type Interactive = { segment: (img: CanvasImageSource, roi: { keypoint: { x: number; y: number } }) => { confidenceMasks?: { width: number; height: number; getAsFloat32Array: () => Float32Array }[]; close: () => void } };
+let mt: Interactive | null = null;
+
+/**
+ * Google MediaPipe "Magic Touch": cuts out the object under a point (fast on
+ * any processor). Used for thumbnail characters when there is no WebGPU.
+ */
+export async function magicTouchCutout(img: CanvasImageSource, r: { x: number; y: number; w: number; h: number }, point: { x: number; y: number }): Promise<HTMLCanvasElement | null> {
+  if (!mt) {
+    const v = await import(/* @vite-ignore */ LIB);
+    const files = await v.FilesetResolver.forVisionTasks(WASM);
+    mt = await v.InteractiveSegmenter.createFromOptions(files, { baseOptions: { modelAssetPath: MT_MODEL }, outputCategoryMask: false, outputConfidenceMasks: true });
+  }
+  const k = Math.min(1, 1024 / Math.max(r.w, r.h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(r.w * k); c.height = Math.round(r.h * k);
+  c.getContext('2d')!.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+  const res = mt!.segment(c, { keypoint: { x: point.x, y: point.y } });
+  const m = res.confidenceMasks?.[0];
+  if (!m) { res.close(); return null; }
+  const data = m.getAsFloat32Array();
+  const mask = document.createElement('canvas');
+  mask.width = m.width; mask.height = m.height;
+  const mx = mask.getContext('2d')!;
+  const im = mx.createImageData(m.width, m.height);
+  let on = 0;
+  for (let i = 0; i < data.length; i++) { const a = Math.min(1, Math.max(0, (data[i] - 0.35) / 0.3)); im.data[i * 4 + 3] = a * 255; if (a > 0.5) on++; }
+  res.close();
+  if (on < data.length * 0.03 || on > data.length * 0.82) return null; // nothing, or the whole panel: not a character
+  mx.putImageData(im, 0, 0);
+  const x = c.getContext('2d')!;
+  x.globalCompositeOperation = 'destination-in';
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(mask, 0, 0, c.width, c.height);
+  return c;
+}

@@ -10,6 +10,7 @@ import { ExportModal } from './components/ExportModal';
 import { AutoModal } from './components/AutoModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CommandPalette } from './components/CommandPalette';
+import { ChannelModal } from './components/ChannelModal';
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
@@ -28,6 +29,7 @@ export default function App() {
   const autoOpen = useStore((s) => s.ui.autoOpen);
   const settingsOpen = useStore((s) => s.ui.settingsOpen);
   const paletteOpen = useStore((s) => s.ui.paletteOpen);
+  const channelOpen = useStore((s) => s.ui.channelOpen);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
   const hasRush = useStore((s) => !!s.project.aroll);
@@ -59,7 +61,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -146,6 +148,7 @@ export default function App() {
       {autoOpen && <AutoModal onClose={() => setUI({ autoOpen: false })} />}
       {settingsOpen && <SettingsModal />}
       {paletteOpen && <CommandPalette onClose={() => setUI({ paletteOpen: false })} />}
+      {channelOpen && <ChannelModal />}
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">

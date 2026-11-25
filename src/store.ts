@@ -18,6 +18,7 @@ export interface UIState {
   autoOpen: boolean;
   settingsOpen: boolean;
   paletteOpen: boolean;
+  channelOpen: boolean;
   loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';
@@ -47,7 +48,7 @@ export function newProject(): Project {
     progressBar: false,
     accent: '#FF5A1F',
     fx: [],
-    look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true, handheld: 0.3, speedLines: true, motionBlur: true },
+    look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true, handheld: 0.3, speedLines: true, motionBlur: true, parallax: true, balloonPop: true },
     autoSfx: { on: true, volume: 0.6 },
   };
 }
@@ -94,7 +95,7 @@ let state: State = {
   project: newProject(),
   ui: {
     selection: null, activePageId: null, playhead: 0, playing: false, mode: 'cut',
-    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, settingsOpen: false, paletteOpen: false, loop: false, busy: null, saved: 'saved',
+    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, settingsOpen: false, paletteOpen: false, channelOpen: false, loop: false, busy: null, saved: 'saved',
   },
   past: [],
   future: [],

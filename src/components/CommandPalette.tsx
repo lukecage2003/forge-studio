@@ -50,6 +50,9 @@ function commands(): Cmd[] {
     { id: 'safe', label: 'Afficher / masquer les zones de sécurité', group: 'Affichage', run: () => setUI({ safeZones: !getState().ui.safeZones }) },
     { id: 'loop', label: 'Lecture en boucle', group: 'Affichage', run: () => setUI({ loop: !getState().ui.loop }) },
     { id: 'settings', label: 'Réglages (Google, apprentissage)', group: 'Affichage', run: () => setUI({ settingsOpen: true }) },
+    { id: 'channel', label: 'Ma chaîne : identité, intro, écran de fin', group: 'Chaîne', run: () => setUI({ channelOpen: true }) },
+    { id: 'thumb', label: 'Créer une miniature YouTube', group: 'Chaîne', run: () => setUI({ channelOpen: true }) },
+    { id: 'chapter', label: 'Ajouter un carton de chapitre (charte)', group: 'Ajouter', run: () => { addTitleCard('CHAPITRE'); const st = getState(); const sel = st.ui.selection; if (sel?.kind === 'shot') update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === sel.id ? { ...x, titleBg: 'brand' } : x)) })); } },
   ];
 }
 
