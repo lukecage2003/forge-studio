@@ -52,6 +52,7 @@ export function newProject(): Project {
     fx: [],
     look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true, handheld: 0.3, speedLines: true, motionBlur: true, parallax: true, balloonPop: true },
     autoSfx: { on: true, volume: 0.6 },
+    mix: { voiceClean: true, target: -14 },
   };
 }
 
@@ -69,6 +70,7 @@ export function migrate(p: Project): Project {
     look: { ...base.look, ...(p.look ?? {}) },
     autoSfx: p.autoSfx ?? base.autoSfx,
     engine: p.engine ?? 2,
+    mix: { ...base.mix!, ...(p.mix ?? {}) },
   };
 }
 

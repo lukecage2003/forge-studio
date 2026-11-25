@@ -3,6 +3,7 @@ import { FORMATS } from '../types';
 import { getImage, getVideo } from './media';
 import { layoutShots, videoDuration } from './timeline';
 import { resolveMotion } from './render';
+import { buildSubtitles, timelineWords } from './auto';
 
 /**
  * Pre-export check: everything that would look or sound wrong once on
@@ -85,9 +86,45 @@ export function checkProject(p: Project): Issue[] {
     if (perMin > 12) out.push({ level: 'warn', text: `${Math.round(perMin)} transitions marquées par minute : trop d’effets, le montage paraît amateur. Garde des coupes franches entre les temps forts (profils de direction créative).` });
   }
 
+  // subtitles too fast to read, texts under the TikTok / Shorts buttons
+  const st = subtitleStats(p);
+  if (st.fast) out.push({ level: 'warn', text: `${st.fast} sous-titre(s) trop rapide(s) à lire (plus de 20 caractères par seconde).`,
+    fix: p.subtitles.length && timelineWords(p).length ? { label: 'Couper plus court', apply: (x) => {
+      const maxWords = Math.max(2, (x.subtitleStyle.maxWords ?? 4) - 1);
+      return { ...x, subtitleStyle: { ...x.subtitleStyle, maxWords }, subtitles: buildSubtitles(timelineWords(x), maxWords) };
+    } } : undefined });
+  const zones = safeZoneIssues(p);
+  if (zones) out.push({ level: 'warn', text: `${zones} texte(s) placé(s) sous les boutons de TikTok / Shorts.`,
+    fix: { label: 'Remonter dans la zone sûre', apply: (x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, y: Math.min(0.78, Math.max(0.12, x.subtitleStyle.y)) }, shots: x.shots.map((s) => ({ ...s, caption: { ...s.caption, y: Math.min(0.78, Math.max(0.12, s.caption.y)) } })) }) } });
+
   // story placements still to check
   const review = p.shots.filter((s) => s.match && s.match.conf < 0.5).length;
   if (review) out.push({ level: 'warn', text: `${review} case(s) associée(s) avec peu de certitude : vérifie-les (inspecteur du projet → « À vérifier »).` });
 
   return out;
+}
+
+/** subtitles too fast to read: characters per second (Netflix-style limit: 17 to 20) */
+export function subtitleStats(p: Project) {
+  const subs = p.subtitles.length ? p.subtitles : layoutShots(p).filter((t) => t.shot.caption.text.trim()).map((t) => ({ s: t.start, e: t.end, text: t.shot.caption.text }));
+  let fast = 0, short = 0, long = 0, maxCps = 0;
+  for (const s of subs) {
+    const d = Math.max(0.01, s.e - s.s), chars = s.text.replace(/\s+/g, ' ').trim().length;
+    const cps = chars / d;
+    maxCps = Math.max(maxCps, cps);
+    if (cps > 20 && chars > 12) fast++;
+    if (d < 0.5) short++;
+    if (chars > 42 && !p.subtitles.length) long++;
+  }
+  return { count: subs.length, fast, short, long, maxCps };
+}
+
+/** text placed where TikTok / Shorts draw their buttons and description */
+export function safeZoneIssues(p: Project): number {
+  if (p.format !== '9:16') return 0;
+  const bad = (y: number) => y > 0.8 || y < 0.1;
+  let n = 0;
+  if (p.subtitles.length && p.subtitleStyle.on !== false && bad(p.subtitleStyle.y)) n++;
+  for (const s of p.shots) if (s.caption.text.trim() && bad(s.caption.y)) n++;
+  return n;
 }

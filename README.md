@@ -354,3 +354,53 @@ Fonctionnement :
   - environ 100 ms par image 3D en 1080p, sans carte graphique ;
   - le bouton et l'inspecteur fonctionnent, sans erreur de page ;
   - export MP4 1080p avec la scène vérifié.
+
+## Moteur de production : phase 6 (son, contrôle qualité, échange, 4K)
+
+**Voix prioritaire** (`src/engine/audio.ts`, réglable dans l'export) :
+- La voix (rush et voix off) passe par un coupe-bas à 80 Hz, un compresseur doux 3:1, un léger relief de présence vers 3 kHz et un gain de compensation.
+- La musique baisse sous la voix ; les bruitages aussi, mais moins (−4,4 dB).
+- **Correction d'un défaut ancien :** quand la voix commençait dès 0 s, cas de presque tous les rushs, la musique descendait lentement sur toute la vidéo (−3,7 dB) au lieu de baisser tout de suite. Elle baisse maintenant du niveau réglé (−12 dB, mesuré).
+
+**Volume des plateformes** (`src/engine/loudness.ts`) :
+- **Mesure :** ITU-R BS.1770-4 / EBU R128 (pondération K, blocs de 400 ms, seuils −70 LUFS et −10 LU), plus l'écart de volume (LRA).
+- **Normalisation :** −14 LUFS (YouTube, TikTok, Instagram), −16 LUFS, ou tel quel.
+- **Limiteur :** il anticipe les crêtes de 5 ms et les garde sous −1,5 dBFS.
+- **Correction en plusieurs passes :** quand le limiteur a écrêté des pics, le volume final atteint quand même la cible.
+- Le volume obtenu s'affiche après l'export.
+
+**Rapport qualité** (`src/engine/report.ts`, bouton « Rapport qualité » dans l'export) : une page HTML autonome avec une note sur 100. Elle couvre :
+- le rythme ;
+- les effets (par minute, répétitions, budget du profil) ;
+- le son : volume mesuré, crête, LRA, présence de la voix, bruitages par minute ;
+- les sous-titres (vitesse de lecture, durée) ;
+- les zones sûres TikTok / Shorts ;
+- l'image.
+
+Le contrôle avant export signale aussi les sous-titres trop rapides et les textes sous les boutons, avec correction en un clic.
+
+**DaVinci Resolve** (`src/engine/otio.ts`, bouton « DaVinci (.otio) ») : un .zip qui contient :
+- `timeline.otio` (OpenTimelineIO) : pistes face caméra, cases avec transitions en fondus, voix, musique et bruitages ;
+- les médias utilisés ;
+- les sous-titres .srt ;
+- un mode d'emploi.
+
+Les cases arrivent comme leur page en plan fixe ; le cadrage, le mouvement et la transition Forge sont dans les métadonnées. Premiere passe par Resolve ou `otioconvert`.
+
+**4K** : choix 1080p ou 4K (2160×3840 en vertical, 3840×2160 en 16:9), même moteur de rendu, avec un message clair si l'ordinateur ne sait pas encoder en 4K.
+
+**Tests** :
+- **Automatiques :** 33 tests, dont :
+  - la valeur de référence de la norme (sinus 1 kHz sur un canal = −3,01 LUFS) ;
+  - le gating du silence ;
+  - la normalisation à −14 avec un pic écrêté ;
+  - la baisse de la musique dès 0 s.
+- **Réels, avec un rush face caméra, de la musique et des planches Watchmen :**
+  - volume final −14,01 LUFS, crête −1,50 dBFS ;
+  - musique baissée de 12,1 dB sous la voix ;
+  - voix compressée (écart entre crêtes et moyenne de 19,1 à 16,6 dB) ;
+  - rapport 97 / 100 ;
+  - .otio relu et réécrit par la bibliothèque officielle OpenTimelineIO 0.18 (durées exactes, aucun média manquant) ;
+  - export 4K 2160×3840 vérifié ;
+  - boutons testés jusqu'au téléchargement.
+- **Non-régression :** les 80 images de référence sont inchangées.

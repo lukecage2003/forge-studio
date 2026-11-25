@@ -5,7 +5,7 @@ import {
 } from 'mediabunny';
 import type { Project } from '../types';
 import { FORMATS } from '../types';
-import { renderMix } from './audio';
+import { masterMix, type MixInfo } from './audio';
 import { createRenderer, loadFonts } from './render';
 import { layoutShots, segmentsOf, videoDuration } from './timeline';
 import { ensureMedia, ensureVideo, mediaBlob } from './media';
@@ -19,6 +19,16 @@ export interface ExportOpts {
   fps: number;
   onProgress: (p: number, label: string) => void;
   signal: AbortSignal;
+  /** 2 = 4K (2160p) */
+  scale?: 1 | 2;
+  /** loudness of the exported mix, once measured */
+  onMix?: (info: MixInfo) => void;
+}
+
+/** pixel size of an export: the format at 1080p, or doubled for 4K */
+export function exportSize(format: Project['format'], scale: 1 | 2 = 1) {
+  const { w, h } = FORMATS[format];
+  return { W: w * scale, H: h * scale };
 }
 
 export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
@@ -30,7 +40,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
   if (typeof VideoEncoder === 'undefined') {
     throw new Error("Ton navigateur ne supporte pas l'encodage vidéo (WebCodecs). Utilise Chrome, Edge ou Firefox récent.");
   }
-  const { w: W, h: H } = FORMATS[project.format];
+  const { W, H } = exportSize(project.format, o.scale ?? 1);
   const duration = videoDuration(project);
   if (duration <= 0) throw new Error('Le projet est vide : ajoute des cases ou un rush avant d’exporter.');
 
@@ -57,7 +67,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
   }
   const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });
-  if (!vcodec) throw new Error('Aucun encodeur vidéo disponible dans ce navigateur.');
+  if (!vcodec) throw new Error(o.scale === 2 ? 'Ton navigateur ne peut pas encoder en 4K sur cet ordinateur : exporte en 1080p.' : 'Aucun encodeur vidéo disponible dans ce navigateur.');
   const hasAudio = project.audio.length > 0 || !!project.aroll || sfxEvents(project).length > 0;
   const acodec = hasAudio ? await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, quality }) : null;
 
@@ -83,9 +93,10 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
 
   try {
     if (audio) {
-      o.onProgress(0.01, 'Mixage audio…');
-      const mix = await renderMix(project, duration);
-      await audio.add(mix);
+      o.onProgress(0.01, 'Mixage et volume…');
+      const { buffer, info } = await masterMix(project, duration);
+      o.onMix?.(info);
+      await audio.add(buffer);
       audio.close();
     }
     const frames = Math.round(duration * o.fps);

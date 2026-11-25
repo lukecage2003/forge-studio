@@ -5,15 +5,15 @@ import { scheduleSfx } from './sfx';
 
 type KF = [number, number];
 
-function valueAt(kfs: KF[], t: number) {
+/** value of a keyframed level at time t; several keyframes at the same time: the last one wins (a step) */
+export function valueAt(kfs: KF[], t: number) {
   if (!kfs.length) return 1;
-  if (t <= kfs[0][0]) return kfs[0][1];
-  for (let i = 1; i < kfs.length; i++) {
-    const [t1, v1] = kfs[i];
-    const [t0, v0] = kfs[i - 1];
-    if (t <= t1) return t1 === t0 ? v1 : v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
-  }
-  return kfs[kfs.length - 1][1];
+  if (t < kfs[0][0]) return kfs[0][1];
+  let i = 0;
+  while (i + 1 < kfs.length && kfs[i + 1][0] <= t) i++;
+  if (i + 1 >= kfs.length) return kfs[i][1];
+  const [t0, v0] = kfs[i], [t1, v1] = kfs[i + 1];
+  return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
 }
 
 function fadeKfs(c: AudioClip): KF[] {
@@ -36,12 +36,32 @@ export function voiceIntervals(p: Project) {
   return out;
 }
 
-function duckKfs(p: Project): KF[] {
+function duckKfs(p: Project, level = p.duckLevel): KF[] {
   const k: KF[] = [[0, 1]];
   for (const [s, e] of voiceIntervals(p)) {
-    k.push([Math.max(0, s - 0.2), 1], [s, p.duckLevel], [e, p.duckLevel], [e + 0.45, 1]);
+    k.push([Math.max(0, s - 0.2), 1], [s, level], [e, level], [e + 0.45, 1]);
   }
   return k;
+}
+
+/** sound effects stay under the voice too (less than the music: they are short accents) */
+export const SFX_UNDER_VOICE = 0.6;
+
+/**
+ * Voice priority: rumble cut under 80 Hz, a gentle compressor that evens out
+ * the words, a presence lift around 3 kHz and make-up gain. Returns the input node.
+ */
+function voiceChain(ctx: BaseAudioContext, dest: AudioNode): AudioNode {
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass'; hp.frequency.value = 80; hp.Q.value = 0.7;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -24; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.2;
+  const pres = ctx.createBiquadFilter();
+  pres.type = 'peaking'; pres.frequency.value = 3200; pres.Q.value = 0.9; pres.gain.value = 2.5;
+  const make = ctx.createGain();
+  make.gain.value = 1.45;
+  hp.connect(comp); comp.connect(pres); pres.connect(make); make.connect(dest);
+  return hp;
 }
 
 function applyKfs(param: AudioParam, kfs: KF[], t0: number, T0: number) {
@@ -56,6 +76,8 @@ function applyKfs(param: AudioParam, kfs: KF[], t0: number, T0: number) {
 export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0: number, T0: number, until = Infinity) {
   const nodes: AudioBufferSourceNode[] = [];
   const duck = p.ducking ? duckKfs(p) : null;
+  const clean = p.mix?.voiceClean !== false;
+  const voiceIn = clean ? voiceChain(ctx, dest) : dest;
   for (const c of p.audio) {
     const buf = getAudio(c.mediaId);
     if (!buf) continue;
@@ -74,7 +96,7 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
       g.connect(dg);
       tail = dg;
     }
-    tail.connect(dest);
+    tail.connect(c.kind === 'voice' ? voiceIn : dest);
     src.start(T0 + (from - t0), c.offset + (from - c.start), end - from);
     nodes.push(src);
   }
@@ -84,7 +106,7 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
   if (ar && abuf) {
     const bus = ctx.createGain();
     bus.gain.value = ar.volume;
-    bus.connect(dest);
+    bus.connect(voiceIn);
     for (const g of segmentsOf(ar)) {
       const len = g.e - g.s, end = Math.min(g.t + len, until);
       if (end <= t0) continue;
@@ -104,7 +126,11 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
       nodes.push(src);
     }
   }
-  nodes.push(...scheduleSfx(ctx, dest, p, t0, T0, until));
+  // sound effects: one bus, lowered while someone speaks
+  const sfxBus = ctx.createGain();
+  if (voiceIntervals(p).length) applyKfs(sfxBus.gain, duckKfs(p, SFX_UNDER_VOICE), t0, T0);
+  sfxBus.connect(dest);
+  nodes.push(...scheduleSfx(ctx, sfxBus, p, t0, T0, until));
   return nodes;
 }
 
@@ -140,6 +166,24 @@ export async function renderMix(p: Project, duration: number, sampleRate = 48000
   const ctx = new OfflineAudioContext(2, len, sampleRate);
   schedule(ctx, ctx.destination, p, 0, 0, duration);
   return ctx.startRendering();
+}
+
+export interface MixInfo { before: number; after: number; peakDb: number; lra: number; gainDb: number; target: number | null }
+
+/** The export mix: rendered offline, then brought to the loudness target (see engine/loudness). */
+export async function masterMix(p: Project, duration: number, sampleRate = 48000): Promise<{ buffer: AudioBuffer; info: MixInfo }> {
+  const raw = await renderMix(p, duration, sampleRate);
+  const { measureLoudness, normalize } = await import('./loudness');
+  const chans = [raw.getChannelData(0), raw.getChannelData(1)];
+  const target = p.mix?.target ?? null;
+  if (target == null) {
+    const m = measureLoudness(chans, sampleRate);
+    return { buffer: raw, info: { before: m.integrated, after: m.integrated, peakDb: m.peakDb, lra: m.lra, gainDb: 0, target } };
+  }
+  const r = normalize(chans, sampleRate, target, -1.5);
+  const out = new AudioBuffer({ length: raw.length, numberOfChannels: 2, sampleRate });
+  r.channels.forEach((c, i) => out.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+  return { buffer: out, info: { before: r.before.integrated, after: r.after.integrated, peakDb: r.after.peakDb, lra: r.after.lra, gainDb: r.gainDb, target } };
 }
 
 /** Peak data for waveform drawing. */

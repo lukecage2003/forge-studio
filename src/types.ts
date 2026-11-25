@@ -230,6 +230,8 @@ export interface Project {
   emphasis?: number[];
   /** automatic sound design: whooshes on transitions, impacts on splashes */
   autoSfx?: { on: boolean; volume: number; /** whooshes allowed per minute (creative profile) */ perMin?: number };
+  /** sound engine: voice clean-up and loudness target of the export (LUFS, null = untouched) */
+  mix?: { voiceClean: boolean; target: number | null };
   /** creative direction profile used by the last auto edit */
   direction?: { profile: string };
 }

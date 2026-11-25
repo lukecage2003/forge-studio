@@ -11,11 +11,20 @@ import { createRenderer, loadFonts } from '../engine/render';
 import { videoDuration } from '../engine/timeline';
 import { pause } from '../engine/transport';
 import { fmtShort } from '../lib/util';
+import { exportSize } from '../engine/export';
+import type { MixInfo } from '../engine/audio';
+import { FileCheck2, Clapperboard } from 'lucide-react';
 
 export function ExportModal() {
   const project = useStore((s) => s.project);
   const [quality, setQuality] = useState<'high' | 'max'>('high');
   const [fps, setFps] = useState(30);
+  const [scale, setScale] = useState<1 | 2>(1);
+  const [mixInfo, setMixInfo] = useState<MixInfo | null>(null);
+  const [side, setSide] = useState<string | null>(null);
+  const mix = project.mix ?? { voiceClean: true, target: -14 };
+  const setMix = (m: Partial<typeof mix>) => update((x) => ({ ...x, mix: { ...mix, ...m } }));
+  const size = exportSize(project.format, scale);
   const [prog, setProg] = useState<{ p: number; label: string } | null>(null);
   const [result, setResult] = useState<{ url: string; size: number; blob: Blob } | null>(null);
   const [err, setErr] = useState('');
@@ -39,7 +48,7 @@ export function ExportModal() {
     const t0 = performance.now();
     try {
       const blob = await exportMp4(getState().project, {
-        quality, fps, signal: abort.current.signal,
+        quality, fps, scale, signal: abort.current.signal, onMix: setMixInfo,
         onProgress: (p, label) => setProg({ p, label }),
       });
       setResult({ url: URL.createObjectURL(blob), size: blob.size, blob });
@@ -68,7 +77,7 @@ export function ExportModal() {
             <span className="modal-ico"><Download size={18} /></span>
             <div>
               <h2 id="exp-title">Exporter</h2>
-              <p>{f.label} · {f.w}×{f.h} · {fmtShort(dur)} · {f.hint}</p>
+              <p>{f.label} · {size.W}×{size.H} · {fmtShort(dur)} · {f.hint}</p>
             </div>
           </div>
           <button className="icon-btn ghost" onClick={close} aria-label="Fermer"><X size={18} /></button>
@@ -85,6 +94,25 @@ export function ExportModal() {
                 <button className={quality === 'max' ? 'on' : ''} onClick={() => setQuality('max')} disabled={busy}>Maximale</button>
               </div>
             </div>
+            <div className="field">
+              <label>Définition</label>
+              <div className="seg full">
+                <button className={scale === 1 ? 'on' : ''} onClick={() => setScale(1)} disabled={busy}>1080p · recommandé</button>
+                <button className={scale === 2 ? 'on' : ''} onClick={() => setScale(2)} disabled={busy}>4K · rendu 4 fois plus long</button>
+              </div>
+            </div>
+            <div className="field">
+              <label>Volume</label>
+              <div className="seg full">
+                <button className={mix.target === -14 ? 'on' : ''} onClick={() => setMix({ target: -14 })} disabled={busy} title="Niveau de YouTube, TikTok et Instagram">−14 LUFS · réseaux</button>
+                <button className={mix.target === -16 ? 'on' : ''} onClick={() => setMix({ target: -16 })} disabled={busy}>−16 LUFS · plus doux</button>
+                <button className={mix.target == null ? 'on' : ''} onClick={() => setMix({ target: null })} disabled={busy}>Tel quel</button>
+              </div>
+            </div>
+            <label className="toggle">
+              <input type="checkbox" checked={mix.voiceClean} onChange={(e) => setMix({ voiceClean: e.target.checked })} disabled={busy} />
+              <span className="switch" /><span>Voix prioritaire<small>Coupe les graves parasites, égalise la voix, baisse musique et bruitages quand tu parles</small></span>
+            </label>
             <div className="field">
               <label>Images par seconde</label>
               <div className="seg full">
@@ -112,6 +140,9 @@ export function ExportModal() {
           <div className="result">
             <video src={result.url} controls playsInline className={`result-video r${project.format.replace(':', '-')}`} />
             <p className="muted">MP4 · {(result.size / 1048576).toFixed(1)} Mo — prêt pour TikTok, Shorts et YouTube.</p>
+            {mixInfo && Number.isFinite(mixInfo.after) && (
+              <p className="muted">Volume : {mixInfo.after.toFixed(1)} LUFS{mixInfo.target != null && Number.isFinite(mixInfo.before) ? ` (était ${mixInfo.before.toFixed(1)})` : ''} · crête {mixInfo.peakDb.toFixed(1)} dBFS</p>
+            )}
           </div>
         )}
 
@@ -129,6 +160,37 @@ export function ExportModal() {
                 catch { download(new Blob([ch], { type: 'text/plain' }), `${fileBase}-chapitres.txt`); }
               }}>
               <ListOrdered size={15} /> Chapitres YouTube
+            </button>
+            <button className="btn sm ghost" disabled={!!side || busy} title="Rythme, effets, volume mesuré, sous-titres, zones sûres : une page à garder"
+              onClick={async () => {
+                setSide('Mesure du volume…');
+                try {
+                  const pr = getState().project;
+                  const [{ buildReport, reportHtml }, { masterMix }] = await Promise.all([import('../engine/report'), import('../engine/audio')]);
+                  const { ensureMedia } = await import('../engine/media');
+                  await Promise.all(pr.audio.map((a) => ensureMedia(a.mediaId, 'audio')));
+                  const hasSound = pr.audio.length > 0 || !!pr.aroll;
+                  const info = hasSound ? (await masterMix(pr, Math.max(0.5, videoDuration(pr)))).info : null;
+                  const r = buildReport(pr, info);
+                  download(new Blob([reportHtml(r)], { type: 'text/html' }), `${fileBase}-controle-qualite.html`);
+                  toast(`Rapport qualité : ${r.score} / 100`);
+                } catch (e) { toast('Rapport impossible : ' + (e as Error).message, 'error'); }
+                setSide(null);
+              }}>
+              {side?.startsWith('Mesure') ? <Loader2 size={15} className="spin" /> : <FileCheck2 size={15} />} Rapport qualité
+            </button>
+            <button className="btn sm ghost" disabled={!!side || busy || !project.shots.length} title="Timeline OpenTimelineIO + médias, à ouvrir dans DaVinci Resolve"
+              onClick={async () => {
+                setSide('Préparation…');
+                try {
+                  const pr = getState().project;
+                  const { exportOtioBundle } = await import('../engine/otio');
+                  download(await exportOtioBundle(pr, exportSrt(pr)), `${fileBase}-davinci.zip`);
+                  toast('Montage exporté : ouvre timeline.otio dans DaVinci Resolve');
+                } catch (e) { toast('Export impossible : ' + (e as Error).message, 'error'); }
+                setSide(null);
+              }}>
+              {side?.startsWith('Prép') ? <Loader2 size={15} className="spin" /> : <Clapperboard size={15} />} DaVinci (.otio)
             </button>
             <button className="btn sm ghost" onClick={thumb} title="Image de l’instant affiché, en pleine définition">
               <ImageDown size={15} /> Miniature .png

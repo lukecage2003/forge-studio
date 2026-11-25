@@ -254,3 +254,50 @@ describe('phase 5 : schémas et scènes 3D', () => {
     expect(direct(shots, PROFILE.premium).report.scenes).toBe(0);
   });
 });
+
+import { measureLoudness, normalize } from '../src/engine/loudness';
+
+describe('phase 6 : volume (ITU-R BS.1770)', () => {
+  const sr = 48000;
+  const sine = (amp: number, f = 997, secs = 5) => Float32Array.from({ length: sr * secs }, (_, i) => amp * Math.sin((2 * Math.PI * f * i) / sr));
+  it('un sinus 1 kHz à 0 dBFS sur un seul canal mesure −3,01 LUFS (valeur de référence de la norme)', () => {
+    const l = measureLoudness([sine(1), new Float32Array(sr * 5)], sr);
+    expect(l.integrated).toBeCloseTo(-3.01, 1);
+  });
+  it('−20 dB de signal = −20 LU', () => {
+    const a = measureLoudness([sine(1), sine(1)], sr).integrated;
+    const b = measureLoudness([sine(0.1), sine(0.1)], sr).integrated;
+    expect(a - b).toBeCloseTo(20, 1);
+  });
+  it('le silence est ignoré par le gating', () => {
+    const half = Float32Array.from({ length: sr * 10 }, (_, i) => (i < sr * 5 ? 0.1 * Math.sin((2 * Math.PI * 997 * i) / sr) : 0));
+    const full = measureLoudness([sine(0.1), sine(0.1)], sr).integrated;
+    expect(measureLoudness([half, half], sr).integrated).toBeCloseTo(full, 0);
+  });
+  it('normalise à −14 LUFS sans dépasser −1,5 dBFS', () => {
+    const quiet = sine(0.05);
+    const loudBurst = Float32Array.from(quiet, (v, i) => (i > sr && i < sr * 1.05 ? v * 18 : v));
+    const r = normalize([loudBurst, loudBurst], sr, -14, -1.5);
+    expect(r.after.integrated).toBeGreaterThan(-15);
+    expect(r.after.integrated).toBeLessThan(-13);
+    expect(r.after.peakDb).toBeLessThanOrEqual(-1.5 + 1e-3);
+  });
+});
+
+import { valueAt } from '../src/engine/audio';
+
+describe('phase 6 : priorité à la voix', () => {
+  it('la musique est baissée dès 0 s quand la voix commence tout de suite', () => {
+    const k: [number, number][] = [[0, 1], [0, 1], [0, 0.25], [5, 0.25], [5.45, 1]];
+    expect(valueAt(k, 0)).toBe(0.25);
+    expect(valueAt(k, 2.5)).toBe(0.25);
+    expect(valueAt(k, 5.225)).toBeCloseTo(0.625, 3);
+    expect(valueAt(k, 9)).toBe(1);
+  });
+  it('rampe normale avant une voix plus tardive', () => {
+    const k: [number, number][] = [[0, 1], [1.8, 1], [2, 0.25], [4, 0.25], [4.45, 1]];
+    expect(valueAt(k, 1)).toBe(1);
+    expect(valueAt(k, 1.9)).toBeCloseTo(0.625, 3);
+    expect(valueAt(k, 3)).toBe(0.25);
+  });
+});
