@@ -7,6 +7,8 @@ import { whisperTranscribe, type WhisperModel } from './engine/whisper';
 import { geminiTranscribe, getGoogle } from './engine/google';
 import { buildSubtitles, timelineWords, STYLES } from './engine/auto';
 import { toast } from './components/Toast';
+import { trackFaces } from './engine/faces';
+import { getVideo } from './engine/media';
 
 const cache = new Map<string, { pcm: Float32Array; a: Analysis }>();
 
@@ -37,6 +39,7 @@ export async function importRush(file: File) {
     update((p) => ({ ...p, aroll: ar, shots: p.shots.map((s, i, arr) => ({ ...s, start: s.start ?? arr.slice(0, i).reduce((a, b) => a + b.duration, 0) })) }));
     setUI({ mode: 'rush', selection: { kind: 'aroll' } });
     await roughCut();
+    await detectFace(true);
   } catch (e) {
     toast((e as Error).message, 'error');
   } finally {
@@ -147,3 +150,25 @@ export function removeRush() {
 }
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+/** find and follow the speaker's face; the framing and the zooms use it */
+export async function detectFace(quiet = false) {
+  const ar = getState().project.aroll;
+  const v = ar && getVideo(ar.mediaId);
+  if (!ar || !v) return;
+  setUI({ busy: 'Détection du visage… 0 %' });
+  try {
+    const track = await trackFaces(v.url, ar.duration, (p) => setUI({ busy: `Détection du visage… ${Math.round(p * 100)} %` }));
+    if (!track.length) {
+      if (!quiet) toast('Aucun visage trouvé : clique sur ton visage avec « Centrer sur le visage ».', 'error');
+      return;
+    }
+    const xs = track.map((k) => k.x).sort((a, b) => a - b), ys = track.map((k) => k.y).sort((a, b) => a - b);
+    setAroll((x) => ({ ...x, faceTrack: track, focus: { x: xs[xs.length >> 1], y: ys[ys.length >> 1] } }));
+    toast(`Visage suivi automatiquement (${track.length} repères)`);
+  } catch (e) {
+    if (!quiet) toast('Détection du visage indisponible : ' + (e as Error).message, 'error');
+  } finally {
+    setUI({ busy: null });
+  }
+}

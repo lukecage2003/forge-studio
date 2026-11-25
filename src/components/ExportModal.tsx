@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
-import { Download, X, Captions, ImageDown, Loader2, CheckCircle2 } from 'lucide-react';
+import { Download, X, Captions, ImageDown, Loader2, CheckCircle2, ListOrdered } from 'lucide-react';
 import { FORMATS } from '../types';
 import { getState, setUI, useStore } from '../store';
-import { download, exportMp4, exportSrt } from '../engine/export';
+import { download, exportMp4, exportSrt, youtubeChapters } from '../engine/export';
+import { toast } from './Toast';
 import { createRenderer, loadFonts } from '../engine/render';
 import { videoDuration } from '../engine/timeline';
 import { pause } from '../engine/transport';
@@ -114,6 +115,15 @@ export function ExportModal() {
             <button className="btn sm ghost" onClick={() => download(new Blob([exportSrt(project)], { type: 'text/plain' }), `${fileBase}.srt`)}
               disabled={!project.shots.some((s) => s.caption.text.trim())} title="Fichier de sous-titres pour YouTube">
               <Captions size={15} /> Sous-titres .srt
+            </button>
+            <button className="btn sm ghost" title="Chapitres pour la description YouTube (couvertures, schémas, cartons)"
+              onClick={async () => {
+                const ch = youtubeChapters(getState().project);
+                if (!ch) { toast('Il faut au moins 3 chapitres espacés de 10 s (couvertures, schémas ou cartons titres).', 'error'); return; }
+                try { await navigator.clipboard.writeText(ch); toast('Chapitres copiés : colle-les dans la description YouTube'); }
+                catch { download(new Blob([ch], { type: 'text/plain' }), `${fileBase}-chapitres.txt`); }
+              }}>
+              <ListOrdered size={15} /> Chapitres YouTube
             </button>
             <button className="btn sm ghost" onClick={thumb} title="Image de l’instant affiché, en pleine définition">
               <ImageDown size={15} /> Miniature .png

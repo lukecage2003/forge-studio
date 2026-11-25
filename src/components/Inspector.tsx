@@ -6,6 +6,7 @@ import type { AudioClip, CaptionAnim, CaptionPreset, Layout, Motion, Shot, Trans
 import { getState, patchCaption, patchShot, setUI, update, useStore } from '../store';
 import { LAYOUT_FR } from '../engine/brain';
 import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
+import { Slider } from './Slider';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { applyDefaultCaptionToAll, deleteSelection, duplicateShot, fitMusicToVideo } from '../actions';
 import { getImage } from '../engine/media';
@@ -36,18 +37,6 @@ function Section({ title, children, aside }: { title: string; children: ReactNod
   );
 }
 
-function Slider({ label, value, min, max, step, onChange, fmt }: {
-  label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string;
-}) {
-  const pct = ((value - min) / (max - min)) * 100;
-  return (
-    <label className="slider">
-      <span className="slider-top"><span>{label}</span><output>{fmt ? fmt(value) : value}</output></span>
-      <input type="range" min={min} max={max} step={step} value={value}
-        style={{ ['--p' as string]: pct + '%' }} onChange={(e) => onChange(+e.target.value)} />
-    </label>
-  );
-}
 
 function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -168,7 +157,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
           <Slider label="Début" value={shot.start ?? 0} min={0} max={Math.max(1, vlen)} step={0.05}
             fmt={(v) => v.toFixed(2) + ' s'} onChange={(v) => patchShot(shot.id, { start: v }, k('start'))} />
         )}
-        <Slider label="Durée du plan" value={shot.duration} min={0.4} max={12} step={0.1}
+        <Slider label="Durée du plan" value={shot.duration} min={0.4} max={12} step={1 / 30}
           fmt={(v) => v.toFixed(1) + ' s'} onChange={(v) => patchShot(shot.id, { duration: v }, k('dur'))} />
       </Section>
 

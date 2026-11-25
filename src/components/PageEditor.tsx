@@ -40,6 +40,28 @@ export function PageEditor() {
 
   useEffect(() => { setDraft(null); setDrag(null); }, [pageId]);
 
+  // arrows move the selected panel by 1 px (Maj: 10 px); Alt+arrows resize it
+  const selId = sel?.kind === 'shot' ? sel.id : null;
+  useEffect(() => {
+    if (!page || !selId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.key.startsWith('Arrow') || (e.target as HTMLElement).closest('input, textarea, select')) return;
+      const shot = shots.find((x) => x.id === selId && x.pageId === page.id);
+      if (!shot) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const d = e.shiftKey ? 10 : 1;
+      const dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, dy = e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
+      const r = shot.rect;
+      const nr = e.altKey
+        ? { ...r, w: clamp(r.w + dx, 20, page.width - r.x), h: clamp(r.h + dy, 20, page.height - r.y) }
+        : { ...r, x: clamp(r.x + dx, 0, page.width - r.w), y: clamp(r.y + dy, 0, page.height - r.h) };
+      patchShot(selId, { rect: nr }, 'nudge-' + selId);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [page, selId, shots]);
+
   if (!page) {
     return (
       <div className="stage empty">
@@ -86,16 +108,23 @@ export function PageEditor() {
       return;
     }
     const dx = p.x - drag.px, dy = p.y - drag.py, o = drag.orig;
+    const tol = e.altKey ? 0 : 8 / fit;
+    const others = pageShots.filter(({ s: q }) => q.id !== drag.id).map(({ s: q }) => q.rect);
+    const xs = [0, W, ...others.flatMap((q) => [q.x, q.x + q.w])], ys = [0, H, ...others.flatMap((q) => [q.y, q.y + q.h])];
+    const snapV = (v: number, list: number[]) => { let b = v, d = tol; for (const c of list) if (Math.abs(c - v) < d) { d = Math.abs(c - v); b = c; } return b; };
     let r: Rect;
     if (drag.type === 'move') {
-      r = { ...o, x: clamp(o.x + dx, 0, W - o.w), y: clamp(o.y + dy, 0, H - o.h) };
+      let nx = clamp(o.x + dx, 0, W - o.w), ny = clamp(o.y + dy, 0, H - o.h);
+      const sx1 = snapV(nx, xs), sx2 = snapV(nx + o.w, xs) - o.w, sy1 = snapV(ny, ys), sy2 = snapV(ny + o.h, ys) - o.h;
+      nx = sx1 !== nx ? sx1 : sx2; ny = sy1 !== ny ? sy1 : sy2;
+      r = { ...o, x: clamp(nx, 0, W - o.w), y: clamp(ny, 0, H - o.h) };
     } else {
       let { x, y } = o;
       let x2 = o.x + o.w, y2 = o.y + o.h;
-      if (drag.h.includes('w')) x = clamp(o.x + dx, 0, x2 - 20);
-      if (drag.h.includes('e')) x2 = clamp(x2 + dx, x + 20, W);
-      if (drag.h.includes('n')) y = clamp(o.y + dy, 0, y2 - 20);
-      if (drag.h.includes('s')) y2 = clamp(y2 + dy, y + 20, H);
+      if (drag.h.includes('w')) x = clamp(snapV(o.x + dx, xs), 0, x2 - 20);
+      if (drag.h.includes('e')) x2 = clamp(snapV(x2 + dx, xs), x + 20, W);
+      if (drag.h.includes('n')) y = clamp(snapV(o.y + dy, ys), 0, y2 - 20);
+      if (drag.h.includes('s')) y2 = clamp(snapV(y2 + dy, ys), y + 20, H);
       r = { x, y, w: x2 - x, h: y2 - y };
     }
     patchShot(drag.id, { rect: roundRect(r) }, 'drag-' + drag.id + drag.type);
@@ -133,7 +162,12 @@ export function PageEditor() {
           <button className={!rtl ? 'on' : ''} onClick={() => update((p) => ({ ...p, readingOrder: 'ltr' }))} title="Lecture occidentale">BD →</button>
           <button className={rtl ? 'on' : ''} onClick={() => update((p) => ({ ...p, readingOrder: 'rtl' }))} title="Lecture manga">← Manga</button>
         </div>
-        <span className="hint">Glisse pour tracer une case · Suppr pour effacer</span>
+        {(() => {
+          const cur = pageShots.find(({ s: q }) => sel?.kind === 'shot' && q.id === sel.id)?.s.rect ?? draft;
+          return cur ? (
+            <span className="coords" title="Position et taille en pixels de la page">x {Math.round(cur.x)} · y {Math.round(cur.y)} · {Math.round(cur.w)}×{Math.round(cur.h)}</span>
+          ) : <span className="hint">Glisse pour tracer · flèches : 1 px (Maj : 10) · Alt+flèches : taille · Alt en glissant : sans aimant</span>;
+        })()}
       </div>
       <div className="stage-canvas" ref={stageRef}>
         <div className="page-wrap" style={{ width: W * fit, height: H * fit }}>

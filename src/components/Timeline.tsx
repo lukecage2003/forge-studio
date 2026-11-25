@@ -80,7 +80,7 @@ export function Timeline() {
     const mv = (ev: PointerEvent) => {
       const dx = ev.clientX - x0;
       if (mode === 'resize') {
-        update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === s.id ? { ...x, duration: +clamp(d0 + dx / pps, 0.4, 30).toFixed(2) } : x)) }), 'tl-dur-' + s.id);
+        update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === s.id ? { ...x, duration: Math.round(clamp(d0 + dx / pps, 0.4, 30) * project.fps) / project.fps } : x)) }), 'tl-dur-' + s.id);
         return;
       }
       if (!moved && Math.abs(dx) < 5) return;
@@ -92,7 +92,7 @@ export function Timeline() {
           if (Math.abs(p - st) * pps < 7) { st = p; break; }
           if (Math.abs(p - (st + s.duration)) * pps < 7) { st = p - s.duration; break; }
         }
-        update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === s.id ? { ...x, start: +st.toFixed(3) } : x)) }), 'tl-start-' + s.id);
+        update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === s.id ? { ...x, start: Math.round(st * project.fps) / project.fps } : x)) }), 'tl-start-' + s.id);
         return;
       }
       const t = xToT(ev.clientX);

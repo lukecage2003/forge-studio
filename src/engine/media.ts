@@ -28,14 +28,23 @@ export const audioCtx = () => (actx ??= new AudioContext({ latencyHint: 'interac
 export const getImage = (id: string) => images.get(id);
 export const getAudio = (id: string) => audios.get(id);
 
+/** soft, colourful blurred copy of the page, used behind panels and whenever nothing else fills the frame */
 function makeBlur(img: CanvasImageSource, w: number, h: number) {
+  const small = document.createElement('canvas');
+  const s = 48 / Math.max(w, h);
+  small.width = Math.max(4, Math.round(w * s));
+  small.height = Math.max(4, Math.round(h * s));
+  const sx = small.getContext('2d')!;
+  sx.imageSmoothingQuality = 'high';
+  sx.drawImage(img, 0, 0, small.width, small.height);
   const c = document.createElement('canvas');
-  const s = 40 / Math.max(w, h);
-  c.width = Math.max(4, Math.round(w * s));
-  c.height = Math.max(4, Math.round(h * s));
+  c.width = small.width * 3;
+  c.height = small.height * 3;
   const x = c.getContext('2d')!;
   x.imageSmoothingQuality = 'high';
-  x.drawImage(img, 0, 0, c.width, c.height);
+  x.filter = 'blur(4px) saturate(1.25)';
+  x.drawImage(small, -4, -4, c.width + 8, c.height + 8);
+  x.filter = 'none';
   return c;
 }
 

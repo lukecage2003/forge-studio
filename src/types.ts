@@ -139,6 +139,9 @@ export type CutReason = 'silence' | 'hesitation' | 'filler' | 'retake' | 'manual
 
 export interface Cut { s: number; e: number; reason: CutReason; on: boolean; label?: string }
 
+/** face position in the rush at a source time: centre (eyes) and width, normalised */
+export interface FaceKey { t: number; x: number; y: number; s: number }
+
 export interface ARoll {
   mediaId: string;
   name: string;
@@ -147,6 +150,8 @@ export interface ARoll {
   height: number;
   /** focus point of the face, normalised 0..1, used for framing and zooms */
   focus: { x: number; y: number };
+  /** detected face track (automatic framing); manual focus is used when absent */
+  faceTrack?: FaceKey[];
   /** proposed cuts on the source (toggle `on` to apply) */
   cuts: Cut[];
   words: Word[];

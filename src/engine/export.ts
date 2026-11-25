@@ -155,3 +155,20 @@ export function download(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+
+/** YouTube chapters (description timestamps) from covers, schemas and title cards */
+export function youtubeChapters(project: Project): string {
+  const fmt = (t: number) => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, '0')}`; };
+  const marks: { t: number; title: string }[] = [];
+  for (const ts of layoutShots(project)) {
+    const s = ts.shot;
+    const title = s.diagram?.title || (s.pageId == null ? s.caption.text : '') || s.nameTag || '';
+    if (title.trim()) marks.push({ t: ts.start, title: title.trim().replace(/\s+/g, ' ').slice(0, 60) });
+  }
+  // YouTube rules: first at 0:00, at least 3 chapters, each ≥ 10 s
+  const out: { t: number; title: string }[] = [];
+  for (const m of marks) if (!out.length || m.t - out[out.length - 1].t >= 10) out.push(m);
+  if (!out.length || out[0].t > 0) out.unshift({ t: 0, title: 'Introduction' });
+  else out[0].t = 0;
+  return out.length >= 3 ? out.map((m) => `${fmt(m.t)} ${m.title}`).join('\n') : '';
+}

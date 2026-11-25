@@ -1,5 +1,6 @@
 import { FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { personMask } from './segment';
+import { faceAt } from './faces';
 import { clamp, easeInOutCubic, easeInOutSine, easeOutBack, easeOutCubic, lerp } from '../lib/util';
 import { getImage } from './media';
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
@@ -123,6 +124,36 @@ function hexA(hex: string, a: number) {
 
 /* --------------------------------------------------------- drawing kit */
 
+/** page shown blurred when nothing else fills the frame: never a black screen */
+let bgPageHint: string | null = null;
+
+export function pageBlur(ctx: Ctx, project: Project, box: Box, pageId?: string | null, region?: Rect | null) {
+  const page = project.pages.find((p) => p.id === (pageId ?? bgPageHint)) ?? project.pages.find((p) => !p.skip && getImage(p.mediaId)) ?? project.pages[0];
+  const asset = page && getImage(page.mediaId);
+  if (!asset) {
+    ctx.drawImage(halftone(Math.max(8, Math.round(box.w)), Math.max(8, Math.round(box.h)), project.accent), box.x, box.y, box.w, box.h);
+    return;
+  }
+  const b = asset.blur;
+  // the whole page, covering the box, centred on the region of interest
+  const sc = Math.max(box.w / b.width, box.h / b.height) * 1.25;
+  const dw = b.width * sc, dh = b.height * sc;
+  const cx = region ? ((region.x + region.w / 2) / asset.width) * dw : dw / 2;
+  const cy = region ? ((region.y + region.h / 2) / asset.height) * dh : dh / 2;
+  const ox = clamp(box.x + box.w / 2 - cx, box.x + box.w - dw, box.x);
+  const oy = clamp(box.y + box.h / 2 - cy, box.y + box.h - dh, box.y);
+  ctx.save();
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(b, ox, oy, dw, dh);
+  const g = ctx.createLinearGradient(0, box.y, 0, box.y + box.h);
+  g.addColorStop(0, 'rgba(8,8,10,0.5)');
+  g.addColorStop(0.5, 'rgba(8,8,10,0.32)');
+  g.addColorStop(1, 'rgba(8,8,10,0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.restore();
+}
+
 function clipBox(ctx: Ctx, b: Box, r = 0) {
   ctx.beginPath();
   if (r > 0) ctx.roundRect(b.x, b.y, b.w, b.h, r);
@@ -147,16 +178,8 @@ function drawBackground(ctx: Ctx, project: Project, box: Box, pageId: string | n
     return;
   }
   if (project.background === 'blur' || project.background === 'page') {
-    const b = asset.blur;
-    const bx = (region.x / asset.width) * b.width, by = (region.y / asset.height) * b.height;
-    const bw = (region.w / asset.width) * b.width, bh = (region.h / asset.height) * b.height;
-    const sc = Math.max(box.w / bw, box.h / bh) * 1.15;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(b, bx, by, bw, bh, box.x + box.w / 2 - (bw * sc) / 2, box.y + box.h / 2 - (bh * sc) / 2, bw * sc, bh * sc);
-    ctx.fillStyle = 'rgba(8,8,10,0.5)';
-    ctx.fillRect(box.x, box.y, box.w, box.h);
-  }
-}
+    pageBlur(ctx, project, box, pageId, region);
+  }}
 
 /** Draw a panel of a page inside `box`, seen through `view`, clipped to `clip`. */
 function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number } = {}) {
@@ -217,9 +240,17 @@ function placeFace(project: Project, box: Box, face: FaceSource, segs: Seg[], t:
   if (ar.punchIn > 0) z *= [1, 1 + 0.16 * ar.punchIn, 1 + 0.07 * ar.punchIn][i % 3];
   const segLen = segs[i].e - segs[i].s;
   if (ar.drift > 0) z *= 1 + 0.05 * ar.drift * clamp(local / Math.max(segLen, 0.5), 0, 1);
+  const fk = faceAt(ar.faceTrack, src);
+  // never zoom so far that the face fills more than ~45 % of the width
+  if (fk && fk.s > 0) {
+    const base = Math.max(box.w / vw, box.h / vh);
+    const faceW = fk.s * vw * base;
+    z = Math.min(z, Math.max(1, (box.w * 0.45) / faceW));
+  }
   const sc = Math.max(box.w / vw, box.h / vh) * z;
   const dw = vw * sc, dh = vh * sc;
-  const fx = ar.focus.x * dw, fy = ar.focus.y * dh;
+  const focus = fk ?? ar.focus;
+  const fx = focus.x * dw, fy = focus.y * dh;
   const ox = clamp(box.x + box.w / 2 - fx, box.x + box.w - dw, box.x);
   const oy = clamp(box.y + box.h * 0.42 - fy, box.y + box.h - dh, box.y);
   return { img, ox, oy, dw, dh, src };
@@ -228,9 +259,8 @@ function placeFace(project: Project, box: Box, face: FaceSource, segs: Seg[], t:
 function drawFace(ctx: Ctx, project: Project, box: Box, face: FaceSource, segs: Seg[], t: number, radius = 0) {
   ctx.save();
   clipBox(ctx, box, radius);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(box.x, box.y, box.w, box.h);
   const pl = placeFace(project, box, face, segs, t);
+  if (!pl || pl.dw < box.w - 1 || pl.dh < box.h - 1) pageBlur(ctx, project, box);
   if (pl) {
     ctx.imageSmoothingQuality = 'high';
     const g = GRADE[project.look?.grade ?? 'natural'];
@@ -842,9 +872,9 @@ export function createRenderer(W: number, H: number): Renderer {
     const [sx, sy, rot] = shakeOffset(shot, local, W);
     const [hx, hy] = layoutKind === 'title' ? [0, 0] : handheld(project.look?.handheld ?? 0, t, W);
     const p = (local - motionStart) / Math.max(0.01, shot.duration - motionStart);
+    if (shot.pageId) bgPageHint = shot.pageId;
     ctx.save();
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    pageBlur(ctx, project, { x: 0, y: 0, w: W, h: H }, shot.pageId, shot.pageId ? shot.rect : null);
     ctx.translate(W / 2 + sx + hx, H / 2 + sy + hy);
     ctx.rotate(rot);
     // a shaking frame is scaled a little so its edges never show
@@ -990,7 +1020,7 @@ export function createRenderer(W: number, H: number): Renderer {
   function renderState(ctx: Ctx, project: Project, st: State, t: number, face: FaceSource, segs: Seg[]) {
     if (st.kind === 'shot') renderShot(ctx, project, st.ts, t, face, segs);
     else if (st.kind === 'face') drawFaceWithFx(ctx, project, W, H, face, segs, t, (project.fx ?? []).filter((f) => t >= f.start && t < f.start + f.duration));
-    else { ctx.fillStyle = '#0B0B0D'; ctx.fillRect(0, 0, W, H); }
+    else pageBlur(ctx, project, { x: 0, y: 0, w: W, h: H });
   }
 
   function overlays(ctx: Ctx, project: Project, t: number, total: number, st: State) {
@@ -1081,8 +1111,7 @@ export function createRenderer(W: number, H: number): Renderer {
       }
       renderState(actx, project, prev, t, face, segs);
       renderShot(bctx, project, cur.ts, t, face, segs);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, W, H);
+      pageBlur(ctx, project, { x: 0, y: 0, w: W, h: H }, shot.pageId, shot.pageId ? shot.rect : null);
       const kind = shot.transition === 'glide' ? 'slide' : shot.transition;
       const e = easeInOutCubic(a);
       switch (kind) {

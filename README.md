@@ -110,6 +110,14 @@ Après chaque montage auto et avant chaque export, Forge vérifie et répare le 
 - **Bruitages automatiques synthétisés** : souffle sur les transitions, impact sur les pleines pages et les mots chocs, volume réglable, toujours sous la voix.
 - **Durée respectée** : si trop de cases pour la durée demandée, Forge en choisit une sélection (couvertures et pleines pages gardées).
 
+## 10. Précision
+
+- **Visage détecté et suivi automatiquement** (Google MediaPipe, local) : recadrage 9:16, zooms de coupe centrés sur les yeux, zoom limité pour que le visage ne dépasse jamais ~45 % de la largeur. Le clic manuel reste possible.
+- **Jamais de fond noir** : partout où l’image ne remplit pas le cadre, la page de comics floutée apparaît derrière.
+- **Valeurs au clavier** : clic sur une valeur pour la taper (↑/↓ pour ajuster, Maj ×10) ; durées à l’image près (1/30 s), timeline aimantée à l’image.
+- **Découpe au pixel** : flèches = 1 px (Maj 10 px), Alt+flèches = taille, aimantation sur les bords des autres cases et de la page (Alt pour désactiver), coordonnées affichées.
+- **Chapitres YouTube** copiés en un clic depuis l’export (couvertures, schémas, cartons).
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

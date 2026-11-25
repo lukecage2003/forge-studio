@@ -4,9 +4,10 @@ import type { ARoll, Cut, Word } from '../types';
 import { setUI, useStore } from '../store';
 import { getVideo } from '../engine/media';
 import { HOP, isFiller, keepSegments, keptShare, segsDuration } from '../engine/speech';
-import { addManualCut, cachedAnalysis, importRush, roughCut, setAllCuts, setFocus, toggleCut, toggleWords, transcribe, patchRoughSettings } from '../rush';
+import { addManualCut, cachedAnalysis, detectFace, importRush, roughCut, setAllCuts, setFocus, toggleCut, toggleWords, transcribe, patchRoughSettings, patchAroll } from '../rush';
 import { hasGoogle } from '../engine/google';
 import { WHISPER_MODELS, type WhisperModel } from '../engine/whisper';
+import { faceAt } from '../engine/faces';
 import { useMediaVersion } from '../lib/hooks';
 import { clamp } from '../lib/util';
 
@@ -130,11 +131,15 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
               const k = Math.min(r.width / vw, r.height / vh);
               const ox = (r.width - vw * k) / 2, oy = (r.height - vh * k) / 2;
               setFocus(clamp((e.clientX - r.left - ox) / (vw * k), 0, 1), clamp((e.clientY - r.top - oy) / (vh * k), 0, 1));
+              patchAroll({ faceTrack: undefined });
               setFocusMode(false);
             }} />}
-            {asset && <FocusMarker ar={ar} />}
+            {asset && <FocusMarker ar={ar} t={srcT} />}
             <div className="rush-video-bar">
               <span className="tc">{fmt(srcT)}</span>
+              <button className="btn sm ghost" onClick={() => void detectFace()} title="Repère et suit ton visage dans toute la vidéo (local)">
+                <ScanLine size={14} /> {ar.faceTrack?.length ? 'Visage suivi ✓' : 'Détecter mon visage'}
+              </button>
               <button className={`btn sm ghost ${focusMode ? 'on' : ''}`} onClick={() => setFocusMode(!focusMode)} title="Clique ensuite sur ton visage : les zooms et recadrages se centrent dessus">
                 <Crosshair size={14} /> {focusMode ? 'Clique sur ton visage' : 'Centrer sur le visage'}
               </button>
@@ -187,8 +192,10 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
   );
 }
 
-function FocusMarker({ ar }: { ar: ARoll }) {
-  return <div className="focus-marker" style={{ left: `${ar.focus.x * 100}%`, top: `${ar.focus.y * 100}%` }} aria-hidden="true" />;
+function FocusMarker({ ar, t }: { ar: ARoll; t: number }) {
+  const f = faceAt(ar.faceTrack, t) ?? ar.focus;
+  // the marker sits on the video's own picture area (object-fit: contain)
+  return <div className="focus-marker" style={{ left: `calc(50% + (${f.x} - 0.5) * min(100%, 100cqh * ${ar.width / ar.height}))`, top: `calc(50% + (${f.y} - 0.5) * min(100%, 100cqw * ${ar.height / ar.width}))` }} aria-hidden="true" />;
 }
 
 function RoughSettings({ ar }: { ar: ARoll }) {

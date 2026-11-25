@@ -6,6 +6,7 @@ import { addFx, deleteSelection, patchFx } from '../actions';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { uid } from '../lib/util';
+import { Slider } from './Slider';
 
 /* ------------------------------------------------------------ helpers */
 
@@ -41,12 +42,6 @@ export function PanelPicker({ onPick, onClose }: { onPick: (pageId: string, rect
   );
 }
 
-const Slider = ({ label, value, min, max, step, onChange, fmt }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt: (v: number) => string }) => (
-  <label className="slider">
-    <span className="slider-top"><span>{label}</span><output>{fmt(value)}</output></span>
-    <input type="range" min={min} max={max} step={step} value={value} style={{ ['--p' as string]: ((value - min) / (max - min)) * 100 + '%' }} onChange={(e) => onChange(+e.target.value)} />
-  </label>
-);
 
 /* ------------------------------------------------------------- effects */
 
