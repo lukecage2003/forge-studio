@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import {
-  Copy, Trash2, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Sparkles, Pause as Still, Scissors,
+  Copy, Trash2, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Sparkles, Pause as Still, Scissors, Plus, Minus, FileVideo,
 } from 'lucide-react';
-import type { AudioClip, CaptionAnim, CaptionPreset, Motion, Shot, Transition, Background } from '../types';
-import { patchCaption, patchShot, setUI, update, useStore } from '../store';
+import type { AudioClip, CaptionAnim, CaptionPreset, Layout, Motion, Shot, Transition, Background, ARoll } from '../types';
+import { getState, patchCaption, patchShot, setUI, update, useStore } from '../store';
+import { LAYOUT_FR } from '../engine/brain';
+import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
 import { applyDefaultCaptionToAll, deleteSelection, duplicateShot, fitMusicToVideo } from '../actions';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
@@ -13,9 +15,10 @@ export function Inspector() {
   const sel = useStore((s) => s.ui.selection);
   const shot = useStore((s) => (sel?.kind === 'shot' ? s.project.shots.find((x) => x.id === sel.id) : undefined));
   const clip = useStore((s) => (sel?.kind === 'audio' ? s.project.audio.find((x) => x.id === sel.id) : undefined));
+  const ar = useStore((s) => (sel?.kind === 'aroll' ? s.project.aroll : null));
   return (
     <aside className="inspector">
-      {shot ? <ShotPanel shot={shot} /> : clip ? <AudioPanel clip={clip} /> : <ProjectPanel />}
+      {shot ? <ShotPanel shot={shot} /> : clip ? <AudioPanel clip={clip} /> : ar ? <ARollPanel ar={ar} /> : <ProjectPanel />}
     </aside>
   );
 }
@@ -72,8 +75,22 @@ const TRANSITIONS: [Transition, string][] = [
 
 const PRESETS: { v: CaptionPreset; l: string }[] = [
   { v: 'tiktok', l: 'TikTok' }, { v: 'comic', l: 'Récitatif' }, { v: 'impact', l: 'Impact' },
-  { v: 'clean', l: 'Propre' }, { v: 'cinema', l: 'Cinéma' },
+  { v: 'clean', l: 'Propre' }, { v: 'cinema', l: 'Cinéma' }, { v: 'neon', l: 'Néon' },
 ];
+
+const LAYOUTS: Layout[] = ['full', 'split', 'pip', 'grid', 'page'];
+function LayoutIcon({ l }: { l: Layout }) {
+  return (
+    <svg viewBox="0 0 24 32" width="18" height="24" aria-hidden="true" className="lay-ico">
+      <rect x="1" y="1" width="22" height="30" rx="2.5" className="lay-frame" />
+      {l === 'full' && <rect x="3" y="3" width="18" height="26" rx="1" className="lay-panel" />}
+      {l === 'split' && (<><rect x="3" y="3" width="18" height="14" rx="1" className="lay-panel" /><circle cx="12" cy="23.5" r="4" className="lay-face" /></>)}
+      {l === 'pip' && (<><rect x="3" y="3" width="18" height="26" rx="1" className="lay-panel" /><circle cx="8" cy="22" r="3.6" className="lay-face" /></>)}
+      {l === 'grid' && (<><rect x="3" y="3" width="18" height="8" rx="1" className="lay-panel" /><rect x="3" y="12" width="18" height="8" rx="1" className="lay-panel" /><rect x="3" y="21" width="18" height="8" rx="1" className="lay-panel" /></>)}
+      {l === 'page' && (<><rect x="4" y="4" width="16" height="24" rx="1" className="lay-page" /><rect x="5.5" y="12" width="13" height="7" rx="0.5" className="lay-panel" /></>)}
+    </svg>
+  );
+}
 const ANIMS: [CaptionAnim, string][] = [['none', 'Aucune'], ['pop', 'Pop'], ['type', 'Machine'], ['words', 'Mot à mot']];
 
 function ShotThumb({ shot }: { shot: Shot }) {
@@ -96,6 +113,9 @@ function ShotThumb({ shot }: { shot: Shot }) {
 
 function ShotPanel({ shot }: { shot: Shot }) {
   const index = useStore((s) => s.project.shots.findIndex((x) => x.id === shot.id));
+  const hasFace = useStore((s) => !!s.project.aroll);
+  const overlay = hasFace;
+  const vlen = useStore((s) => videoDuration(s.project));
   const k = (f: string) => `${shot.id}-${f}`;
   const isTitle = shot.pageId == null;
   return (
@@ -117,7 +137,33 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </button>
       )}
 
+      {!isTitle && (
+        <Section title="Mise en page">
+          <div className="layout-grid">
+            {LAYOUTS.map((l) => (
+              <button key={l} className={shot.layout === l ? 'on' : ''} disabled={(l === 'split' || l === 'pip') && !hasFace}
+                title={(l === 'split' || l === 'pip') && !hasFace ? 'Nécessite un rush face caméra' : LAYOUT_FR[l]}
+                onClick={() => patchShot(shot.id, { layout: l, group: l === 'grid' && !shot.group?.length ? nextPanels(shot, 1) : shot.group })}>
+                <LayoutIcon l={l} /><span>{LAYOUT_FR[l]}</span>
+              </button>
+            ))}
+          </div>
+          {shot.layout === 'grid' && (
+            <div className="row-btns gap">
+              <span className="muted">{1 + (shot.group?.length ?? 0)} cases ensemble</span>
+              <button className="icon-btn sm" title="Retirer une case" disabled={!shot.group?.length} onClick={() => patchShot(shot.id, { group: shot.group?.slice(0, -1) })}><Minus size={14} /></button>
+              <button className="icon-btn sm" title="Ajouter la case suivante" disabled={(shot.group?.length ?? 0) >= 3} onClick={() => patchShot(shot.id, { group: nextPanels(shot, (shot.group?.length ?? 0) + 1) })}><Plus size={14} /></button>
+            </div>
+          )}
+          <input className="input" placeholder="Nom à l’écran (ex. : Bruce Wayne)" value={shot.nameTag ?? ''} onChange={(e) => patchShot(shot.id, { nameTag: e.target.value }, k('tag'))} />
+        </Section>
+      )}
+
       <Section title="Durée">
+        {overlay && (
+          <Slider label="Début" value={shot.start ?? 0} min={0} max={Math.max(1, vlen)} step={0.05}
+            fmt={(v) => v.toFixed(2) + ' s'} onChange={(v) => patchShot(shot.id, { start: v }, k('start'))} />
+        )}
         <Slider label="Durée du plan" value={shot.duration} min={0.4} max={12} step={0.1}
           fmt={(v) => v.toFixed(1) + ' s'} onChange={(v) => patchShot(shot.id, { duration: v }, k('dur'))} />
       </Section>
@@ -148,7 +194,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </Section>
       )}
 
-      {index > 0 && (
+      {(index > 0 || overlay) && (
         <Section title="Transition d’entrée">
           <select className="input" value={shot.transition} onChange={(e) => patchShot(shot.id, { transition: e.target.value as Transition })}>
             {TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -234,7 +280,7 @@ function ProjectPanel() {
         <div><span className="eyebrow">Projet</span><h2>Réglages</h2></div>
       </div>
       <Section title="Arrière-plan">
-        <Seg<Background> value={p.background} options={[['blur', 'Flou'], ['page', 'Planche'], ['color', 'Couleur']]} onChange={(v) => set({ background: v })} />
+        <Seg<Background> value={p.background} options={[['blur', 'Flou'], ['halftone', 'Trame'], ['page', 'Planche'], ['color', 'Uni']]} onChange={(v) => set({ background: v })} />
         {p.background === 'color' && (
           <label className="color-row">
             <input type="color" value={p.bgColor} onChange={(e) => set({ bgColor: e.target.value }, 'bgc')} />
@@ -253,7 +299,40 @@ function ProjectPanel() {
             fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => set({ duckLevel: v }, 'duck')} />
         )}
       </Section>
-      <Section title="Sous-titres par défaut" aside={<button className="link-btn" onClick={applyDefaultCaptionToAll}>Appliquer partout</button>}>
+      <Section title="Habillage">
+        <label className="color-row">
+          <input type="color" value={p.accent} onChange={(e) => set({ accent: e.target.value }, 'accent')} />
+          <span>Couleur d’accent · {p.accent}</span>
+        </label>
+        <label className="toggle">
+          <input type="checkbox" checked={p.progressBar} onChange={(e) => set({ progressBar: e.target.checked })} />
+          <span className="switch" />
+          <span>Barre de progression<small>Aide la rétention sur TikTok et Shorts</small></span>
+        </label>
+      </Section>
+      {p.aroll && (
+        <Section title="Sous-titres auto" aside={<button className="link-btn" onClick={rebuildSubtitles}>Régénérer</button>}>
+          <label className="toggle">
+            <input type="checkbox" checked={p.subtitleStyle.on} onChange={(e) => set({ subtitleStyle: { ...p.subtitleStyle, on: e.target.checked } })} />
+            <span className="switch" />
+            <span>Afficher les sous-titres<small>{p.subtitles.length ? `${p.subtitles.length} lignes, issues de la transcription` : 'Transcris le rush pour les générer'}</small></span>
+          </label>
+          <div className="preset-grid">
+            {PRESETS.map((x) => (
+              <button key={x.v} className={`preset p-${x.v} ${p.subtitleStyle.preset === x.v ? 'on' : ''}`} onClick={() => set({ subtitleStyle: { ...p.subtitleStyle, preset: x.v } })}>
+                <span className="preset-sample">Aa</span><span>{x.l}</span>
+              </button>
+            ))}
+          </div>
+          <Slider label="Mots par ligne" value={p.subtitleStyle.maxWords} min={1} max={10} step={1} fmt={(v) => String(v)}
+            onChange={(v) => { set({ subtitleStyle: { ...p.subtitleStyle, maxWords: v } }, 'subw'); rebuildSubtitles(); }} />
+          <Slider label="Position verticale" value={p.subtitleStyle.y} min={0.1} max={0.92} step={0.01}
+            fmt={(v) => (v < 0.34 ? 'Haut' : v > 0.66 ? 'Bas' : 'Centre')} onChange={(v) => set({ subtitleStyle: { ...p.subtitleStyle, y: v } }, 'suby')} />
+          <Slider label="Taille" value={p.subtitleStyle.size} min={0.5} max={1.8} step={0.05}
+            fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => set({ subtitleStyle: { ...p.subtitleStyle, size: v } }, 'subs')} />
+        </Section>
+      )}
+      <Section title="Textes des cases" aside={<button className="link-btn" onClick={applyDefaultCaptionToAll}>Appliquer partout</button>}>
         <div className="preset-grid">
           {PRESETS.map((x) => (
             <button key={x.v} className={`preset p-${x.v} ${dc.preset === x.v ? 'on' : ''}`} onClick={() => set({ defaultCaption: { ...dc, preset: x.v } })}>
@@ -274,7 +353,43 @@ function ProjectPanel() {
           <li><kbd>Suppr</kbd> Supprimer la sélection</li>
           <li><kbd>Ctrl</kbd><kbd>Z</kbd> Annuler</li>
           <li><kbd>A</kbd> Montage auto</li>
+          <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Rush · Découpe · Aperçu</li>
         </ul>
+      </Section>
+    </>
+  );
+}
+
+/** the next panels in reading order after this one, for multi-panel shots */
+function nextPanels(shot: Shot, n: number) {
+  const all = getState().project.shots.filter((s) => s.pageId);
+  const i = all.findIndex((s) => s.id === shot.id);
+  return all.slice(i + 1, i + 1 + n).filter((s) => s.id !== shot.id).map((s) => ({ pageId: s.pageId!, rect: s.rect }));
+}
+
+/* ------------------------------------------------------------- face cam */
+
+function ARollPanel({ ar }: { ar: ARoll }) {
+  return (
+    <>
+      <div className="insp-title">
+        <div><span className="eyebrow">Rush face caméra</span><h2 className="ellipsis" title={ar.name}>{ar.name}</h2></div>
+        <button className="icon-btn ghost danger" title="Retirer le rush du projet" onClick={removeRush}><Trash2 size={16} /></button>
+      </div>
+      <button className="btn sm ghost block" onClick={() => setUI({ mode: 'rush' })}><FileVideo size={14} /> Ouvrir le dérushage</button>
+      <Section title="Zooms">
+        <Slider label="Zoom à chaque coupe" value={ar.punchIn} min={0} max={1} step={0.05}
+          fmt={(v) => (v ? '+' + Math.round(v * 16) + ' %' : 'off')} onChange={(v) => patchAroll({ punchIn: v }, 'punch')} />
+        <p className="help">Alterne les cadrages à chaque coupe pour masquer les sauts d’image, centré sur ton visage.</p>
+        <Slider label="Poussée lente" value={ar.drift} min={0} max={1} step={0.05}
+          fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => patchAroll({ drift: v }, 'drift')} />
+      </Section>
+      <Section title="Son">
+        <Slider label="Volume de la voix" value={ar.volume} min={0} max={2} step={0.05}
+          fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => patchAroll({ volume: v }, 'avol')} />
+      </Section>
+      <Section title="Cadrage">
+        <p className="help">Point de focus : {Math.round(ar.focus.x * 100)} % · {Math.round(ar.focus.y * 100)} %. Change-le dans l’onglet Rush avec « Centrer sur le visage ».</p>
       </Section>
     </>
   );

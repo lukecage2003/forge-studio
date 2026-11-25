@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2, ScanFace } from 'lucide-react';
 import type { AudioClip, AudioKind, Project, Shot } from '../types';
 import { getState, setUI, update, useStore } from '../store';
-import { layout, videoDuration } from '../engine/timeline';
+import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
 import { getImage } from '../engine/media';
 import { peaks } from '../engine/audio';
 import { seek } from '../engine/transport';
@@ -10,7 +10,8 @@ import { useMediaVersion } from '../lib/hooks';
 import { moveShot } from '../actions';
 import { clamp, fmtShort } from '../lib/util';
 
-const LANES: { kind: 'video' | 'text' | AudioKind; label: string; icon: React.ReactNode }[] = [
+const LANES: { kind: 'face' | 'video' | 'text' | AudioKind; label: string; icon: React.ReactNode }[] = [
+  { kind: 'face', label: 'Visage', icon: <ScanFace size={14} /> },
   { kind: 'video', label: 'Cases', icon: <Film size={14} /> },
   { kind: 'text', label: 'Texte', icon: <Type size={14} /> },
   { kind: 'voice', label: 'Voix', icon: <AudioLines size={14} /> },
@@ -27,7 +28,9 @@ export function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drop, setDrop] = useState<number | null>(null);
 
-  const timed = layout(project.shots);
+  const timed = layoutShots(project);
+  const overlay = !!project.aroll;
+  const segs = segmentsOf(project.aroll);
   const vdur = videoDuration(project);
   const adur = project.audio.reduce((m, c) => Math.max(m, c.start + c.duration), 0);
   const total = Math.max(vdur, adur, 10) + 4;
@@ -68,7 +71,7 @@ export function Timeline() {
     e.stopPropagation();
     if (e.button !== 0) return;
     setUI({ selection: { kind: 'shot', id: s.id }, activePageId: s.pageId ?? getState().ui.activePageId });
-    const x0 = e.clientX, d0 = s.duration;
+    const x0 = e.clientX, d0 = s.duration, s0 = s.start ?? 0;
     let moved = false;
     let target = index;
     const mv = (ev: PointerEvent) => {
@@ -79,8 +82,18 @@ export function Timeline() {
       }
       if (!moved && Math.abs(dx) < 5) return;
       moved = true;
+      if (overlay) {
+        let st = Math.max(0, s0 + dx / pps);
+        const pts = [0, getState().ui.playhead, ...segs.map((g) => g.t), ...layoutShots(getState().project).filter((x) => x.shot.id !== s.id).flatMap((x) => [x.start, x.end])];
+        for (const p of pts) {
+          if (Math.abs(p - st) * pps < 7) { st = p; break; }
+          if (Math.abs(p - (st + s.duration)) * pps < 7) { st = p - s.duration; break; }
+        }
+        update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === s.id ? { ...x, start: +st.toFixed(3) } : x)) }), 'tl-start-' + s.id);
+        return;
+      }
       const t = xToT(ev.clientX);
-      const tl = layout(getState().project.shots);
+      const tl = layoutShots(getState().project);
       target = tl.findIndex((ts) => t < ts.start + ts.shot.duration / 2);
       if (target < 0) target = tl.length;
       setDrop(target);
@@ -90,8 +103,8 @@ export function Timeline() {
       window.removeEventListener('pointerup', up);
       setDrop(null);
       if (mode === 'move') {
-        if (moved && target !== index && target !== index + 1) moveShot(index, target);
-        else if (!moved) seek(timed[index].start + 0.001);
+        if (!overlay && moved && target !== index && target !== index + 1) moveShot(index, target);
+        else if (!moved) seek((timed.find((x) => x.shot.id === s.id)?.start ?? 0) + 0.001);
       }
     };
     window.addEventListener('pointermove', mv);
@@ -99,7 +112,7 @@ export function Timeline() {
   };
 
   /* -------- audio drag: move / trim */
-  const snapPoints = () => [0, getState().ui.playhead, ...layout(getState().project.shots).flatMap((t) => [t.start, t.end])];
+  const snapPoints = () => [0, getState().ui.playhead, ...segs.map((g) => g.t), ...layoutShots(getState().project).flatMap((t) => [t.start, t.end])];
   const snap = (t: number) => {
     for (const p of snapPoints()) if (Math.abs(p - t) * pps < 7) return p;
     return t;
@@ -166,11 +179,19 @@ export function Timeline() {
               ))}
             </div>
 
+            {/* face-cam lane */}
+            <div className="tl-lane lane-face" onPointerDown={() => setUI({ selection: project.aroll ? { kind: 'aroll' } : null })}>
+              {segs.map((g, i) => (
+                <div key={i} className={`face-seg ${sel?.kind === 'aroll' ? 'on' : ''} ${i % 2 ? 'odd' : ''}`} style={{ left: g.t * pps, width: Math.max(1, (g.e - g.s) * pps) }} />
+              ))}
+              {!project.aroll && <div className="lane-empty">Ton rush face caméra (onglet Rush)</div>}
+            </div>
+
             {/* video lane */}
             <div className="tl-lane lane-video" onPointerDown={() => setUI({ selection: null })}>
-              {timed.map(({ shot, start, index }) => (
+              {timed.map(({ shot, start, index }, ti) => (
                 <ShotBlock key={shot.id} shot={shot} project={project} left={start * pps} width={shot.duration * pps}
-                  on={sel?.kind === 'shot' && sel.id === shot.id} index={index}
+                  on={sel?.kind === 'shot' && sel.id === shot.id} index={overlay ? ti : index}
                   onMove={(e) => startShotDrag(e, shot, index, 'move')} onResize={(e) => startShotDrag(e, shot, index, 'resize')} />
               ))}
               {drop != null && <div className="drop-line" style={{ left: (timed[drop]?.start ?? vdur) * pps }} />}
@@ -179,6 +200,9 @@ export function Timeline() {
 
             {/* text lane */}
             <div className="tl-lane lane-text">
+              {project.subtitles.map((sb, i) => (
+                <div key={'sub' + i} className="cap-chip sub" style={{ left: sb.s * pps + 1, width: Math.max(4, (sb.e - sb.s) * pps - 2) }} title={sb.text}>{sb.text}</div>
+              ))}
               {timed.filter((t) => t.shot.caption.text.trim()).map(({ shot, start }) => (
                 <div key={shot.id} className={`cap-chip ${sel?.kind === 'shot' && sel.id === shot.id ? 'on' : ''}`}
                   style={{ left: start * pps + 1, width: shot.duration * pps - 2 }}

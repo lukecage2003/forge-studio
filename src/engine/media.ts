@@ -102,3 +102,56 @@ export async function mediaBlob(id: string) {
 export async function putMediaBlob(id: string, blob: Blob) {
   await idb.put('media', id, blob);
 }
+
+/* ------------------------------------------------------------ video */
+
+export interface VideoAsset { url: string; width: number; height: number; duration: number }
+const videos = new Map<string, VideoAsset>();
+export const getVideo = (id: string) => videos.get(id);
+
+function probeVideo(url: string): Promise<{ width: number; height: number; duration: number }> {
+  return new Promise((res, rej) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.muted = true;
+    v.onloadedmetadata = () => res({ width: v.videoWidth, height: v.videoHeight, duration: v.duration });
+    v.onerror = () => rej(new Error('Vidéo illisible par le navigateur (essaie un MP4 H.264).'));
+    v.src = url;
+  });
+}
+
+async function decodeVideo(id: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const meta = await probeVideo(url);
+  const asset = { url, ...meta };
+  videos.set(id, asset);
+  try {
+    const buf = await audioCtx().decodeAudioData(await blob.arrayBuffer());
+    audios.set(id, buf);
+  } catch {
+    /* video without a readable audio track */
+  }
+  emit();
+  return asset;
+}
+
+export async function importVideo(file: Blob) {
+  const id = uid('m_');
+  await idb.put('media', id, file);
+  const asset = await decodeVideo(id, file);
+  return { id, asset };
+}
+
+export function ensureVideo(id: string): Promise<unknown> {
+  if (videos.has(id)) return Promise.resolve(videos.get(id));
+  if (pending.has(id)) return pending.get(id)!;
+  const p: Promise<unknown> = idb.get<Blob>('media', id).then((blob): Promise<unknown> => {
+    if (!blob) throw new Error('Rush introuvable : ' + id);
+    return decodeVideo(id, blob);
+  });
+  pending.set(id, p);
+  p.catch(() => {}).finally(() => pending.delete(id));
+  return p;
+}
+
+export const notifyMedia = () => emit();

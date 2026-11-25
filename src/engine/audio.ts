@@ -1,5 +1,6 @@
 import type { AudioClip, Project } from '../types';
 import { audioCtx, getAudio } from './media';
+import { segmentsOf } from './timeline';
 
 type KF = [number, number];
 
@@ -21,10 +22,10 @@ function fadeKfs(c: AudioClip): KF[] {
 }
 
 export function voiceIntervals(p: Project) {
-  const iv = p.audio
-    .filter((c) => c.kind === 'voice')
-    .map((c) => [c.start, c.start + c.duration] as [number, number])
-    .sort((a, b) => a[0] - b[0]);
+  const iv = [
+    ...p.audio.filter((c) => c.kind === 'voice').map((c) => [c.start, c.start + c.duration] as [number, number]),
+    ...segmentsOf(p.aroll).map((g) => [g.t, g.t + g.e - g.s] as [number, number]),
+  ].sort((a, b) => a[0] - b[0]);
   const out: [number, number][] = [];
   for (const i of iv) {
     const last = out[out.length - 1];
@@ -75,6 +76,32 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
     tail.connect(dest);
     src.start(T0 + (from - t0), c.offset + (from - c.start), end - from);
     nodes.push(src);
+  }
+  // face-cam rush: each kept segment, with 6 ms micro-fades so jump cuts never click
+  const ar = p.aroll;
+  const abuf = ar && getAudio(ar.mediaId);
+  if (ar && abuf) {
+    const bus = ctx.createGain();
+    bus.gain.value = ar.volume;
+    bus.connect(dest);
+    for (const g of segmentsOf(ar)) {
+      const len = g.e - g.s, end = Math.min(g.t + len, until);
+      if (end <= t0) continue;
+      const from = Math.max(g.t, t0);
+      const src = ctx.createBufferSource();
+      src.buffer = abuf;
+      const gn = ctx.createGain();
+      const at = T0 + (from - t0), stop = T0 + (end - t0);
+      const f = Math.min(0.006, (stop - at) / 3);
+      gn.gain.setValueAtTime(0, at);
+      gn.gain.linearRampToValueAtTime(1, at + f);
+      gn.gain.setValueAtTime(1, stop - f);
+      gn.gain.linearRampToValueAtTime(0, stop);
+      src.connect(gn);
+      gn.connect(bus);
+      src.start(at, g.s + (from - g.t), end - from);
+      nodes.push(src);
+    }
   }
   return nodes;
 }

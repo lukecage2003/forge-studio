@@ -1,0 +1,147 @@
+import type { Word } from '../types';
+import { SR } from './speech';
+
+/**
+ * Google AI (Gemini API) — optional. The key stays in this browser
+ * (localStorage) and calls go straight from the browser to Google.
+ */
+export interface GoogleSettings { apiKey: string; model: string; language: string }
+
+const KEY = 'forge.google';
+export const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+export function getGoogle(): GoogleSettings {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || '{}');
+    return { apiKey: v.apiKey || '', model: v.model || DEFAULT_MODEL, language: v.language || 'fr' };
+  } catch {
+    return { apiKey: '', model: DEFAULT_MODEL, language: 'fr' };
+  }
+}
+export function setGoogle(s: GoogleSettings) {
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage blocked */ }
+}
+export const hasGoogle = () => !!getGoogle().apiKey;
+
+async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal) {
+  const g = getGoogle();
+  if (!g.apiKey) throw new Error('Ajoute ta clé API Google (Gemini) dans les réglages.');
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`, {
+    method: 'POST',
+    signal,
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': g.apiKey },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0, ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}) },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.error?.message || res.statusText;
+    if (res.status === 400 && /API key/i.test(msg)) throw new Error('Clé API Google refusée : vérifie-la dans les réglages.');
+    if (res.status === 429) throw new Error('Quota Google atteint : réessaie dans une minute ou vérifie ta facturation.');
+    throw new Error('Google : ' + msg);
+  }
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
+  return text;
+}
+
+export async function testGoogle() {
+  const t = await generate([{ text: 'Réponds uniquement par le mot OK.' }]);
+  return t.trim();
+}
+
+export function wav16(pcm: Float32Array): Blob {
+  const buf = new ArrayBuffer(44 + pcm.length * 2);
+  const v = new DataView(buf);
+  const w = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+const b64 = async (b: Blob) => {
+  const bytes = new Uint8Array(await b.arrayBuffer());
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+const WORDS_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: { w: { type: 'STRING' }, s: { type: 'NUMBER' }, e: { type: 'NUMBER' }, f: { type: 'BOOLEAN' } },
+    required: ['w', 's', 'e'],
+  },
+};
+
+/** Verbatim transcription (with hesitations) in 2-minute chunks. */
+export async function geminiTranscribe(pcm: Float32Array, onProgress: (p: number) => void, signal?: AbortSignal): Promise<Word[]> {
+  const lang = getGoogle().language === 'en' ? 'anglais' : 'français';
+  const CH = 120 * SR;
+  const out: Word[] = [];
+  const n = Math.ceil(pcm.length / CH);
+  for (let k = 0; k < n; k++) {
+    const part = pcm.subarray(k * CH, Math.min(pcm.length, (k + 1) * CH));
+    const offset = k * 120;
+    const text = await generate([
+      { inline_data: { mime_type: 'audio/wav', data: await b64(wav16(part)) } },
+      {
+        text:
+          `Transcris cet audio en ${lang}, mot par mot, de façon STRICTEMENT verbatim : garde chaque hésitation ` +
+          `(euh, heu, hum, mmh, bah…), chaque répétition et chaque faux départ, sans corriger. ` +
+          `Pour chaque mot donne w (le mot, ponctuation collée au mot), s et e (début et fin en secondes depuis le début de CET extrait, au centième), ` +
+          `et f=true si c'est une hésitation ou un mot de remplissage. Réponds uniquement avec le JSON.`,
+      },
+    ], WORDS_SCHEMA, signal);
+    let arr: { w: string; s: number; e: number; f?: boolean }[] = [];
+    try { arr = JSON.parse(text); } catch { throw new Error('Réponse de Google illisible pour la transcription.'); }
+    for (const x of arr) {
+      if (typeof x.s !== 'number' || typeof x.e !== 'number' || !x.w) continue;
+      out.push({ w: x.w.trim(), s: offset + x.s, e: offset + Math.max(x.e, x.s + 0.05), filler: !!x.f });
+    }
+    onProgress((k + 1) / n);
+  }
+  return out.sort((a, b) => a.s - b.s);
+}
+
+/** Ask Gemini which panel illustrates which sentence. Returns panelId → sentence index. */
+export async function geminiMatchPanels(
+  panels: { id: string; jpeg: string }[],
+  sentences: string[],
+  signal?: AbortSignal,
+): Promise<Record<string, number>> {
+  const parts: unknown[] = [{
+    text:
+      `Tu es monteur vidéo pour une chaîne qui explique des comics. Voici le script découpé en phrases numérotées, ` +
+      `puis des cases de BD identifiées. Associe chaque case à la phrase qu'elle illustre le mieux. ` +
+      `Respecte l'ordre de lecture quand c'est plausible. Une phrase peut recevoir plusieurs cases.\n\n` +
+      sentences.map((s, i) => `[${i}] ${s}`).join('\n'),
+  }];
+  for (const p of panels) {
+    parts.push({ text: `Case ${p.id} :` });
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: p.jpeg } });
+  }
+  const text = await generate(parts, {
+    type: 'ARRAY',
+    items: { type: 'OBJECT', properties: { panel: { type: 'STRING' }, sentence: { type: 'INTEGER' } }, required: ['panel', 'sentence'] },
+  }, signal);
+  const map: Record<string, number> = {};
+  try {
+    for (const m of JSON.parse(text)) if (typeof m.sentence === 'number') map[m.panel] = m.sentence;
+  } catch { /* ignore */ }
+  return map;
+}
+
+/** Hook / title suggestions from the transcript. */
+export async function geminiHooks(transcript: string, signal?: AbortSignal): Promise<string[]> {
+  const text = await generate([{
+    text: `Voici le script d'une vidéo qui explique un comics :\n\n${transcript.slice(0, 12000)}\n\n` +
+      `Propose 5 accroches courtes (max 8 mots) pour les 2 premières secondes d'un TikTok/Short, percutantes, sans clickbait mensonger.`,
+  }], { type: 'ARRAY', items: { type: 'STRING' } }, signal);
+  try { return JSON.parse(text); } catch { return []; }
+}

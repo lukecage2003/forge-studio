@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import type { Caption, Project, Selection, Shot } from './types';
+import { observeShotDeleted, observeShotEdit } from './engine/brain';
 import { uid } from './lib/util';
 import { idb } from './lib/db';
 
-export type Mode = 'cut' | 'preview';
+export type Mode = 'rush' | 'cut' | 'preview';
 
 export interface UIState {
   selection: Selection;
@@ -15,6 +16,8 @@ export interface UIState {
   safeZones: boolean;
   exportOpen: boolean;
   autoOpen: boolean;
+  settingsOpen: boolean;
+  busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';
 }
 
@@ -36,6 +39,24 @@ export function newProject(): Project {
     audio: [],
     defaultCaption: defaultCaption(),
     watermark: '',
+    aroll: null,
+    subtitles: [],
+    subtitleStyle: { ...defaultCaption(), anim: 'words', y: 0.72, on: true, maxWords: 3 },
+    progressBar: false,
+    accent: '#FF5A1F',
+  };
+}
+
+/** bring projects saved by older versions up to date */
+export function migrate(p: Project): Project {
+  const base = newProject();
+  return {
+    ...base,
+    ...p,
+    subtitleStyle: { ...base.subtitleStyle, ...(p.subtitleStyle ?? {}) },
+    shots: (p.shots ?? []).map((s) => ({ ...s, layout: s.layout ?? 'full' })),
+    aroll: p.aroll ?? null,
+    subtitles: p.subtitles ?? [],
   };
 }
 
@@ -51,6 +72,7 @@ export function newShot(p: Project, partial: Partial<Shot>): Shot {
     transition: p.shots.length ? 'glide' : 'cut',
     transitionDur: 0.5,
     shake: 0,
+    layout: 'full',
     caption: { text: '', ...p.defaultCaption },
     ...partial,
   };
@@ -64,7 +86,7 @@ let state: State = {
   project: newProject(),
   ui: {
     selection: null, activePageId: null, playhead: 0, playing: false, mode: 'cut',
-    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, saved: 'saved',
+    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, settingsOpen: false, busy: null, saved: 'saved',
   },
   past: [],
   future: [],
@@ -128,6 +150,7 @@ export function redo() {
 }
 
 export function loadProject(p: Project) {
+  p = migrate(p);
   state = { ...state, project: p, past: [], future: [], ui: { ...state.ui, selection: null, playhead: 0, activePageId: p.pages[0]?.id ?? null } };
   emit();
   scheduleSave();
@@ -144,8 +167,30 @@ export const useHistory = () => ({
 
 /* ------------------------------------------------------------- helpers */
 
-export const patchShot = (id: string, patch: Partial<Shot>, key?: string) =>
+// learn from corrections once per gesture: a drag or a slider sends many edits,
+// Forge Brain sees the original value and the final one.
+let pendingObs: { id: string; key: string; orig: Shot; patch: Partial<Shot>; timer: number } | null = null;
+function flushObs() {
+  if (!pendingObs) return;
+  window.clearTimeout(pendingObs.timer);
+  observeShotEdit(pendingObs.orig, pendingObs.patch);
+  pendingObs = null;
+}
+
+export const patchShot = (id: string, patch: Partial<Shot>, key?: string) => {
+  const cur = state.project.shots.find((s) => s.id === id);
+  if (cur?.auto) {
+    const k = key ?? '';
+    if (pendingObs && (pendingObs.id !== id || pendingObs.key !== k || !k)) flushObs();
+    if (!pendingObs) pendingObs = { id, key: k, orig: cur, patch: {}, timer: 0 };
+    pendingObs.patch = { ...pendingObs.patch, ...patch };
+    window.clearTimeout(pendingObs.timer);
+    pendingObs.timer = window.setTimeout(flushObs, k ? 900 : 0);
+  }
   update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === id ? { ...s, ...patch } : s)) }), key);
+};
+
+export const shotDeleted = (s: Shot) => observeShotDeleted(s);
 
 export const patchCaption = (id: string, patch: Partial<Caption>, key?: string) =>
   update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === id ? { ...s, caption: { ...s.caption, ...patch } } : s)) }), key);

@@ -305,6 +305,8 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .tl-ruler-spacer { height: 24px; border-bottom: 1px solid var(--border); }
 .tl-label { height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 12px; font-size: 11.5px; font-weight: 600; color: var(--text-2); border-bottom: 1px solid #18181c; }
 .tl-label.lane-video { height: 62px; }
+.tl-label.lane-face { height: 30px; }
+.tl-label.lane-face svg { color: var(--voice); }
 .tl-label.lane-text { height: 30px; }
 .tl-label.lane-video svg { color: var(--ember); } .tl-label.lane-text svg { color: var(--text-lane); }
 .tl-label.lane-voice svg { color: var(--voice); } .tl-label.lane-music svg { color: var(--music); } .tl-label.lane-sfx svg { color: var(--sfx); }
@@ -316,6 +318,11 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .tick span { position: absolute; bottom: 10px; left: 3px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tl-lane { height: 40px; position: relative; border-bottom: 1px solid #18181c; }
 .tl-lane.lane-video { height: 62px; }
+.tl-lane.lane-face { height: 30px; }
+.face-seg { position: absolute; top: 5px; bottom: 5px; background: rgba(79, 209, 197, 0.22); border: 1px solid rgba(79, 209, 197, 0.45); border-radius: 3px; cursor: pointer; }
+.face-seg.odd { background: rgba(79, 209, 197, 0.32); }
+.face-seg.on { border-color: var(--voice); }
+.cap-chip.sub { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.18); color: var(--text-2); font-weight: 500; }
 .tl-lane.lane-text { height: 30px; }
 .lane-empty { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 11.5px; }
 .shot-block {

@@ -1,13 +1,14 @@
 import {
-  AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH, QUALITY_VERY_HIGH,
-  getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
+  ALL_FORMATS, AudioBufferSource, type WrappedCanvas, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
+  QUALITY_HIGH, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
 } from 'mediabunny';
 import type { Project } from '../types';
 import { FORMATS } from '../types';
 import { renderMix } from './audio';
 import { createRenderer, loadFonts } from './render';
-import { layout, videoDuration } from './timeline';
-import { ensureMedia } from './media';
+import { layoutShots, segmentsOf, videoDuration } from './timeline';
+import { ensureMedia, ensureVideo, mediaBlob } from './media';
+import { toSource } from './speech';
 
 export interface ExportOpts {
   quality: 'high' | 'max';
@@ -22,19 +23,20 @@ export async function exportMp4(project: Project, o: ExportOpts): Promise<Blob> 
   }
   const { w: W, h: H } = FORMATS[project.format];
   const duration = videoDuration(project);
-  if (duration <= 0) throw new Error('Le projet est vide : ajoute des cases avant d’exporter.');
+  if (duration <= 0) throw new Error('Le projet est vide : ajoute des cases ou un rush avant d’exporter.');
 
   o.onProgress(0, 'Préparation des médias…');
   await loadFonts();
   await Promise.all([
     ...project.pages.map((p) => ensureMedia(p.mediaId, 'image')),
     ...project.audio.map((a) => ensureMedia(a.mediaId, 'audio')),
+    ...(project.aroll ? [ensureVideo(project.aroll.mediaId)] : []),
   ]);
 
   const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });
   if (!vcodec) throw new Error('Aucun encodeur vidéo disponible dans ce navigateur.');
-  const hasAudio = project.audio.length > 0;
+  const hasAudio = project.audio.length > 0 || !!project.aroll;
   const acodec = hasAudio ? await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, quality }) : null;
 
   const canvas = document.createElement('canvas');
@@ -62,14 +64,41 @@ export async function exportMp4(project: Project, o: ExportOpts): Promise<Blob> 
     }
     const frames = Math.round(duration * o.fps);
     const dt = 1 / o.fps;
+
+    // face cam frames, decoded in order with WebCodecs (frame-exact)
+    let faceIter: AsyncGenerator<WrappedCanvas | null, void, unknown> | null = null;
+    let input: Input | null = null;
+    const segs = segmentsOf(project.aroll);
+    if (project.aroll && segs.length) {
+      const blob = await mediaBlob(project.aroll.mediaId);
+      if (blob) {
+        input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+        const track = await input.getPrimaryVideoTrack();
+        if (track) {
+          const maxSide = Math.max(W, H);
+          const k = Math.min(1, maxSide / Math.max(project.aroll.width, project.aroll.height));
+          const sink = new CanvasSink(track, { width: Math.round(project.aroll.width * k), height: Math.round(project.aroll.height * k), poolSize: 2 });
+          const times = (function* () { for (let f = 0; f < frames; f++) yield toSource(segs, f * dt).src; })();
+          faceIter = sink.canvasesAtTimestamps(times);
+        }
+      }
+    }
+
     for (let f = 0; f < frames; f++) {
       if (o.signal.aborted) throw new DOMException('Export annulé', 'AbortError');
       const t = f * dt;
-      renderer.draw(ctx, project, t);
+      let faceFrame: CanvasImageSource | null = null;
+      if (faceIter) {
+        const r = await faceIter.next();
+        faceFrame = (r.value?.canvas as CanvasImageSource) ?? null;
+      }
+      renderer.draw(ctx, project, t, () => faceFrame);
       await video.add(t, dt);
       if (f % 6 === 0) o.onProgress(0.03 + 0.95 * (f / frames), `Rendu image ${f + 1} / ${frames}`);
     }
     video.close();
+    await faceIter?.return(undefined);
+    (input as unknown as { dispose?: () => void } | null)?.dispose?.();
     o.onProgress(0.99, 'Finalisation du MP4…');
     await output.finalize();
   } catch (e) {
@@ -89,7 +118,10 @@ export function exportSrt(project: Project) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
   };
   let n = 0;
-  return layout(project.shots)
+  if (project.subtitles.length) {
+    return project.subtitles.map((s) => `${++n}\n${ts(s.s)} --> ${ts(s.e)}\n${s.text}\n`).join('\n');
+  }
+  return layoutShots(project)
     .filter((t) => t.shot.caption.text.trim())
     .map((t) => `${++n}\n${ts(t.start)} --> ${ts(t.end)}\n${t.shot.caption.text.trim()}\n`)
     .join('\n');

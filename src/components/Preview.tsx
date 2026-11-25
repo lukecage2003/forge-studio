@@ -5,7 +5,9 @@ import { createRenderer, loadFonts } from '../engine/render';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
 import { pause, seek, toggle } from '../engine/transport';
-import { layout, videoDuration } from '../engine/timeline';
+import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
+import { arollPlayer } from '../engine/video';
+import { toSource } from '../engine/speech';
 import { fmtTime } from '../lib/util';
 
 const PREVIEW_SCALE = 0.5;
@@ -40,10 +42,16 @@ export function Preview() {
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d', { alpha: false });
-    if (ctx) renderer.draw(ctx, project, t);
-  }, [renderer, project, t, mv, fontsReady]);
+    const ar = project.aroll;
+    if (ar && !playing) {
+      const segs = segmentsOf(ar);
+      if (segs.length) arollPlayer.seek(ar.mediaId, toSource(segs, t).src);
+    }
+    const face = ar ? () => arollPlayer.frame(ar.mediaId) : undefined;
+    if (ctx) renderer.draw(ctx, project, t, face);
+  }, [renderer, project, t, mv, fontsReady, playing]);
 
-  const timed = layout(project.shots);
+  const timed = layoutShots(project);
   const idx = timed.findIndex((x) => t >= x.start && t < x.end);
   const jump = (d: number) => {
     const i = idx < 0 ? timed.length - 1 : idx;
@@ -61,8 +69,8 @@ export function Preview() {
               <div className="sz top" /><div className="sz bottom" /><div className="sz right" />
             </div>
           )}
-          {!project.shots.length && (
-            <div className="screen-empty">Importe des planches puis lance le <b>montage auto</b>.</div>
+          {!project.shots.length && !project.aroll && (
+            <div className="screen-empty">Importe tes planches ou ton rush face caméra, puis lance le <b>montage auto</b>.</div>
           )}
         </div>
       </div>

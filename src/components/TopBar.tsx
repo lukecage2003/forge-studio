@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Download, Wand2, FolderOpen, FilePlus2, Redo2, Save, Undo2 } from 'lucide-react';
+import { Download, Wand2, FolderOpen, FilePlus2, Redo2, Save, Undo2, Settings2 } from 'lucide-react';
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
@@ -73,6 +73,7 @@ export function TopBar() {
       <div className="topbar-right">
         <button className="icon-btn" disabled={!canUndo} onClick={undo} title="Annuler (Ctrl+Z)"><Undo2 size={17} /></button>
         <button className="icon-btn" disabled={!canRedo} onClick={redo} title="Rétablir (Ctrl+Maj+Z)"><Redo2 size={17} /></button>
+        <button className="icon-btn" onClick={() => setUI({ settingsOpen: true })} title="Réglages : Google AI, apprentissage"><Settings2 size={17} /></button>
         <button className="btn accent-outline" onClick={() => setUI({ autoOpen: true })} title="Montage automatique (A)">
           <Wand2 size={16} /> Montage auto
         </button>

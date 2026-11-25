@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2 } from 'lucide-react';
+import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, FileVideo } from 'lucide-react';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
 import { addTitleCard, importAudioFiles, importPages, removePage } from '../actions';
+import { importRush } from '../rush';
+import { keepSegments, segsDuration } from '../engine/speech';
 import type { AudioKind } from '../types';
 import { toast } from './Toast';
 
@@ -23,6 +25,7 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      <RushCard />
       <section className="side-section grow">
         <div className="side-head">
           <h2>Planches</h2>
@@ -115,5 +118,29 @@ function Recorder() {
     <button className="tile" onClick={start} title="Enregistre ta voix au micro, posée à la tête de lecture">
       <Mic size={18} /><span>Enregistrer</span>
     </button>
+  );
+}
+
+function RushCard() {
+  const ar = useStore((s) => s.project.aroll);
+  const ref = useRef<HTMLInputElement>(null);
+  const kept = ar ? segsDuration(keepSegments(ar)) : 0;
+  const fmt = (x: number) => `${Math.floor(x / 60)}:${String(Math.round(x % 60)).padStart(2, '0')}`;
+  return (
+    <section className="side-section">
+      <div className="side-head"><h2>Rush face caméra</h2></div>
+      {ar ? (
+        <button className="rush-card" onClick={() => setUI({ mode: 'rush', selection: { kind: 'aroll' } })}>
+          <span className="rush-ico"><FileVideo size={18} /></span>
+          <span className="page-meta">
+            <span className="page-name" title={ar.name}>{ar.name}</span>
+            <span className="page-shots">{fmt(ar.duration)} → <b>{fmt(kept)}</b> · {ar.cuts.filter((c) => c.on).length} coupes</span>
+          </span>
+        </button>
+      ) : (
+        <button className="btn block" onClick={() => ref.current?.click()}><FileVideo size={16} /> Importer le rush</button>
+      )}
+      <input ref={ref} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importRush(f); e.target.value = ''; }} />
+    </section>
   );
 }

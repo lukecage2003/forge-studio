@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Scissors, MonitorPlay, Upload, Wand2, ImagePlus, Download } from 'lucide-react';
+import { Scissors, MonitorPlay, Upload, Wand2, ImagePlus, Download, FileVideo, Loader2 } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { PageEditor } from './components/PageEditor';
@@ -8,11 +8,14 @@ import { Inspector } from './components/Inspector';
 import { Timeline } from './components/Timeline';
 import { ExportModal } from './components/ExportModal';
 import { AutoModal } from './components/AutoModal';
+import { SettingsModal } from './components/SettingsModal';
+import { RushEditor } from './components/RushEditor';
+import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
 import { getState, loadProject, redo, setUI, undo, useStore } from './store';
 import { deleteSelection, importAudioFiles, importPages } from './actions';
 import { idb } from './lib/db';
-import { ensureMedia } from './engine/media';
+import { ensureMedia, ensureVideo } from './engine/media';
 import { seek, toggle } from './engine/transport';
 import type { Project } from './types';
 import { Mark } from './brand/Logo';
@@ -21,7 +24,10 @@ export default function App() {
   const mode = useStore((s) => s.ui.mode);
   const exportOpen = useStore((s) => s.ui.exportOpen);
   const autoOpen = useStore((s) => s.ui.autoOpen);
+  const settingsOpen = useStore((s) => s.ui.settingsOpen);
+  const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
+  const hasRush = useStore((s) => !!s.project.aroll);
   const [dragging, setDragging] = useState(false);
   const [booted, setBooted] = useState(false);
 
@@ -34,8 +40,10 @@ export default function App() {
           await Promise.allSettled([
             ...p.pages.map((x) => ensureMedia(x.mediaId, 'image')),
             ...p.audio.map((x) => ensureMedia(x.mediaId, 'audio')),
+            ...(p.aroll ? [ensureVideo(p.aroll.mediaId)] : []),
           ]);
           loadProject(p);
+          if (p.aroll) void analysisOf(p.aroll).catch(() => {});
         }
       } catch { /* first run */ }
       setBooted(true);
@@ -48,7 +56,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
@@ -58,8 +66,9 @@ export default function App() {
       if (e.key === 'ArrowRight') { e.preventDefault(); seek(ui.playhead + (e.shiftKey ? 1 : 1 / project.fps)); return; }
       if (e.key === 'Escape') setUI({ selection: null });
       if (e.key.toLowerCase() === 'a' && !mod) setUI({ autoOpen: true });
-      if (e.key === '1') setUI({ mode: 'cut' });
-      if (e.key === '2') setUI({ mode: 'preview' });
+      if (e.key === '1') setUI({ mode: 'rush' });
+      if (e.key === '2') setUI({ mode: 'cut' });
+      if (e.key === '3') setUI({ mode: 'preview' });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -78,6 +87,8 @@ export default function App() {
       const files = [...(e.dataTransfer?.files ?? [])];
       const imgs = files.filter((f) => f.type.startsWith('image/'));
       const auds = files.filter((f) => f.type.startsWith('audio/'));
+      const vids = files.filter((f) => f.type.startsWith('video/'));
+      if (vids.length) await importRush(vids[0]);
       if (imgs.length) await importPages(imgs);
       const voices = auds.filter((f) => /voix|voice|vo[ _-]|narr|record|enreg/i.test(f.name));
       const music = auds.filter((f) => !voices.includes(f));
@@ -87,7 +98,7 @@ export default function App() {
       } catch (er) {
         toast('Audio illisible : ' + (er as Error).message, 'error');
       }
-      if (!imgs.length && !auds.length && files.length) toast('Format non pris en charge : images ou audio uniquement.', 'error');
+      if (!imgs.length && !auds.length && !vids.length && files.length) toast('Format non pris en charge : images, vidéo ou audio uniquement.', 'error');
     };
     window.addEventListener('dragenter', enter);
     window.addEventListener('dragleave', leave);
@@ -112,6 +123,9 @@ export default function App() {
         <Sidebar />
         <main className="center">
           <div className="mode-tabs" role="tablist">
+            <button role="tab" aria-selected={mode === 'rush'} className={mode === 'rush' ? 'on' : ''} onClick={() => setUI({ mode: 'rush' })}>
+              <FileVideo size={15} /> Rush
+            </button>
             <button role="tab" aria-selected={mode === 'cut'} className={mode === 'cut' ? 'on' : ''} onClick={() => setUI({ mode: 'cut' })}>
               <Scissors size={15} /> Découpe
             </button>
@@ -119,16 +133,18 @@ export default function App() {
               <MonitorPlay size={15} /> Aperçu
             </button>
           </div>
-          {!hasPages ? <Welcome /> : mode === 'cut' ? <PageEditor /> : <Preview />}
+          {mode === 'rush' ? <RushEditor /> : !hasPages && !hasRush ? <Welcome /> : mode === 'cut' ? <PageEditor /> : <Preview />}
         </main>
         <Inspector />
       </div>
       <Timeline />
       {exportOpen && <ExportModal />}
       {autoOpen && <AutoModal onClose={() => setUI({ autoOpen: false })} />}
+      {settingsOpen && <SettingsModal />}
+      {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">
-          <div><Upload size={36} /><strong>Dépose tes fichiers</strong><span>Planches → cases détectées · Audio → musique ou voix off</span></div>
+          <div><Upload size={36} /><strong>Dépose tes fichiers</strong><span>Vidéo → rush face caméra · Planches → cases détectées · Audio → musique ou voix off</span></div>
         </div>
       )}
       <Toasts />
@@ -137,26 +153,29 @@ export default function App() {
 }
 
 function Welcome() {
-  const pick = () => {
+  const pick = (accept: string, multiple: boolean, fn: (f: File[]) => void) => {
     const i = document.createElement('input');
     i.type = 'file';
-    i.accept = 'image/*';
-    i.multiple = true;
-    i.onchange = () => void importPages([...(i.files ?? [])]);
+    i.accept = accept;
+    i.multiple = multiple;
+    i.onchange = () => fn([...(i.files ?? [])]);
     i.click();
   };
   return (
     <div className="stage welcome">
       <div className="welcome-card">
         <Mark size={64} />
-        <h1>Tes comics, en vidéos qui retiennent.</h1>
-        <p>Forge transforme tes planches en vidéos rythmées pour TikTok, Shorts et YouTube : découpe des cases, caméra, sous-titres, musique, export MP4.</p>
-        <button className="btn primary lg" onClick={pick}><ImagePlus size={18} /> Importer des planches</button>
-        <span className="muted">ou glisse-les n’importe où dans la fenêtre</span>
+        <h1>Tes comics expliqués, montés comme un pro.</h1>
+        <p>Importe ton rush face caméra et tes planches. Forge coupe les silences et les « euh », alterne ton visage avec les cases, sous-titre et exporte pour TikTok, Shorts et YouTube.</p>
+        <div className="welcome-actions">
+          <button className="btn primary lg" onClick={() => pick('video/*', false, (f) => f[0] && void importRush(f[0]))}><FileVideo size={18} /> Importer mon rush</button>
+          <button className="btn lg" onClick={() => pick('image/*', true, (f) => void importPages(f))}><ImagePlus size={18} /> Importer des planches</button>
+        </div>
+        <span className="muted">ou glisse tes fichiers n’importe où dans la fenêtre</span>
         <ol className="steps">
-          <li><span><ImagePlus size={16} /></span><div><b>Importe</b><small>Les cases sont détectées automatiquement</small></div></li>
-          <li><span><Wand2 size={16} /></span><div><b>Montage auto</b><small>Caméra, rythme, transitions, calage sur le beat</small></div></li>
-          <li><span><Download size={16} /></span><div><b>Exporte</b><small>MP4 9:16 ou 16:9, sous-titres .srt</small></div></li>
+          <li><span><FileVideo size={16} /></span><div><b>Dérushage</b><small>Silences, hésitations et reprises coupés au mot près</small></div></li>
+          <li><span><Wand2 size={16} /></span><div><b>Montage auto</b><small>Visage et cases en alternance, zooms, sous-titres</small></div></li>
+          <li><span><Download size={16} /></span><div><b>Export</b><small>MP4 9:16 ou 16:9, sous-titres .srt, miniature</small></div></li>
         </ol>
       </div>
     </div>

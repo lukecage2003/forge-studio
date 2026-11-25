@@ -25,7 +25,17 @@ export type Framing = 'fit' | 'fill';
 
 export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash';
 
-export type CaptionPreset = 'tiktok' | 'comic' | 'clean' | 'impact' | 'cinema';
+/**
+ * How a comic shot is composed on screen.
+ * - full    : the panel fills the frame (camera moves on it)
+ * - split   : face cam + panel, stacked (vertical) or side by side (horizontal)
+ * - pip     : panel full frame, face cam in a bubble
+ * - grid    : several panels shown together (see Shot.group)
+ * - page    : the whole page, spotlight + camera on the panel
+ */
+export type Layout = 'full' | 'split' | 'pip' | 'grid' | 'page';
+
+export type CaptionPreset = 'tiktok' | 'comic' | 'clean' | 'impact' | 'cinema' | 'neon';
 export type CaptionAnim = 'none' | 'pop' | 'type' | 'words';
 
 export interface Caption {
@@ -42,6 +52,11 @@ export interface Shot {
   /** null = title card */
   pageId: string | null;
   rect: Rect; // page pixels
+  /** extra panels shown together with this one (grid layout) */
+  group?: { pageId: string; rect: Rect }[];
+  layout: Layout;
+  /** timeline start, used when the project has a face-cam rush (overlay mode) */
+  start?: number;
   duration: number;
   framing: Framing;
   motion: Motion;
@@ -50,7 +65,10 @@ export interface Shot {
   transitionDur: number;
   shake: number; // 0..1 impact shake at start
   caption: Caption;
+  nameTag?: string; // e.g. character name, shown as a lower third
   titleBg?: string;
+  /** set by the auto editor; used by Forge Brain to learn from corrections */
+  auto?: { duration: number; layout: Layout; motion: Motion; style: string };
 }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
@@ -69,7 +87,46 @@ export interface AudioClip {
   fadeOut: number;
 }
 
-export type Background = 'blur' | 'color' | 'page';
+/* ------------------------------------------------------- face-cam rush */
+
+export interface Word { w: string; s: number; e: number; filler?: boolean; conf?: number }
+
+export type CutReason = 'silence' | 'hesitation' | 'filler' | 'retake' | 'manual';
+
+export interface Cut { s: number; e: number; reason: CutReason; on: boolean; label?: string }
+
+export interface ARoll {
+  mediaId: string;
+  name: string;
+  duration: number;
+  width: number;
+  height: number;
+  /** focus point of the face, normalised 0..1, used for framing and zooms */
+  focus: { x: number; y: number };
+  /** proposed cuts on the source (toggle `on` to apply) */
+  cuts: Cut[];
+  words: Word[];
+  transcriptSource?: 'whisper' | 'gemini' | 'manual';
+  /** jump-cut punch-in zooms */
+  punchIn: number; // 0..1 strength (0 = off)
+  /** slow push-in on long takes */
+  drift: number; // 0..1
+  volume: number;
+  settings: RoughCutSettings;
+}
+
+export interface RoughCutSettings {
+  threshold: number; // dB above noise floor treated as voice
+  minSilence: number; // seconds
+  padding: number; // seconds kept before/after speech
+  hesitations: boolean;
+  fillers: boolean;
+  retakes: boolean;
+}
+
+export interface Subtitle { s: number; e: number; text: string; words: { w: string; s: number; e: number }[] }
+
+export type Background = 'blur' | 'color' | 'page' | 'halftone';
 
 export interface Project {
   id: string;
@@ -84,12 +141,18 @@ export interface Project {
   pages: Page[];
   shots: Shot[];
   audio: AudioClip[];
+  aroll: ARoll | null;
+  subtitles: Subtitle[];
+  subtitleStyle: Omit<Caption, 'text'> & { on: boolean; maxWords: number };
   defaultCaption: Omit<Caption, 'text'>;
   watermark: string;
+  progressBar: boolean;
+  accent: string;
 }
 
 export type Selection =
   | { kind: 'shot'; id: string }
   | { kind: 'audio'; id: string }
   | { kind: 'page'; id: string }
+  | { kind: 'aroll' }
   | null;
