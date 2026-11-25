@@ -44,15 +44,19 @@ export function analyse(pcm: Float32Array): Analysis {
     db[i] = 10 * Math.log10(e / hop + 1e-10);
     zcr[i] = z / hop;
   }
-  const sorted = Float32Array.from(db).sort();
-  const pct = (p: number) => sorted[Math.min(n - 1, Math.max(0, Math.floor(p * n)))];
+  // ignore digital silence (exact zeros from editing / TTS) when measuring the room noise
+  const real = Float32Array.from(db.filter((v) => v > -90));
+  const sorted = (real.length > n * 0.2 ? real : Float32Array.from(db)).sort();
+  const m = sorted.length;
+  const pct = (p: number) => sorted[Math.min(m - 1, Math.max(0, Math.floor(p * m)))];
   return { db, zcr, floor: pct(0.08), speech: pct(0.85), duration: pcm.length / SR };
 }
 
 /** voiced / unvoiced per frame, with hangover so word-internal dips don't count as silence */
 export function voiceMask(a: Analysis, thresholdDb: number) {
   const n = a.db.length;
-  const thr = Math.min(a.floor + thresholdDb, a.speech - 6);
+  // between the room noise and the voice, whatever the recording level
+  const thr = Math.min(Math.max(a.floor + thresholdDb, a.speech - 32), a.speech - 6);
   const m = new Uint8Array(n);
   for (let i = 0; i < n; i++) m[i] = a.db[i] > thr ? 1 : 0;
   // remove blips < 40 ms, fill holes < 90 ms
@@ -102,14 +106,14 @@ function syllableNuclei(a: Analysis, isl: Island) {
   const s: number[] = [];
   for (let i = isl.a; i < isl.b; i++) {
     let v = 0, k = 0;
-    for (let j = i - 3; j <= i + 3; j++) if (j >= isl.a && j < isl.b) { v += a.db[j]; k++; }
+    for (let j = i - 5; j <= i + 5; j++) if (j >= isl.a && j < isl.b) { v += a.db[j]; k++; }
     s.push(v / k);
   }
   let peaks = 0, lastMin = Infinity, rising = true, peakV = -Infinity;
   for (let i = 1; i < s.length; i++) {
     if (rising && s[i] < s[i - 1]) {
       peakV = s[i - 1];
-      if (peakV - lastMin > 4 || peaks === 0) peaks++;
+      if (peakV - lastMin > 8 || peaks === 0) peaks++;
       rising = false;
       lastMin = s[i];
     } else if (!rising && s[i] > s[i - 1]) {
@@ -131,7 +135,7 @@ function stats(arr: Float32Array, a: number, b: number) {
 
 const FILLERS = new Set([
   'euh', 'euhh', 'euhhh', 'heu', 'heuu', 'eu', 'hum', 'humm', 'hmm', 'hm', 'mmh', 'mh', 'mmm', 'bah', 'beh', 'ben',
-  'uh', 'um', 'umm', 'erm', 'er', 'ah', 'oh', 'eh', 'heuh', 'euhm',
+  'uh', 'um', 'umm', 'erm', 'er', 'heuh', 'euhm',
 ]);
 const norm = (w: string) => w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9']/g, '');
 export const isFiller = (w: string) => FILLERS.has(norm(w).replace(/(.)\1{2,}/g, '$1$1'));
@@ -152,7 +156,7 @@ export function proposeCuts(a: Analysis, words: Word[], st: RoughCutSettings, bi
   for (const i of isl) { gaps.push([prev * HOP, i.a * HOP]); prev = i.b; }
   gaps.push([prev * HOP, T]);
   for (const [s0, e0] of gaps) {
-    const head = s0 === 0, tail = e0 >= T - 1e-6;
+    const head = s0 < 0.15, tail = e0 >= T - 0.05;
     if (e0 - s0 < st.minSilence && !head && !tail) continue;
     const s = head ? 0 : snapToQuiet(a, s0 + st.padding);
     const e = tail ? T : snapToQuiet(a, e0 - st.padding);
@@ -169,8 +173,13 @@ export function proposeCuts(a: Analysis, words: Word[], st: RoughCutSettings, bi
       const after = k === isl.length - 1 ? 1 : (isl[k + 1].a - it.b) * HOP;
       if (before < 0.12 || after < 0.12) continue;
       const e = stats(a.db, it.a, it.b), z = stats(a.zcr, it.a, it.b);
+      if (!e) continue;
       const nuclei = syllableNuclei(a, it);
-      if (nuclei > 1) continue;
+      // real words have consonants: deep energy dips between syllables
+      let dips = 0;
+      for (let f = it.a; f < it.b; f++) if (a.db[f] < e.mean - 12) dips++;
+      const dipFrac = dips / (it.b - it.a);
+      if (nuclei > 2 || (nuclei === 2 && e.std > 3.5) || dipFrac > 0.08) continue;
       // steady energy, no fricatives (low ZCR), not louder than usual speech
       let conf = 0;
       conf += e.std < 3 ? 0.35 : e.std < 4.5 ? 0.2 : 0;
@@ -190,31 +199,34 @@ export function proposeCuts(a: Analysis, words: Word[], st: RoughCutSettings, bi
   if (st.fillers && words.length) {
     for (const w of words) {
       if (!w.filler && !isFiller(w.w)) continue;
-      // find the voiced island that best overlaps the word
-      const c = (w.s + w.e) / 2;
-      let best: Island | null = null, bd = Infinity;
+      // use the acoustic island only when it holds this sound alone (never cut a neighbouring word)
+      let s = w.s, e = w.e;
       for (const it of isl) {
-        const m = ((it.a + it.b) / 2) * HOP;
-        const d = Math.abs(m - c);
-        if (d < bd && d < 0.6) { bd = d; best = it; }
+        const is = it.a * HOP, ie = it.b * HOP;
+        const overlap = Math.min(ie, w.e) - Math.max(is, w.s);
+        if (overlap > 0 && ie - is <= w.e - w.s + 0.35 && ie - is < 1.6) { s = is; e = ie; break; }
       }
-      const s = best && (best.b - best.a) * HOP < 1.6 ? best.a * HOP : w.s;
-      const e = best && (best.b - best.a) * HOP < 1.6 ? best.b * HOP : w.e;
-      cuts.push({ s: snapToQuiet(a, s - 0.03), e: snapToQuiet(a, e + 0.03), reason: 'filler', on: true, label: `« ${w.w} »` });
+      const cs = snapToQuiet(a, s - 0.03), ce = snapToQuiet(a, e + 0.03);
+      // already covered by an acoustic hesitation? keep a single entry
+      if (cuts.some((c) => c.reason === 'hesitation' && Math.min(c.e, ce) - Math.max(c.s, cs) > (ce - cs) * 0.6)) continue;
+      cuts.push({ s: cs, e: ce, reason: 'filler', on: true, label: `« ${w.w} »` });
     }
   }
 
-  // 4. false starts / retakes: a phrase restarted shortly after
+  // 4. false starts / retakes: a phrase restarted shortly after (fillers ignored)
   if (st.retakes && words.length > 4) {
-    const W = words.map((w) => norm(w.w)).filter(Boolean);
-    const ws = words.filter((w) => norm(w.w));
+    const ws = words.filter((w) => norm(w.w) && !w.filler && !isFiller(w.w));
+    const W = ws.map((w) => norm(w.w));
     for (let i = 0; i < W.length - 2; i++) {
       for (let j = i + 1; j < Math.min(W.length, i + 14); j++) {
         if (ws[j].s - ws[i].s > 9) break;
         let k = 0;
         while (j + k < W.length && i + k < j && W[i + k] === W[j + k]) k++;
-        const strong = k >= 3, weak = k === 2 && ws[j].s - ws[j - 1].e > 0.35;
-        if ((strong || weak) && !FILLERS.has(W[i])) {
+        if (k < 2) continue;
+        // the first take was abandoned: trailing "…" / "-" or a clear pause before the restart
+        const abandoned = /(\.\.\.|…|-|—)$/.test(ws[j - 1].w) || ws[j].s - ws[j - 1].e > 0.35;
+        const strong = k >= 3 || (k === 2 && abandoned);
+        if (strong || abandoned) {
           const s = snapToQuiet(a, ws[i].s - 0.03);
           const e = snapToQuiet(a, ws[j].s - 0.03);
           if (e - s > 0.25) {
@@ -260,6 +272,14 @@ export function toSource(segs: Seg[], t: number) {
     if (t < g.t + (g.e - g.s) || i === segs.length - 1) return { src: Math.min(g.e, g.s + Math.max(0, t - g.t)), i, local: t - g.t };
   }
   return { src: 0, i: 0, local: 0 };
+}
+
+/** share of a source range that survives the edit (0..1) */
+export function keptShare(segs: Seg[], s: number, e: number) {
+  if (e <= s) return 0;
+  let k = 0;
+  for (const g of segs) k += Math.max(0, Math.min(g.e, e) - Math.max(g.s, s));
+  return k / (e - s);
 }
 
 /** source time → timeline time (null if the moment was cut) */

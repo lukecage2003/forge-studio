@@ -5,37 +5,56 @@
 
 ---
 
-Forge est une application web de montage dédiée aux comics, BD et mangas. On importe des planches, Forge détecte les cases, anime une caméra case par case, pose les sous-titres, cale le rythme sur la musique et exporte un MP4 prêt à publier. Tout se fait dans le navigateur, sans compte ni serveur : les fichiers ne quittent pas l'ordinateur.
+Forge est une application web de montage pour les vidéos qui expliquent des comics, en face caméra ou en voix off. Tu importes ton rush et tes planches. Forge coupe les silences, les « euh » et les reprises, alterne ton visage avec les cases, ajoute les zooms et les sous-titres, puis exporte un MP4 prêt pour TikTok, Shorts et YouTube. Tout tourne dans le navigateur : tes fichiers ne quittent pas ton ordinateur, sauf si tu actives Google AI.
 
-## Montage automatique
+## 1. Dérushage du face caméra (onglet Rush)
 
-Le bouton **Montage auto** (touche `A`) fait le montage complet en un clic :
-
-| Étape | Ce que fait Forge |
+| Ce qui est coupé | Comment |
 |---|---|
-| Découpe | Détecte les cases de chaque planche (gouttières blanches ou noires, dessins qui débordent, sens BD ou manga). Les découpes faites à la main sont conservées. |
-| Caméra | Panoramique sur les cases larges ou hautes, zoom avant/arrière alterné sur les autres, recul et secousse sur les grandes cases (splash). |
-| Rythme | Durée de chaque plan selon la densité de la case (détails, bulles) et la longueur du sous-titre, ajustée à la durée cible. |
-| Musique | Détection du tempo (BPM) et coupes calées sur le beat. |
-| Voix off | La vidéo suit la durée de la narration, la musique baisse automatiquement sous la voix (ducking). |
-| Transitions | Glissé caméra entre cases d'une même planche, whip, fondu ou poussée entre planches, flash sur les splash. |
-| Accroche | Carton plein écran optionnel pour les 2 premières secondes. |
+| Silences et respirations | Mesure du bruit de la pièce, seuil réglable, marge autour de la voix, coupe calée au creux du son (pas de clic) |
+| Hésitations (« euuuh », « mmmh ») | Détectées au son, sans transcription : son tenu, stable, sans consonne, isolé par des pauses |
+| « Euh » de la transcription | Repérés dans le texte puis localisés précisément dans le son |
+| Reprises et faux départs | « Alors Batman il… Alors Batman il a décidé » : la première prise est retirée |
 
-Trois styles : **Dynamique** (TikTok/Shorts), **Cinématique** (YouTube), **Manga** (lecture droite → gauche, impacts).
+Tout est révisable : liste des coupes avec écoute, waveform zoomable (glisser = couper), transcription cliquable au mot près (clic = couper/garder, Maj+clic = plage). Les cas douteux sont proposés « à vérifier » au lieu d’être coupés d’office.
 
-Tout reste modifiable ensuite, plan par plan.
+Transcription au choix : **Whisper en local** (gratuit, hors ligne après le premier téléchargement du modèle) ou **Google Gemini** (verbatim, garde les « euh »).
 
-## Fonctions
+## 2. Montage automatique (touche A)
 
-- **Formats** : 9:16 (TikTok, Shorts, Reels), 16:9 (YouTube), 1:1, 4:5, et zones de sécurité TikTok dans l'aperçu.
-- **Découpe** : tracer, déplacer et redimensionner les cases à la souris, détection automatique, planche entière.
-- **Caméra** : 8 mouvements, cadrage « case entière » ou « plein cadre », intensité, secousse d'impact.
-- **Transitions** : cut, glissé caméra, fondu, poussée, whip, zoom, flash.
-- **Texte** : 5 styles (TikTok, Récitatif, Impact, Propre, Cinéma), animations pop, machine à écrire, mot à mot ; cartons titres.
-- **Audio** : pistes musique, voix off et bruitages, enregistrement micro, volumes, fondus, découpe des clips, ducking automatique.
-- **Arrière-plan** : flou de la case, planche assombrie ou couleur unie ; signature @compte.
-- **Export** : MP4 H.264 1080p en 24, 30 ou 60 i/s, plus vite que le temps réel (WebCodecs) ; sous-titres `.srt` ; miniature `.png`.
-- **Projet** : sauvegarde automatique dans le navigateur, fichier `.forge` portable, annuler/rétablir.
+Le rush coupé sert de colonne vertébrale. Les cases se posent dessus en blocs qui commencent et finissent sur les coupes et les fins de phrase, ce qui masque aussi les sauts d’image.
+
+- **Explication** : cases plein écran, page entière avec projecteur, visage en ouverture et en relance (format « comics expliqués », idéal en 16:9).
+- **Énergique** : visage très présent, écrans partagés, bulle visage, multi-cases, zooms de coupe marqués (idéal en 9:16).
+- Sans face caméra : **Dynamique**, **Cinématique**, **Manga** (calage sur le beat de la musique ou sur la voix off).
+
+**Mises en page** : plein écran · écran partagé visage + case · bulle visage sur la case · multi-cases (2 à 4 ensemble) · page entière avec la case mise en lumière.
+
+**Zooms** : à chaque coupe, alternance de cadrages (100 % / +16 % / +7 %) centrés sur ton visage (clique sur ton visage une fois pour le régler), plus une poussée lente sur les prises longues.
+
+**Habillage** : sous-titres mot à mot synchronisés sur ta voix (6 styles), nom à l’écran (« Bruce Wayne »), accroche d’ouverture posée sur ton visage, fond trame comics, barre de progression, couleur d’accent, signature @compte.
+
+## 3. Forge apprend de toi
+
+Chaque correction d’une décision automatique (durée d’un plan, mise en page, mouvement, intensité, coupe rétablie ou ajoutée, case retirée) ajuste les préférences de Forge. Le montage suivant en tient compte. Ce qu’il a appris est affiché dans les Réglages, avec une remise à zéro. Les données restent dans le navigateur.
+
+## 4. Google AI (optionnel)
+
+Dans Réglages, colle une clé Gemini (gratuite sur aistudio.google.com). Forge peut alors :
+- transcrire le rush mot à mot en gardant les hésitations ;
+- placer chaque case sur la phrase qu’elle illustre (analyse des images + du script) ;
+- proposer des accroches.
+
+La clé est stockée dans ce navigateur et les appels partent directement vers Google.
+
+## Autres fonctions
+
+- Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.
+- Détection automatique des cases (BD ou manga), retouche à la souris.
+- 7 transitions, 8 mouvements de caméra, secousse d’impact.
+- Pistes musique, voix off, bruitages, enregistrement micro, ducking automatique sous ta voix.
+- Export MP4 1080p image par image (WebCodecs), sous-titres `.srt` depuis la transcription, miniature `.png`.
+- Sauvegarde automatique, fichier projet `.forge`, annuler/rétablir.
 
 ## Raccourcis
 
@@ -46,7 +65,7 @@ Tout reste modifiable ensuite, plan par plan.
 | `Suppr` | Supprimer la sélection |
 | `Ctrl+Z` / `Ctrl+Maj+Z` | Annuler / rétablir |
 | `A` | Montage auto |
-| `1` / `2` | Découpe / Aperçu |
+| `1` / `2` / `3` | Rush / Découpe / Aperçu |
 
 ## Lancer en local
 
@@ -69,6 +88,11 @@ src/
     render.ts     rendu d'une image à l'instant t (caméra, transitions, sous-titres)
     auto.ts       montage automatique
     detect.ts     détection des cases (découpe XY récursive sur les gouttières)
+    speech.ts     analyse de la voix : silences, hésitations, « euh », reprises
+    whisper.ts    transcription locale (Whisper, Web Worker)
+    google.ts     Google Gemini : transcription verbatim, placement des cases, accroches
+    brain.ts      apprentissage des préférences à partir des corrections
+    video.ts      lecture du face caméra à travers les coupes
     beats.ts      détection du tempo
     audio.ts      mixage (aperçu temps réel + rendu hors ligne), ducking
     export.ts     encodage MP4 (mediabunny / WebCodecs), SRT

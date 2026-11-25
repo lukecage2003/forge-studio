@@ -77,7 +77,7 @@ export async function exportMp4(project: Project, o: ExportOpts): Promise<Blob> 
         if (track) {
           const maxSide = Math.max(W, H);
           const k = Math.min(1, maxSide / Math.max(project.aroll.width, project.aroll.height));
-          const sink = new CanvasSink(track, { width: Math.round(project.aroll.width * k), height: Math.round(project.aroll.height * k), poolSize: 2 });
+          const sink = new CanvasSink(track, { width: Math.round(project.aroll.width * k), height: Math.round(project.aroll.height * k), fit: 'fill', poolSize: 2 });
           const times = (function* () { for (let f = 0; f < frames; f++) yield toSource(segs, f * dt).src; })();
           faceIter = sink.canvasesAtTimestamps(times);
         }

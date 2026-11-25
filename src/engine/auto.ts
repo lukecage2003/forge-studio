@@ -7,7 +7,7 @@ import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
 import { resolveMotion } from './render';
 import { segmentsOf } from './timeline';
-import { isFiller, toTimeline, segsDuration, type Seg } from './speech';
+import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speech';
 import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMotion } from './brain';
 
 /**
@@ -146,12 +146,25 @@ export function timelineWords(p: Project): Word[] {
   const out: Word[] = [];
   for (const w of ar.words) {
     if (w.filler || isFiller(w.w)) continue;
-    const m = (w.s + w.e) / 2;
-    const tm = toTimeline(segs, m);
-    if (tm == null) continue;
-    const s = toTimeline(segs, w.s) ?? tm - (m - w.s);
-    const e = toTimeline(segs, w.e) ?? tm + (w.e - m);
-    out.push({ w: w.w, s: Math.max(0, s), e: Math.max(s + 0.05, e) });
+    // transcript timestamps are approximate: a word stays if a good part of it survives,
+    // or if it only fell into a removed *silence* (then it belongs to the next spoken segment)
+    let s = w.s, e = w.e;
+    if (keptShare(segs, s, e) < 0.4) {
+      const m = (s + e) / 2;
+      const by = ar.cuts.find((c) => c.on && m >= c.s && m <= c.e);
+      if (!by || by.reason !== 'silence') continue;
+      const next = segs.find((g) => g.s >= by.e - 0.05 && g.s - by.e < 0.3);
+      if (!next) continue;
+      const len = Math.min(e - s, 0.6);
+      s = next.s;
+      e = next.s + len;
+    }
+    // clamp the word into the kept audio, then map it
+    const seg = segs.find((g) => Math.min(g.e, e) - Math.max(g.s, s) > 0);
+    if (seg) { s = Math.max(s, seg.s); e = Math.min(e, seg.e); }
+    const ts = toTimeline(segs, s), te = toTimeline(segs, e);
+    if (ts == null) continue;
+    out.push({ w: w.w, s: Math.max(0, ts), e: Math.max(ts + 0.05, te ?? ts + (e - s)) });
   }
   return out;
 }

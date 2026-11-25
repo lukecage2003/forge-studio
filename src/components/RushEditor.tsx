@@ -3,7 +3,7 @@ import { AudioWaveform, Crosshair, FileVideo, Headphones, Languages, Play, Rotat
 import type { ARoll, Cut, Word } from '../types';
 import { setUI, useStore } from '../store';
 import { getVideo } from '../engine/media';
-import { HOP, isFiller, keepSegments, segsDuration } from '../engine/speech';
+import { HOP, isFiller, keepSegments, keptShare, segsDuration } from '../engine/speech';
 import { addManualCut, cachedAnalysis, importRush, roughCut, setAllCuts, setFocus, toggleCut, toggleWords, transcribe, patchRoughSettings } from '../rush';
 import { hasGoogle } from '../engine/google';
 import { WHISPER_MODELS, type WhisperModel } from '../engine/whisper';
@@ -144,7 +144,7 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
         </div>
 
         <div className="rush-right">
-          <Transcript ar={ar} srcT={srcT} onSeek={seekSrc} />
+          <Transcript ar={ar} srcT={srcT} onSeek={seekSrc} segs={segs} />
         </div>
       </div>
 
@@ -350,10 +350,22 @@ function Wave({ ar, srcT, onSeek }: { ar: ARoll; srcT: number; onSeek: (t: numbe
 
 /* ---------------------------------------------------------- transcript */
 
-function Transcript({ ar, srcT, onSeek }: { ar: ARoll; srcT: number; onSeek: (t: number) => void }) {
+function Transcript({ ar, srcT, onSeek, segs }: { ar: ARoll; srcT: number; onSeek: (t: number) => void; segs: ReturnType<typeof keepSegments> }) {
   const [anchor, setAnchor] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const cutAt = (w: Word) => ar.cuts.find((c) => c.on && (w.s + w.e) / 2 >= c.s && (w.s + w.e) / 2 <= c.e);
+  const cutAt = (w: Word) => {
+    if (keptShare(segs, w.s, w.e) >= 0.4) return undefined;
+    const m = (w.s + w.e) / 2;
+    const hit = ar.cuts.find((c) => c.on && m >= c.s && m <= c.e);
+    if (hit?.reason === 'silence') return undefined; // timing drift, the word itself is kept
+    let best: Cut | undefined, bo = 0;
+    for (const c of ar.cuts) {
+      if (!c.on) continue;
+      const o = Math.min(c.e, w.e) - Math.max(c.s, w.s);
+      if (o > bo) { bo = o; best = c; }
+    }
+    return best;
+  };
   const activeIdx = ar.words.findIndex((w) => srcT >= w.s && srcT < w.e);
 
   useEffect(() => {
