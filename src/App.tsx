@@ -15,6 +15,7 @@ import { Toasts, toast } from './components/Toast';
 import { getState, loadProject, redo, setUI, undo, useStore } from './store';
 import { deleteSelection, importAudioFiles, importPages } from './actions';
 import { idb } from './lib/db';
+import { isComicFile } from './engine/importers';
 import { ensureMedia, ensureVideo } from './engine/media';
 import { seek, toggle } from './engine/transport';
 import type { Project } from './types';
@@ -85,7 +86,7 @@ export default function App() {
       depth = 0;
       setDragging(false);
       const files = [...(e.dataTransfer?.files ?? [])];
-      const imgs = files.filter((f) => f.type.startsWith('image/'));
+      const imgs = files.filter(isComicFile);
       const auds = files.filter((f) => f.type.startsWith('audio/'));
       const vids = files.filter((f) => f.type.startsWith('video/'));
       if (vids.length) await importRush(vids[0]);
@@ -144,7 +145,7 @@ export default function App() {
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">
-          <div><Upload size={36} /><strong>Dépose tes fichiers</strong><span>Vidéo → rush face caméra · Planches → cases détectées · Audio → musique ou voix off</span></div>
+          <div><Upload size={36} /><strong>Dépose tes fichiers</strong><span>Vidéo → rush face caméra · Images, PDF, CBZ → cases détectées · Audio → musique ou voix off</span></div>
         </div>
       )}
       <Toasts />
@@ -169,7 +170,7 @@ function Welcome() {
         <p>Importe ton rush face caméra et tes planches. Forge coupe les silences et les « euh », alterne ton visage avec les cases, sous-titre et exporte pour TikTok, Shorts et YouTube.</p>
         <div className="welcome-actions">
           <button className="btn primary lg" onClick={() => pick('video/*', false, (f) => f[0] && void importRush(f[0]))}><FileVideo size={18} /> Importer mon rush</button>
-          <button className="btn lg" onClick={() => pick('image/*', true, (f) => void importPages(f))}><ImagePlus size={18} /> Importer des planches</button>
+          <button className="btn lg" onClick={() => pick('image/*,.pdf,.cbz,.zip,application/pdf', true, (f) => void importPages(f))}><ImagePlus size={18} /> Importer des planches</button>
         </div>
         <span className="muted">ou glisse tes fichiers n’importe où dans la fenêtre</span>
         <ol className="steps">

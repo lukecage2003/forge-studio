@@ -53,7 +53,11 @@ export function videoDuration(p: Project) {
 export function shotAt(timed: TimedShot[], t: number, overlay = false): TimedShot | null {
   if (!timed.length) return null;
   let hit: TimedShot | null = null;
-  for (const ts of timed) if (t >= ts.start && t < ts.end) hit = ts;
+  for (const ts of timed) {
+    if (t < ts.start || t >= ts.end) continue;
+    // schemas and title cards placed over comic shots win
+    if (!hit || ts.shot.pageId == null || hit.shot.pageId != null) hit = ts;
+  }
   if (hit || overlay) return hit;
   return timed[timed.length - 1];
 }

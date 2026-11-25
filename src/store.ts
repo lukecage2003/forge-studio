@@ -44,6 +44,8 @@ export function newProject(): Project {
     subtitleStyle: { ...defaultCaption(), anim: 'words', y: 0.72, on: true, maxWords: 3 },
     progressBar: false,
     accent: '#FF5A1F',
+    fx: [],
+    look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true },
   };
 }
 
@@ -57,6 +59,8 @@ export function migrate(p: Project): Project {
     shots: (p.shots ?? []).map((s) => ({ ...s, layout: s.layout ?? 'full' })),
     aroll: p.aroll ?? null,
     subtitles: p.subtitles ?? [],
+    fx: p.fx ?? [],
+    look: { ...base.look, ...(p.look ?? {}) },
   };
 }
 

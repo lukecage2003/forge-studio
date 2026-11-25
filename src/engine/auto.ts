@@ -1,13 +1,15 @@
 import type { CaptionAnim, CaptionPreset, Layout, Motion, Project, Rect, Shot, Subtitle, Transition, Word } from '../types';
 import { FORMATS } from '../types';
 import { clamp, uid } from '../lib/util';
-import { detectPanels } from './detect';
+import { cutPage } from './detect';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
 import { resolveMotion } from './render';
 import { segmentsOf } from './timeline';
 import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speech';
+import { validateProject } from './validate';
+import type { FxItem } from '../types';
 import { faceMult, intensityMult, noteMontage, paceMult, pickLayout, preferredMotion } from './brain';
 
 /**
@@ -232,13 +234,15 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   for (const s of proj.shots) if (s.pageId) kept.set(s.pageId, [...(kept.get(s.pageId) ?? []), s]);
   const raw: Shot[] = [];
   for (const pg of proj.pages) {
+    if (pg.skip) continue;
     const a = getImage(pg.mediaId);
     if (!a) continue;
     let list: Shot[] = o.redetect ? [] : (kept.get(pg.id) ?? []).map((s) => ({ ...s, group: undefined }));
     if (!list.length) {
       const old = kept.get(pg.id) ?? [];
-      list = detectPanels(a.img, a.width, a.height, readingOrder === 'rtl').map((rect, i) =>
-        newShot(proj, { pageId: pg.id, rect, caption: old[i]?.caption ?? { text: '', ...proj.defaultCaption } }));
+      const cut = cutPage(a.img, a.width, a.height, readingOrder === 'rtl');
+      list = cut.rects.map((rect, i) =>
+        newShot(proj, { pageId: pg.id, rect, zone: cut.kind === 'panels' ? undefined : cut.kind, caption: old[i]?.caption ?? { text: '', ...proj.defaultCaption } }));
     }
     raw.push(...list.map((s) => ({ ...s })));
   }
@@ -252,7 +256,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     const pan = resolveMotion({ ...s, motion: 'auto' }, aspect, readingOrder === 'rtl').motion.startsWith('pan');
     let w = 0.65 + panelLoad(a.img, s.rect) * 0.9 + Math.sqrt(area) * 0.6;
     if (pan) w *= 1.3;
-    return { shot: s, w, area, pan, splash: area > 0.42 };
+    return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones') };
   });
 
   const minRead = (s: Shot) => {
@@ -263,6 +267,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   /** camera + style for one panel shot */
   const dress = (pn: Panel, layout: Layout, flip: boolean): Shot => {
     const s = pn.shot;
+    // unreliable panels: travel the page zone by zone with the spotlight, always readable
+    if (s.zone === 'zones' && layout !== 'split' && layout !== 'pip') layout = 'page';
     let motion: Motion = 'auto';
     if (!pn.pan) motion = pn.splash ? 'zoom-out' : flip ? 'zoom-out' : 'zoom-in';
     motion = preferredMotion(motion);
@@ -283,7 +289,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     let merged = 0;
     for (let i = 0; i < list.length; i++) {
       const a = list[i], b = list[i + 1], c = list[i + 2];
-      if (merged < maxGroups && b && a.shot.pageId === b.shot.pageId && !a.splash && !b.splash) {
+      if (merged < maxGroups && b && a.shot.pageId === b.shot.pageId && !a.splash && !b.splash && !a.shot.zone && !b.shot.zone) {
         const take = c && c.shot.pageId === a.shot.pageId && !c.splash && rand() < 0.4 ? [b, c] : [b];
         out.push({
           ...a,
@@ -398,7 +404,27 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     // remaining title cards (user-made) are kept at their place
     for (const tc of titleCards) shots.push(tc);
 
-    if (o.hook.trim()) {
+    // face-cam effects made by the editor: hook written behind the speaker, panel teasers behind them
+    const fx: FxItem[] = (proj.fx ?? []).filter((f) => !f.id.startsWith('auto_'));
+    const cutout = proj.look?.cutout !== false;
+    const gaps: { s: number; e: number }[] = [];
+    let prevEnd = 0;
+    for (const b of blocks) { if (b.s - prevEnd > 0.8) gaps.push({ s: prevEnd, e: b.s }); prevEnd = b.e; }
+    if (T - prevEnd > 0.8) gaps.push({ s: prevEnd, e: T });
+    if (cutout && o.hook.trim() && gaps[0]?.s === 0) {
+      fx.push({ id: 'auto_' + uid(), kind: 'textBehind', start: 0, duration: Math.min(gaps[0].e, 3), text: o.hook.trim() });
+    }
+    if (cutout && o.style === 'energetic') {
+      gaps.slice(1).forEach((g, k) => {
+        const next = shots.find((x) => (x.start ?? 0) >= g.e - 0.01 && x.pageId);
+        if (k % 2 === 0 && next && g.e - g.s > 1.6) {
+          fx.push({ id: 'auto_' + uid(), kind: 'panelBehind', start: g.s, duration: g.e - g.s, pageId: next.pageId!, rect: next.rect });
+        }
+      });
+    }
+    proj = { ...proj, fx };
+
+    if (o.hook.trim() && !cutout) {
       shots.push({
         ...newShot(proj, { pageId: null }), id: 'hook_' + uid(), start: 0, duration: Math.min(st.hook, 2.2), layout: 'full',
         transition: 'cut', transitionDur: 0, titleBg: 'face',
@@ -516,6 +542,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   if (music && music.sourceDuration - music.offset < total - 0.5) notes.push('La musique est plus courte que la vidéo.');
   if (st.rtl && p.readingOrder !== 'rtl') notes.push('Sens de lecture passé en manga (droite → gauche).');
   noteMontage();
+  const checked = validateProject(proj);
+  proj = checked.project;
 
   return {
     project: proj,

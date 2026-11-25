@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2, ScanFace } from 'lucide-react';
+import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2, ScanFace, Sparkles } from 'lucide-react';
+import { FX_LABEL } from './FxDiagram';
+import { patchFx } from '../actions';
 import type { AudioClip, AudioKind, Project, Shot } from '../types';
 import { getState, setUI, update, useStore } from '../store';
 import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
@@ -10,10 +12,11 @@ import { useMediaVersion } from '../lib/hooks';
 import { moveShot } from '../actions';
 import { clamp, fmtShort } from '../lib/util';
 
-const LANES: { kind: 'face' | 'video' | 'text' | AudioKind; label: string; icon: React.ReactNode }[] = [
+const LANES: { kind: 'face' | 'video' | 'text' | 'fx' | AudioKind; label: string; icon: React.ReactNode }[] = [
   { kind: 'face', label: 'Visage', icon: <ScanFace size={14} /> },
   { kind: 'video', label: 'Cases', icon: <Film size={14} /> },
   { kind: 'text', label: 'Texte', icon: <Type size={14} /> },
+  { kind: 'fx', label: 'Effets', icon: <Sparkles size={14} /> },
   { kind: 'voice', label: 'Voix', icon: <AudioLines size={14} /> },
   { kind: 'music', label: 'Musique', icon: <Music2 size={14} /> },
   { kind: 'sfx', label: 'Bruitages', icon: <Volume2 size={14} /> },
@@ -212,6 +215,31 @@ export function Timeline() {
               ))}
             </div>
 
+            {/* effects lane */}
+            <div className="tl-lane lane-fx">
+              {(project.fx ?? []).map((f) => (
+                <div key={f.id} className={`fx-chip ${sel?.kind === 'fx' && sel.id === f.id ? 'on' : ''}`}
+                  style={{ left: f.start * pps, width: Math.max(6, f.duration * pps) }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setUI({ selection: { kind: 'fx', id: f.id } });
+                    const x0 = e.clientX, s0 = f.start, d0 = f.duration;
+                    const edge = (e.target as HTMLElement).classList.contains('trim');
+                    const mv = (ev: PointerEvent) => {
+                      const dt = (ev.clientX - x0) / pps;
+                      if (edge) patchFx(f.id, { duration: Math.max(0.3, d0 + dt) }, 'fxd' + f.id);
+                      else patchFx(f.id, { start: Math.max(0, snap(s0 + dt)) }, 'fxs' + f.id);
+                    };
+                    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+                    window.addEventListener('pointermove', mv);
+                    window.addEventListener('pointerup', up);
+                  }}>
+                  <span>{f.text || FX_LABEL[f.kind]}</span>
+                  <div className="trim r" />
+                </div>
+              ))}
+            </div>
+
             {(['voice', 'music', 'sfx'] as AudioKind[]).map((k) => (
               <div key={k} className={`tl-lane lane-${k}`}>
                 {project.audio.filter((c) => c.kind === k).map((c) => (
@@ -252,7 +280,7 @@ function ShotBlock({ shot, project, left, width, on, index, onMove, onResize }: 
   }
   return (
     <div className={`shot-block ${on ? 'on' : ''} ${page ? '' : 'title'}`} style={{ left, width }} onPointerDown={onMove}>
-      <div className="shot-film">{tiles}{!page && <span className="title-label">{shot.caption.text || 'Titre'}</span>}</div>
+      <div className="shot-film">{tiles}{!page && <span className="title-label">{shot.diagram ? `Schéma · ${shot.diagram.title}` : shot.caption.text || 'Titre'}</span>}</div>
       <span className="shot-idx">{index + 1}</span>
       {width > 54 && <span className="shot-dur">{shot.duration.toFixed(1)}s</span>}
       {index > 0 && shot.transition !== 'cut' && <span className="tr-mark" title={`Transition : ${shot.transition}`} />}

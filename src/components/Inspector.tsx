@@ -6,6 +6,7 @@ import type { AudioClip, CaptionAnim, CaptionPreset, Layout, Motion, Shot, Trans
 import { getState, patchCaption, patchShot, setUI, update, useStore } from '../store';
 import { LAYOUT_FR } from '../engine/brain';
 import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
+import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { applyDefaultCaptionToAll, deleteSelection, duplicateShot, fitMusicToVideo } from '../actions';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
@@ -16,9 +17,10 @@ export function Inspector() {
   const shot = useStore((s) => (sel?.kind === 'shot' ? s.project.shots.find((x) => x.id === sel.id) : undefined));
   const clip = useStore((s) => (sel?.kind === 'audio' ? s.project.audio.find((x) => x.id === sel.id) : undefined));
   const ar = useStore((s) => (sel?.kind === 'aroll' ? s.project.aroll : null));
+  const fx = useStore((s) => (sel?.kind === 'fx' ? s.project.fx.find((f) => f.id === sel.id) : undefined));
   return (
     <aside className="inspector">
-      {shot ? <ShotPanel shot={shot} /> : clip ? <AudioPanel clip={clip} /> : ar ? <ARollPanel ar={ar} /> : <ProjectPanel />}
+      {shot ? <ShotPanel shot={shot} /> : clip ? <AudioPanel clip={clip} /> : fx ? <FxPanel fx={fx} /> : ar ? <ARollPanel ar={ar} /> : <ProjectPanel />}
     </aside>
   );
 }
@@ -123,14 +125,15 @@ function ShotPanel({ shot }: { shot: Shot }) {
       <div className="insp-title">
         <div>
           <span className="eyebrow">{isTitle ? 'Carton' : 'Case'} {String(index + 1).padStart(2, '0')}</span>
-          <h2>{isTitle ? 'Carton titre' : 'Plan'}</h2>
+          <h2>{shot.diagram ? 'Schéma' : isTitle ? 'Carton titre' : 'Plan'}</h2>
         </div>
         <div className="row-btns">
           <button className="icon-btn ghost" title="Dupliquer" onClick={() => duplicateShot(shot.id)}><Copy size={16} /></button>
           <button className="icon-btn ghost danger" title="Supprimer (Suppr)" onClick={deleteSelection}><Trash2 size={16} /></button>
         </div>
       </div>
-      <ShotThumb shot={shot} />
+      {!shot.diagram && <ShotThumb shot={shot} />}
+      {shot.diagram && <DiagramPanel shot={shot} />}
       {!isTitle && (
         <button className="btn sm ghost block" onClick={() => setUI({ mode: 'cut', activePageId: shot.pageId })}>
           <Scissors size={14} /> Ajuster le cadrage sur la planche
@@ -185,7 +188,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
             fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => patchShot(shot.id, { shake: v }, k('shake'))} />
         </Section>
       )}
-      {isTitle && (
+      {isTitle && !shot.diagram && (
         <Section title="Fond">
           <label className="color-row">
             <input type="color" value={shot.titleBg ?? '#0E0E11'} onChange={(e) => patchShot(shot.id, { titleBg: e.target.value }, k('bg'))} />
@@ -206,7 +209,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </Section>
       )}
 
-      <Section title={isTitle ? 'Texte' : 'Sous-titre'}>
+      {!shot.diagram && <Section title={isTitle ? 'Texte' : 'Sous-titre'}>
         <textarea className="input" rows={3} placeholder={isTitle ? 'Titre…' : 'Ce que dit le narrateur sur cette case…'}
           value={shot.caption.text} onChange={(e) => patchCaption(shot.id, { text: e.target.value }, k('txt'))} />
         <div className="preset-grid">
@@ -223,7 +226,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         )}
         <Slider label="Taille" value={shot.caption.size} min={0.5} max={2} step={0.05}
           fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => patchCaption(shot.id, { size: v }, k('size'))} />
-      </Section>
+      </Section>}
     </>
   );
 }
@@ -299,6 +302,7 @@ function ProjectPanel() {
             fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => set({ duckLevel: v }, 'duck')} />
         )}
       </Section>
+      <LookSection />
       <Section title="Habillage">
         <label className="color-row">
           <input type="color" value={p.accent} onChange={(e) => set({ accent: e.target.value }, 'accent')} />
@@ -384,6 +388,10 @@ function ARollPanel({ ar }: { ar: ARoll }) {
         <Slider label="Poussée lente" value={ar.drift} min={0} max={1} step={0.05}
           fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => patchAroll({ drift: v }, 'drift')} />
       </Section>
+      <Section title="Effets à la tête de lecture">
+        <FxAdd />
+      </Section>
+      <LookSection />
       <Section title="Son">
         <Slider label="Volume de la voix" value={ar.volume} min={0} max={2} step={0.05}
           fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => patchAroll({ volume: v }, 'avol')} />

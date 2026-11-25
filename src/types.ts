@@ -15,6 +15,10 @@ export interface Page {
   mediaId: string;
   width: number;
   height: number;
+  /** excluded from the auto edit (ads, credits…) */
+  skip?: boolean;
+  /** how the page was cut: real panels, a full-page splash, or reading-order zones */
+  cut?: 'panels' | 'splash' | 'zones';
 }
 
 export type Motion =
@@ -55,6 +59,8 @@ export interface Shot {
   /** extra panels shown together with this one (grid layout) */
   group?: { pageId: string; rect: Rect }[];
   layout: Layout;
+  /** cut from reading-order zones (unreliable panels) or a full-page splash */
+  zone?: 'zones' | 'splash';
   /** timeline start, used when the project has a face-cam rush (overlay mode) */
   start?: number;
   duration: number;
@@ -66,10 +72,27 @@ export interface Shot {
   shake: number; // 0..1 impact shake at start
   caption: Caption;
   nameTag?: string; // e.g. character name, shown as a lower third
+  /** schema / timeline built from comic panels (title-card shots only) */
+  diagram?: Diagram;
   titleBg?: string;
   /** set by the auto editor; used by Forge Brain to learn from corrections */
   auto?: { duration: number; layout: Layout; motion: Motion; style: string };
 }
+
+export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking';
+export interface DiagramItem { id: string; label: string; sub?: string; pageId?: string; rect?: Rect }
+export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: { a: number; b: number; label?: string }[] }
+
+/** Effects on the face cam (need the person cut-out for the "behind me" ones). */
+export type FxKind = 'textBehind' | 'panelBehind' | 'callout' | 'bgBlur' | 'bgHalftone';
+export interface FxItem {
+  id: string; kind: FxKind; start: number; duration: number;
+  text?: string; color?: string; y?: number; size?: number;
+  pageId?: string; rect?: Rect;
+}
+
+export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
+export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
 
@@ -148,6 +171,8 @@ export interface Project {
   watermark: string;
   progressBar: boolean;
   accent: string;
+  fx: FxItem[];
+  look: Look;
 }
 
 export type Selection =
@@ -155,4 +180,5 @@ export type Selection =
   | { kind: 'audio'; id: string }
   | { kind: 'page'; id: string }
   | { kind: 'aroll' }
+  | { kind: 'fx'; id: string }
   | null;

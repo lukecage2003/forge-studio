@@ -9,6 +9,8 @@ import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
 import { arollPlayer } from '../engine/video';
 import { toSource } from '../engine/speech';
 import { fmtTime } from '../lib/util';
+import { loadSegmenter, segmenterReady } from '../engine/segment';
+import { notifyMedia } from '../engine/media';
 
 const PREVIEW_SCALE = 0.5;
 
@@ -28,6 +30,10 @@ export function Preview() {
   const dur = videoDuration(project);
 
   useEffect(() => { void loadFonts().then(() => setFontsReady(true)); }, []);
+  const needsCutout = !!project.aroll && project.look?.cutout !== false && project.fx?.some((f) => f.kind !== 'callout');
+  useEffect(() => {
+    if (needsCutout && !segmenterReady()) void loadSegmenter().then(() => notifyMedia());
+  }, [needsCutout]);
 
   useLayoutEffect(() => {
     const el = boxRef.current;

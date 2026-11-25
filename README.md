@@ -47,6 +47,33 @@ Dans Réglages, colle une clé Gemini (gratuite sur aistudio.google.com). Forge 
 
 La clé est stockée dans ce navigateur et les appels partent directement vers Google.
 
+## 5. Import de comics : PDF, CBZ, images
+
+Glisse un ou plusieurs **PDF**, **CBZ/ZIP** ou images. Chaque page est rendue en haute définition, puis découpée :
+
+- **Doubles pages** : coupées en deux, lecture dans l’ordre (BD ou manga).
+- **Contrôles** : petites zones, cases imbriquées, couverture insuffisante, marge non uniforme ou gouttières « sales ».
+- **Si la détection n’est pas fiable** (art sans gouttières, peinture, couverture, page texte), la page est animée **par zones** dans l’ordre de lecture avec un projecteur. Une page est donc toujours animée, jamais sautée ni mal découpée.
+- **Pleine page** (splash) : recul et secousse d’impact.
+- Un clic sur l’œil d’une page l’**exclut** du montage (pub, crédits…).
+
+## 6. Effets face caméra
+
+Ton visage est détouré en local (Google MediaPipe). À placer à la tête de lecture ou ajoutés par le montage auto :
+
+- **Texte derrière moi** : un grand titre posé entre le décor et toi (l’accroche du montage auto l’utilise).
+- **Case derrière moi** : une case remplace ton décor (le style Énergique s’en sert pour annoncer la suite).
+- **Fond flou**, **fond trame comics**, **mot choc** (texte d’impact devant).
+- **Étalonnage** (Naturel, Cinéma, Chaud, Punchy, Noir), **vignette**, **grain**.
+
+## 7. Schémas avec tes cases
+
+Bouton **Schéma** : frise chronologique, réseau de personnages (liens nommés), duel « VS », classement (compte à rebours). Les cartes utilisent tes cases (aucune image générée) et s’animent une à une.
+
+## 8. Contrôle anti-erreurs
+
+Après chaque montage auto et avant chaque export, Forge vérifie et répare le projet : pages manquantes, durées invalides, cases hors page, chevauchements, audio au-delà de sa source, sous-titres vides.
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

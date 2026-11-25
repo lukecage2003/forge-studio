@@ -9,6 +9,8 @@ import { createRenderer, loadFonts } from './render';
 import { layoutShots, segmentsOf, videoDuration } from './timeline';
 import { ensureMedia, ensureVideo, mediaBlob } from './media';
 import { toSource } from './speech';
+import { validateProject } from './validate';
+import { loadSegmenter } from './segment';
 
 export interface ExportOpts {
   quality: 'high' | 'max';
@@ -17,7 +19,12 @@ export interface ExportOpts {
   signal: AbortSignal;
 }
 
-export async function exportMp4(project: Project, o: ExportOpts): Promise<Blob> {
+export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
+  const project = validateProject(input0).project;
+  if (project.aroll && project.look?.cutout !== false && project.fx?.some((f) => f.kind !== 'callout')) {
+    o.onProgress(0, 'Chargement du détourage…');
+    await loadSegmenter();
+  }
   if (typeof VideoEncoder === 'undefined') {
     throw new Error("Ton navigateur ne supporte pas l'encodage vidéo (WebCodecs). Utilise Chrome, Edge ou Firefox récent.");
   }

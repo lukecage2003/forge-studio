@@ -1,4 +1,5 @@
-import { FORMATS, type Caption, type Layout, type Project, type Rect, type Shot } from '../types';
+import { FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
+import { personMask } from './segment';
 import { clamp, easeInOutCubic, easeInOutSine, easeOutBack, easeOutCubic, lerp } from '../lib/util';
 import { getImage } from './media';
 import { layoutShots, overlayMode, segmentsOf, shotAt, type TimedShot } from './timeline';
@@ -187,34 +188,380 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   ctx.restore();
 }
 
-/** Face cam: cover-fit around the focus point, with jump-cut punch-ins and slow drift. */
-function drawFace(ctx: Ctx, project: Project, box: Box, face: FaceSource, segs: Seg[], t: number, radius = 0) {
+const GRADE: Record<Grade, string> = {
+  natural: 'none',
+  cinema: 'contrast(1.08) saturate(0.88) sepia(0.12) brightness(0.98)',
+  warm: 'contrast(1.05) saturate(1.1) sepia(0.22) brightness(1.02)',
+  punch: 'contrast(1.18) saturate(1.3)',
+  noir: 'grayscale(1) contrast(1.3) brightness(0.95)',
+};
+
+interface Placement { img: CanvasImageSource; ox: number; oy: number; dw: number; dh: number; src: number }
+
+/** where the face-cam frame lands in `box`: cover-fit on the focus point, punch-ins on cuts, slow drift */
+function placeFace(project: Project, box: Box, face: FaceSource, segs: Seg[], t: number): Placement | null {
   const ar = project.aroll;
+  if (!ar || !segs.length) return null;
+  const { src, i, local } = toSource(segs, t);
+  const img = face(src);
+  if (!img) return null;
+  const vw = ar.width, vh = ar.height;
+  let z = 1;
+  if (ar.punchIn > 0) z *= [1, 1 + 0.16 * ar.punchIn, 1 + 0.07 * ar.punchIn][i % 3];
+  const segLen = segs[i].e - segs[i].s;
+  if (ar.drift > 0) z *= 1 + 0.05 * ar.drift * clamp(local / Math.max(segLen, 0.5), 0, 1);
+  const sc = Math.max(box.w / vw, box.h / vh) * z;
+  const dw = vw * sc, dh = vh * sc;
+  const fx = ar.focus.x * dw, fy = ar.focus.y * dh;
+  const ox = clamp(box.x + box.w / 2 - fx, box.x + box.w - dw, box.x);
+  const oy = clamp(box.y + box.h * 0.42 - fy, box.y + box.h - dh, box.y);
+  return { img, ox, oy, dw, dh, src };
+}
+
+function drawFace(ctx: Ctx, project: Project, box: Box, face: FaceSource, segs: Seg[], t: number, radius = 0) {
   ctx.save();
   clipBox(ctx, box, radius);
   ctx.fillStyle = '#000';
   ctx.fillRect(box.x, box.y, box.w, box.h);
-  if (!ar || !segs.length) { ctx.restore(); return; }
-  const { src, i, local } = toSource(segs, t);
-  const img = face(src);
-  if (img) {
-    const vw = ar.width, vh = ar.height;
-    let z = 1;
-    if (ar.punchIn > 0) z *= [1, 1 + 0.16 * ar.punchIn, 1 + 0.07 * ar.punchIn][i % 3];
-    const segLen = segs[i].e - segs[i].s;
-    if (ar.drift > 0) z *= 1 + 0.05 * ar.drift * clamp(local / Math.max(segLen, 0.5), 0, 1);
-    const sc = Math.max(box.w / vw, box.h / vh) * z;
-    const dw = vw * sc, dh = vh * sc;
-    // place focus point at ~ centre (slightly above for headroom), clamped to cover the box
-    const fx = ar.focus.x * dw, fy = ar.focus.y * dh;
-    let ox = box.x + box.w / 2 - fx;
-    let oy = box.y + box.h * 0.42 - fy;
-    ox = clamp(ox, box.x + box.w - dw, box.x);
-    oy = clamp(oy, box.y + box.h - dh, box.y);
+  const pl = placeFace(project, box, face, segs, t);
+  if (pl) {
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, ox, oy, dw, dh);
+    const g = GRADE[project.look?.grade ?? 'natural'];
+    if (g !== 'none') ctx.filter = g;
+    ctx.drawImage(pl.img, pl.ox, pl.oy, pl.dw, pl.dh);
+    ctx.filter = 'none';
   }
   ctx.restore();
+}
+
+/* ---------------------------------------------------- face-cam effects */
+
+let personBuf: HTMLCanvasElement | null = null;
+
+function bigText(ctx: Ctx, W: number, H: number, fx: FxItem, local: number, accent: string, behind: boolean) {
+  const text = (fx.text || '').toUpperCase();
+  if (!text) return;
+  const size = Math.min(W, H) * (behind ? 0.24 : 0.16) * (fx.size ?? 1);
+  ctx.save();
+  ctx.font = `${behind ? '400' : '400'} ${size}px ${behind ? FONT_STACK.anton : FONT_STACK.bangers}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lines = wrap(ctx, text, W * 0.92);
+  const a = easeOutCubic(clamp(local / 0.35, 0, 1));
+  const out = clamp((fx.duration - local) / 0.25, 0, 1);
+  ctx.globalAlpha = Math.min(a, out);
+  const y0 = (fx.y ?? (behind ? 0.33 : 0.45)) * H;
+  const lh = size * (behind ? 0.95 : 1.05);
+  const scale = behind ? lerp(1.12, 1, a) : lerp(0.4, 1, easeOutBack(clamp(local / 0.3, 0, 1)));
+  ctx.translate(W / 2, y0);
+  ctx.scale(scale, scale);
+  if (!behind) {
+    const sh = Math.max(0, 1 - local / 0.4) * size * 0.06;
+    ctx.translate(Math.sin(local * 80) * sh, Math.cos(local * 63) * sh);
+    ctx.rotate(-0.05);
+  }
+  lines.forEach((l, i) => {
+    const y = (i - (lines.length - 1) / 2) * lh;
+    if (behind) {
+      ctx.fillStyle = fx.color || '#FFFFFF';
+      ctx.fillText(l, 0, y);
+    } else {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = size * 0.16;
+      ctx.strokeStyle = '#000';
+      ctx.fillStyle = '#000';
+      ctx.fillText(l, size * 0.06, y + size * 0.06);
+      ctx.strokeText(l, 0, y);
+      ctx.fillStyle = fx.color || accent;
+      ctx.fillText(l, 0, y);
+    }
+  });
+  ctx.restore();
+}
+
+/** Full-frame face with background effects; the person is cut out and put back on top. */
+function drawFaceWithFx(ctx: Ctx, project: Project, W: number, H: number, face: FaceSource, segs: Seg[], t: number, active: FxItem[]) {
+  const box: Box = { x: 0, y: 0, w: W, h: H };
+  const behind = active.filter((f) => f.kind !== 'callout');
+  if (!behind.length) { drawFace(ctx, project, box, face, segs, t); return; }
+  const pl = placeFace(project, box, face, segs, t);
+  const mask = pl && project.look?.cutout !== false ? personMask(pl.img, pl.src) : null;
+  // 1. background: the room, replaced or treated
+  const bgFx = behind.find((f) => f.kind === 'panelBehind' || f.kind === 'bgHalftone' || f.kind === 'bgBlur');
+  if (bgFx?.kind === 'panelBehind' && bgFx.pageId && bgFx.rect && mask) {
+    drawPanelIn(ctx, project, bgFx.pageId, box, baseView(bgFx.rect, W / H, 'fill'), bgFx.rect, { bg: false });
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, W, H);
+  } else if (bgFx?.kind === 'bgHalftone' && mask) {
+    ctx.drawImage(halftone(W, H, project.accent), 0, 0);
+  } else {
+    drawFace(ctx, project, box, face, segs, t);
+    if (bgFx?.kind === 'bgBlur' && mask && pl) {
+      ctx.save();
+      ctx.filter = 'blur(' + Math.round(Math.min(W, H) * 0.012) + 'px) brightness(0.8)';
+      ctx.drawImage(pl.img, pl.ox, pl.oy, pl.dw, pl.dh);
+      ctx.restore();
+    }
+  }
+  // 2. what goes behind the person
+  for (const f of behind) if (f.kind === 'textBehind') bigText(ctx, W, H, f, t - f.start, project.accent, true);
+  // 3. the person on top
+  if (pl && mask) {
+    personBuf ??= document.createElement('canvas');
+    if (personBuf.width !== W || personBuf.height !== H) { personBuf.width = W; personBuf.height = H; }
+    const p = personBuf.getContext('2d')!;
+    p.globalCompositeOperation = 'source-over';
+    p.clearRect(0, 0, W, H);
+    const g = GRADE[project.look?.grade ?? 'natural'];
+    if (g !== 'none') p.filter = g;
+    p.drawImage(pl.img, pl.ox, pl.oy, pl.dw, pl.dh);
+    p.filter = 'none';
+    p.globalCompositeOperation = 'destination-in';
+    p.imageSmoothingQuality = 'high';
+    p.drawImage(mask, pl.ox, pl.oy, pl.dw, pl.dh);
+    p.globalCompositeOperation = 'source-over';
+    ctx.drawImage(personBuf, 0, 0);
+  }
+}
+
+/* ------------------------------------------------------------ diagrams */
+
+function card(ctx: Ctx, project: Project, it: { label: string; sub?: string; pageId?: string; rect?: Rect }, cx: number, cy: number, w: number, h: number, a: number, accent: string, U: number) {
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, a * 1.5);
+  ctx.translate(cx, cy + (1 - a) * U * 3);
+  const s = lerp(0.85, 1, easeOutBack(clamp(a, 0, 1)));
+  ctx.scale(s, s);
+  const imgH = it.pageId && it.rect ? h - U * 2.6 : 0;
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = U * 1.2;
+  ctx.fillStyle = '#16161b';
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, U * 0.5);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  if (imgH > 0) {
+    const box: Box = { x: -w / 2 + U * 0.3, y: -h / 2 + U * 0.3, w: w - U * 0.6, h: imgH - U * 0.3 };
+    drawPanelIn(ctx, project, it.pageId!, box, baseView(it.rect!, box.w / box.h, 'fill'), it.rect!, { bg: false });
+  }
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = U * 0.18;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h / 2, w, h, U * 0.5);
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const ly = imgH > 0 ? -h / 2 + imgH + U * 1.05 : -U * 0.5;
+  ctx.fillStyle = '#fff';
+  ctx.font = `700 ${U * 0.95}px ${FONT_STACK.grotesk}`;
+  ctx.fillText(it.label.toUpperCase(), 0, ly, w - U * 0.6);
+  if (it.sub) {
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = `500 ${U * 0.7}px ${FONT_STACK.inter}`;
+    ctx.fillText(it.sub, 0, ly + U * 1.0, w - U * 0.6);
+  }
+  ctx.restore();
+}
+
+function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagram, local: number, dur: number) {
+  const accent = project.accent;
+  const vertical = H > W;
+  const U = Math.min(W, H) * 0.035;
+  ctx.drawImage(halftone(W, H, accent), 0, 0);
+  const z = 1 + 0.03 * easeInOutSine(clamp(local / dur, 0, 1));
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(z, z);
+  ctx.translate(-W / 2, -H / 2);
+  // title
+  if (d.title) {
+    const a = easeOutCubic(clamp(local / 0.4, 0, 1));
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = `700 ${U * 1.8}px ${FONT_STACK.grotesk}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    const ty = vertical ? H * 0.11 : H * 0.12;
+    ctx.fillText(d.title.toUpperCase(), W / 2, ty, W * 0.9);
+    const tw = Math.min(W * 0.9, ctx.measureText(d.title.toUpperCase()).width);
+    ctx.fillStyle = accent;
+    ctx.fillRect(W / 2 - (tw / 2) * a, ty + U * 0.6, tw * a, U * 0.22);
+    ctx.restore();
+  }
+  const n = d.items.length;
+  if (!n) { ctx.restore(); return; }
+  const span = Math.max(0.5, dur * 0.7);
+  const appear = (i: number) => clamp((local - 0.35 - (i * span) / n) / 0.45, 0, 1);
+  const top = vertical ? H * 0.17 : H * 0.22, bottom = H * 0.93;
+
+  if (d.kind === 'timeline') {
+    if (vertical) {
+      const x = W / 2, y0 = top + U, y1 = bottom - U;
+      const step = (y1 - y0) / Math.max(1, n);
+      const prog = clamp((local - 0.3) / span, 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(x - U * 0.1, y0, U * 0.2, y1 - y0);
+      ctx.fillStyle = accent;
+      ctx.fillRect(x - U * 0.1, y0, U * 0.2, (y1 - y0) * prog);
+      const cw = W * 0.4, ch = Math.min(step * 0.92, cw * 0.95);
+      d.items.forEach((it, i) => {
+        const cy = y0 + step * (i + 0.5), a = appear(i);
+        ctx.fillStyle = a > 0 ? accent : 'rgba(255,255,255,0.3)';
+        ctx.beginPath(); ctx.arc(x, cy, U * 0.45, 0, Math.PI * 2); ctx.fill();
+        card(ctx, project, it, i % 2 ? x + U + cw / 2 : x - U - cw / 2, cy, cw, ch, a, accent, U);
+      });
+    } else {
+      const y = (top + bottom) / 2, x0 = W * 0.06, x1 = W * 0.94;
+      const step = (x1 - x0) / Math.max(1, n);
+      const prog = clamp((local - 0.3) / span, 0, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(x0, y - U * 0.1, x1 - x0, U * 0.2);
+      ctx.fillStyle = accent;
+      ctx.fillRect(x0, y - U * 0.1, (x1 - x0) * prog, U * 0.2);
+      const cw = Math.min(step * 0.92, W * 0.24), ch = (bottom - top) / 2 - U * 1.2;
+      d.items.forEach((it, i) => {
+        const cx = x0 + step * (i + 0.5), a = appear(i);
+        ctx.fillStyle = a > 0 ? accent : 'rgba(255,255,255,0.3)';
+        ctx.beginPath(); ctx.arc(cx, y, U * 0.45, 0, Math.PI * 2); ctx.fill();
+        card(ctx, project, it, cx, i % 2 ? y + U + ch / 2 : y - U - ch / 2, cw, ch, a, accent, U);
+      });
+    }
+  } else if (d.kind === 'versus') {
+    const [A, B] = d.items;
+    const cw = vertical ? W * 0.62 : W * 0.34, ch = vertical ? (bottom - top) / 2 - U * 2 : (bottom - top) * 0.85;
+    const pa = vertical ? [W / 2, top + ch / 2 + U] : [W * 0.26, (top + bottom) / 2];
+    const pb = vertical ? [W / 2, bottom - ch / 2 - U] : [W * 0.74, (top + bottom) / 2];
+    if (A) card(ctx, project, A, pa[0], pa[1], cw, ch, appear(0), accent, U);
+    if (B) card(ctx, project, B, pb[0], pb[1], cw, ch, appear(Math.min(1, n - 1)), accent, U);
+    const va = easeOutBack(clamp((local - 0.35 - span * 0.5) / 0.35, 0, 1));
+    if (va > 0) {
+      ctx.save();
+      ctx.translate((pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2);
+      ctx.scale(va, va);
+      ctx.rotate(-0.08);
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      for (let k = 0; k < 16; k++) {
+        const r = (k % 2 ? 2.2 : 3.4) * U, ang = (k / 16) * Math.PI * 2;
+        ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = `${U * 2.6}px ${FONT_STACK.bangers}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = U * 0.3;
+      ctx.strokeStyle = '#000';
+      ctx.strokeText('VS', 0, 0);
+      ctx.fillStyle = '#fff';
+      ctx.fillText('VS', 0, 0);
+      ctx.restore();
+    }
+  } else if (d.kind === 'ranking') {
+    const rows = n, rh = (bottom - top) / rows;
+    const cw = vertical ? W * 0.62 : W * 0.5;
+    d.items.forEach((it, i) => {
+      const order = rows - 1 - i; // countdown: last rank appears first
+      const a = appear(order);
+      const cy = top + rh * (i + 0.5);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = `${rh * 0.6}px ${FONT_STACK.bangers}`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = accent;
+      ctx.fillText(`#${i + 1}`, W / 2 - cw / 2 - U * 0.6, cy);
+      ctx.restore();
+      card(ctx, project, it, W / 2 + U, cy, cw, rh * 0.86, a, accent, U);
+    });
+  } else {
+    // network: first item at the centre when there are 4+, others around
+    const cx = W / 2, cy = (top + bottom) / 2;
+    const hub = n >= 4;
+    const ring = hub ? d.items.slice(1) : d.items;
+    const R = Math.min(W * 0.36, (bottom - top) * 0.36);
+    const pos = d.items.map((_, i) => {
+      if (hub && i === 0) return [cx, cy];
+      const k = hub ? i - 1 : i, m = ring.length;
+      const ang = -Math.PI / 2 + (k / m) * Math.PI * 2;
+      return [cx + Math.cos(ang) * R * (vertical ? 0.95 : 1.25), cy + Math.sin(ang) * R];
+    });
+    const cs = Math.min(W, H) * (n > 5 ? 0.2 : 0.25);
+    const linkT = clamp((local - 0.35 - span) / 0.5, 0, 1);
+    const links: { a: number; b: number; label?: string }[] = d.links.length ? d.links : hub ? ring.map((_, k) => ({ a: 0, b: k + 1 })) : [];
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = U * 0.2;
+    ctx.setLineDash([U * 0.6, U * 0.4]);
+    for (const [li, l] of links.entries()) {
+      const pa = pos[l.a], pb = pos[l.b];
+      if (!pa || !pb) continue;
+      const e = clamp(linkT * links.length - li * 0.5, 0, 1);
+      if (e <= 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(pa[0], pa[1]);
+      ctx.lineTo(lerp(pa[0], pb[0], e), lerp(pa[1], pb[1], e));
+      ctx.stroke();
+      if (l.label && e >= 1) {
+        const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = `700 ${U * 0.7}px ${FONT_STACK.grotesk}`;
+        const tw = ctx.measureText(l.label.toUpperCase()).width;
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.roundRect(mx - tw / 2 - U * 0.4, my - U * 0.55, tw + U * 0.8, U * 1.1, U * 0.55);
+        ctx.fill();
+        ctx.fillStyle = '#140700';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(l.label.toUpperCase(), mx, my);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+    d.items.forEach((it, i) => card(ctx, project, it, pos[i][0], pos[i][1], cs, cs * 1.15, appear(i), accent, U));
+  }
+  ctx.restore();
+}
+
+/* ---------------------------------------------------- vignette & grain */
+
+let grainTile: HTMLCanvasElement | null = null;
+function drawLook(ctx: Ctx, project: Project, W: number, H: number, t: number) {
+  const look = project.look;
+  if (!look) return;
+  if (look.vignette > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(0,0,0,${0.75 * look.vignette})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (look.grain > 0) {
+    if (!grainTile) {
+      grainTile = document.createElement('canvas');
+      grainTile.width = grainTile.height = 256;
+      const x = grainTile.getContext('2d')!;
+      const im = x.createImageData(256, 256);
+      for (let i = 0; i < im.data.length; i += 4) {
+        const v = Math.random() * 255;
+        im.data[i] = im.data[i + 1] = im.data[i + 2] = v;
+        im.data[i + 3] = 255;
+      }
+      x.putImageData(im, 0, 0);
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.09 * look.grain;
+    ctx.globalCompositeOperation = 'overlay';
+    const pat = ctx.createPattern(grainTile, 'repeat')!;
+    const f = Math.floor(t * 24);
+    ctx.translate((f * 97) % 256, (f * 61) % 256);
+    ctx.fillStyle = pat;
+    ctx.fillRect(-256, -256, W + 512, H + 512);
+    ctx.restore();
+  }
 }
 
 function drawTitleCard(ctx: Ctx, W: number, H: number, shot: Shot, local: number, accent: string) {
@@ -472,6 +819,8 @@ export function createRenderer(W: number, H: number): Renderer {
           g.addColorStop(1, 'rgba(0,0,0,0.15)');
           ctx.fillStyle = g;
           ctx.fillRect(0, 0, W, H);
+        } else if (shot.diagram) {
+          drawDiagram(ctx, project, W, H, shot.diagram, local, shot.duration);
         } else drawTitleCard(ctx, W, H, shot, local, project.accent);
         break;
       case 'full': {
@@ -558,9 +907,16 @@ export function createRenderer(W: number, H: number): Renderer {
         const whole: View = baseView({ x: 0, y: 0, w: page.width, h: page.height }, W / H, 'fit', 1.12);
         const tight: View = baseView(shot.rect, W / H, 'fit', 1.5);
         const e = easeInOutCubic(clamp((p - 0.05) / 0.75, 0, 1));
-        const target = { cx: lerp(whole.cx, tight.cx, 0.55), cy: lerp(whole.cy, tight.cy, 0.55), vw: lerp(whole.vw, Math.max(tight.vw, whole.vw * 0.55), 1) };
-        const view = { cx: lerp(whole.cx, target.cx, e), cy: lerp(whole.cy, target.cy, e), vw: lerp(whole.vw, target.vw, e) };
-        const dim = lerp(0.15, 0.68, clamp(local / 0.6, 0, 1));
+        let view: View;
+        if (shot.zone === 'zones') {
+          // zone tour: frame the zone, gentle push-in, neighbours stay visible but dimmed
+          const z = baseView(shot.rect, W / H, 'fit', 1.12);
+          view = { cx: z.cx, cy: z.cy, vw: z.vw * lerp(1.08, 1, easeInOutSine(clamp(p, 0, 1))) };
+        } else {
+          const target = { cx: lerp(whole.cx, tight.cx, 0.55), cy: lerp(whole.cy, tight.cy, 0.55), vw: lerp(whole.vw, Math.max(tight.vw, whole.vw * 0.55), 1) };
+          view = { cx: lerp(whole.cx, target.cx, e), cy: lerp(whole.cy, target.cy, e), vw: lerp(whole.vw, target.vw, e) };
+        }
+        const dim = shot.zone === 'zones' ? 0.5 : lerp(0.15, 0.68, clamp(local / 0.6, 0, 1));
         drawPanelIn(ctx, project, page.id, full, view, shot.rect, { bg: false, dimPage: dim, border: Math.min(W, H) * 0.006 });
         break;
       }
@@ -576,11 +932,15 @@ export function createRenderer(W: number, H: number): Renderer {
 
   function renderState(ctx: Ctx, project: Project, st: State, t: number, face: FaceSource, segs: Seg[]) {
     if (st.kind === 'shot') renderShot(ctx, project, st.ts, t, face, segs);
-    else if (st.kind === 'face') drawFace(ctx, project, { x: 0, y: 0, w: W, h: H }, face, segs, t);
+    else if (st.kind === 'face') drawFaceWithFx(ctx, project, W, H, face, segs, t, (project.fx ?? []).filter((f) => t >= f.start && t < f.start + f.duration));
     else { ctx.fillStyle = '#0B0B0D'; ctx.fillRect(0, 0, W, H); }
   }
 
   function overlays(ctx: Ctx, project: Project, t: number, total: number, st: State) {
+    drawLook(ctx, project, W, H, t);
+    for (const f of project.fx ?? []) {
+      if (f.kind === 'callout' && t >= f.start && t < f.start + f.duration) bigText(ctx, W, H, f, t - f.start, project.accent, false);
+    }
     // subtitles from the transcript
     if (project.subtitleStyle.on && project.subtitles.length) {
       const sub = project.subtitles.find((s) => t >= s.s && t < s.e);

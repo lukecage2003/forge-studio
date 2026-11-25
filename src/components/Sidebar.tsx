@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
-import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, FileVideo } from 'lucide-react';
+import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, FileVideo, Eye, EyeOff, Network } from 'lucide-react';
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
-import { addTitleCard, importAudioFiles, importPages, removePage } from '../actions';
+import { addDiagram, addTitleCard, importAudioFiles, importPages, removePage, togglePageSkip } from '../actions';
 import { importRush } from '../rush';
 import { keepSegments, segsDuration } from '../engine/speech';
 import type { AudioKind } from '../types';
@@ -34,7 +34,7 @@ export function Sidebar() {
         <button className="btn block" onClick={() => pageRef.current?.click()}>
           <ImagePlus size={16} /> Importer des planches
         </button>
-        <input ref={pageRef} type="file" accept="image/*" multiple hidden
+        <input ref={pageRef} type="file" accept="image/*,.pdf,.cbz,.zip,application/pdf" multiple hidden
           onChange={(e) => { void importPages([...(e.target.files ?? [])]); e.target.value = ''; }} />
         <div className="page-list">
           {pages.map((pg, i) => {
@@ -45,7 +45,7 @@ export function Sidebar() {
                 key={pg.id}
                 role="button"
                 tabIndex={0}
-                className={`page-item ${active === pg.id ? 'on' : ''}`}
+                className={`page-item ${active === pg.id ? 'on' : ''} ${pg.skip ? 'skipped' : ''}`}
                 onClick={() => setUI({ activePageId: pg.id, mode: 'cut', selection: { kind: 'page', id: pg.id } })}
                 onKeyDown={(e) => e.key === 'Enter' && setUI({ activePageId: pg.id, mode: 'cut' })}
               >
@@ -53,8 +53,12 @@ export function Sidebar() {
                 <div className="page-meta">
                   <span className="page-num">P.{String(i + 1).padStart(2, '0')}</span>
                   <span className="page-name" title={pg.name}>{pg.name}</span>
-                  <span className="page-shots">{n} case{n > 1 ? 's' : ''}</span>
+                  <span className="page-shots">{pg.skip ? 'exclue du montage' : `${n} ${pg.cut === 'zones' ? 'zones' : pg.cut === 'splash' ? 'pleine page' : n > 1 ? 'cases' : 'case'}`}</span>
                 </div>
+                <button className="icon-btn ghost sm" title={pg.skip ? 'Inclure dans le montage' : 'Exclure du montage (pub, crédits…)'}
+                  onClick={(e) => { e.stopPropagation(); togglePageSkip(pg.id); }}>
+                  {pg.skip ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
                 <button className="icon-btn ghost sm" title="Retirer la planche"
                   onClick={(e) => { e.stopPropagation(); if (confirm('Retirer cette planche et ses cases ?')) removePage(pg.id); }}>
                   <Trash2 size={14} />
@@ -62,11 +66,12 @@ export function Sidebar() {
               </div>
             );
           })}
-          {!pages.length && <p className="empty-hint">Glisse tes planches (JPG, PNG, WebP) n’importe où dans la fenêtre.</p>}
+          {!pages.length && <p className="empty-hint">Glisse tes planches (PDF, CBZ, JPG, PNG) n’importe où dans la fenêtre.</p>}
         </div>
-        <button className="btn ghost block" onClick={() => addTitleCard()}>
-          <Type size={16} /> Ajouter un carton titre
-        </button>
+        <div className="two-btns">
+          <button className="btn ghost" onClick={() => addTitleCard()}><Type size={15} /> Carton titre</button>
+          <button className="btn ghost" onClick={() => addDiagram('timeline')} title="Frise, réseau de personnages, duel ou classement, avec tes cases"><Network size={15} /> Schéma</button>
+        </div>
       </section>
 
       <section className="side-section">
