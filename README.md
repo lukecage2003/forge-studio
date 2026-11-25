@@ -164,7 +164,11 @@ Les temps forts de ta voix (mot appuyé, montée d’énergie) sont repérés su
 Bouton couronne (ou Ctrl+K → « Ma chaîne ») :
 - **Identité** : fond jaune, titres noirs, logo (le logo Forge « creuset griffé » par défaut, ou le tien).
 - **Intro logo** (1,2 s), **carton de chapitre** aux couleurs de la chaîne avant chaque numéro, **écran de fin YouTube** (10 s, deux emplacements pour tes vidéos, en 16:9).
-- **Miniatures YouTube** dans ta DA : grand titre noir espacé, personnages détourés avec contour blanc façon sticker (BiRefNet lite, MIT, local), logo en bas à gauche ; variantes duo, solo et ton visage + personnage. PNG 1280×720.
+- **Miniatures YouTube, en 3 gestes**, sur fond jaune avec aperçu en direct :
+  1. tape le titre (1-2 mots) ;
+  2. ajoute 1 ou 2 personnages : **« Chercher un PNG »** ouvre Google Images (PNG à fond transparent) → clic droit « Copier l’image » → **Ctrl+V** dans Forge ; ou glisse un fichier ; ou prends une case de tes comics ;
+  3. **Télécharger** (PNG 1280×720).
+  Les PNG transparents sont utilisés tels quels ; sinon le fond est retiré tout seul (BiRefNet sur WebGPU, Magic Touch de MediaPipe sinon). Contour blanc, ombre, placement façon affiche et logo en bas à gauche sont automatiques.
 
 Le logo et ses variantes sont dans `brand-kit/` (SVG).
 

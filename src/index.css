@@ -645,3 +645,20 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .thumbs figure { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .thumbs img { width: 100%; border-radius: 6px; box-shadow: var(--shadow); }
+
+/* thumbnail studio */
+.ts { display: flex; flex-direction: column; gap: 10px; }
+.ts-preview { position: relative; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+.ts-preview canvas { width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; }
+.ts-busy { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); color: #fff; font-weight: 600; }
+.ts-busy svg { margin-right: 6px; }
+.ts-title { font: 700 18px "Anton", Impact, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+.ts-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ts-slot { position: relative; height: 92px; display: grid; place-items: center; border: 1px dashed var(--border-2); border-radius: var(--r); background: #FFE500; color: #111; font-size: 12px; font-weight: 700; }
+.ts-slot.on { outline: 2px solid var(--ember); outline-offset: 2px; }
+.ts-slot img { max-height: 84px; max-width: 90%; }
+.ts-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #111; color: #fff; }
+.ts-add { display: flex; flex-direction: column; gap: 8px; }
+.ts-search { display: flex; gap: 6px; }
+.ts-search .input { flex: 1; }
+.ts .help { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

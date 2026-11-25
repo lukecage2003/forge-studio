@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2, Type, Image as ImageIcon, Zap, Droplets, Grid3x3, X } from 'lucide-react';
 import type { Diagram, DiagramKind, FxItem, FxKind, Grade, Look, Rect, Shot } from '../types';
 import { patchShot, update, useStore } from '../store';
@@ -26,7 +26,8 @@ function Crop({ pageId, rect, h = 54 }: { pageId: string; rect: Rect; h?: number
 /** grid of every panel of the project, to pick one */
 export function PanelPicker({ onPick, onClose }: { onPick: (pageId: string, rect: Rect) => void; onClose: () => void }) {
   useMediaVersion();
-  const shots = useStore((s) => s.project.shots.filter((x) => x.pageId));
+  const all = useStore((s) => s.project.shots);
+  const shots = useMemo(() => all.filter((x) => x.pageId), [all]); // a new array per read would loop React
   return (
     <div className="picker">
       <div className="picker-head"><span>Choisis une case</span><button className="icon-btn sm ghost" onClick={onClose} aria-label="Fermer"><X size={14} /></button></div>

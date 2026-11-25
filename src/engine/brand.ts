@@ -191,9 +191,10 @@ export function drawThumbnail(b: Brand, title: string, layout: ThumbLayout, a: H
     const w = s.width * k;
     x.drawImage(s, cx - w / 2, bottom - h, w, h);
   };
-  if (layout === 'solo' && a) place(a, W / 2, H + 40, H * 0.72);
-  else if (layout === 'right' && a) place(a, W * 0.7, H + 30, H * 0.78);
-  else if (a && c2) { place(a, W * 0.25, H + 30, H * 0.68); place(c2, W * 0.7, H + 30, H * 0.72); }
+  // characters big and low, overlapping the bottom edge, like a poster
+  if (layout === 'solo' && a) place(a, W / 2, H + 40, H * 0.8);
+  else if (layout === 'right' && a) place(a, W * 0.68, H + 40, H * 0.86);
+  else if (a && c2) { place(a, W * 0.25, H + 30, H * 0.72); place(c2, W * 0.7, H + 40, H * 0.86); }
   else if (a) place(a, W * 0.62, H + 30, H * 0.74);
   drawLogo(x, b, 28, H - 148, 120);
   return cv;
