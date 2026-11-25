@@ -46,7 +46,7 @@ export type Motion =
 
 export type Framing = 'fit' | 'fill';
 
-export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur';
+export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur' | 'burn';
 
 /**
  * How a comic shot is composed on screen.
@@ -59,7 +59,7 @@ export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 
 export type Layout = 'full' | 'split' | 'pip' | 'grid' | 'page';
 
 export type CaptionPreset = 'tiktok' | 'comic' | 'clean' | 'impact' | 'cinema' | 'neon';
-export type CaptionAnim = 'none' | 'pop' | 'type' | 'words';
+export type CaptionAnim = 'none' | 'pop' | 'type' | 'words' | 'slide';
 
 export interface Caption {
   text: string;
@@ -113,7 +113,7 @@ export interface FxItem {
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
-export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean }
+export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
 

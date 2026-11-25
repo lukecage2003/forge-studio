@@ -69,7 +69,7 @@ function make(ctx: BaseAudioContext, kind: Kind): AudioBuffer {
   return buf;
 }
 
-const MOVING = new Set(['whip', 'slide', 'zoom', 'slash', 'iris', 'glitch']);
+const MOVING = new Set(['whip', 'slide', 'zoom', 'slash', 'iris', 'glitch', 'burn']);
 
 export interface SfxEvent { t: number; kind: Kind; gain: number }
 

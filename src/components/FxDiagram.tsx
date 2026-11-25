@@ -107,9 +107,21 @@ export function LookSection() {
   const look = useStore((s) => s.project.look);
   const hasFace = useStore((s) => !!s.project.aroll);
   const set = (p: Partial<Look>, key?: string) => update((x) => ({ ...x, look: { ...x.look, ...p } }), key);
+  const PRESETS: { l: string; look: Partial<Look>; accent?: string }[] = [
+    { l: 'Naturel', look: { grade: 'natural', vignette: 0.2, grain: 0, paper: 0, handheld: 0.2, chroma: true } },
+    { l: 'Cinéma', look: { grade: 'cinema', vignette: 0.45, grain: 0.35, paper: 0, handheld: 0.35, chroma: false } },
+    { l: 'Pop TikTok', look: { grade: 'punch', vignette: 0.1, grain: 0, paper: 0, handheld: 0.15, chroma: true, speedLines: true }, accent: '#FF3D7F' },
+    { l: 'Noir comics', look: { grade: 'noir', vignette: 0.6, grain: 0.5, paper: 0.3, handheld: 0.25, chroma: false }, accent: '#E0E0E0' },
+    { l: 'Papier rétro', look: { grade: 'warm', vignette: 0.35, grain: 0.25, paper: 0.7, handheld: 0.2, chroma: false }, accent: '#D7261E' },
+  ];
   return (
     <section className="insp-section">
       <div className="insp-head"><h3>Image</h3></div>
+      <div className="look-presets">
+        {PRESETS.map((pr) => (
+          <button key={pr.l} className="chip" onClick={() => update((x) => ({ ...x, look: { ...x.look, ...pr.look }, accent: pr.accent ?? x.accent }))}>{pr.l}</button>
+        ))}
+      </div>
       {hasFace && (
         <div className="seg full">
           {GRADES.map(([g, l]) => <button key={g} className={look.grade === g ? 'on' : ''} onClick={() => set({ grade: g })}>{l}</button>)}
@@ -124,6 +136,11 @@ export function LookSection() {
       <label className="toggle">
         <input type="checkbox" checked={look.motionBlur !== false} onChange={(e) => set({ motionBlur: e.target.checked })} />
         <span className="switch" /><span>Flou de mouvement à l’export<small>Sur les transitions rapides et les impacts</small></span>
+      </label>
+      <Slider label="Texture papier BD" value={look.paper ?? 0} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ paper: v }, 'paper')} />
+      <label className="toggle">
+        <input type="checkbox" checked={look.chroma !== false} onChange={(e) => set({ chroma: e.target.checked })} />
+        <span className="switch" /><span>Aberration chromatique sur les impacts</span>
       </label>
       <Slider label="Grain" value={look.grain} min={0} max={1} step={0.05} fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ grain: v }, 'grain')} />
       {hasFace && (

@@ -25,6 +25,7 @@ export function play() {
     const t = t0 + Math.max(0, ctx.currentTime - T0);
     if (t >= dur) {
       pause();
+      if (getState().ui.loop) { setUI({ playhead: 0 }); play(); return; }
       setUI({ playhead: dur });
       return;
     }

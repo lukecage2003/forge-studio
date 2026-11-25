@@ -58,7 +58,7 @@ export const STYLES: Record<AutoStyle, StyleDef> = {
     splashTr: 'zoom', splashShake: 0, preset: 'clean', anim: 'words', beatEvery: 4,
     soloLayouts: [['full', 6], ['page', 1.2], ['grid', 0.8]],
     faceLayouts: [['full', 6], ['page', 1.3], ['pip', 1.2], ['grid', 0.8], ['split', 0.3]],
-    hook: 3, faceDur: [2.2, 3.5], block: [12, 22], enterTr: 'fade', punchIn: 0.45, drift: 0.4, maxWords: 6, pagePool: ['fade', 'dip', 'blur', 'slide'],
+    hook: 3, faceDur: [2.2, 3.5], block: [12, 22], enterTr: 'fade', punchIn: 0.45, drift: 0.4, maxWords: 6, pagePool: ['fade', 'dip', 'blur', 'slide', 'burn'],
   },
   energetic: {
     label: 'Énergique', desc: 'Face caméra très présente, zooms de coupe, écrans partagés, bulles et multi-cases.',
@@ -80,7 +80,7 @@ export const STYLES: Record<AutoStyle, StyleDef> = {
     face: false, base: 3.4, min: 2, max: 7, intensity: 0.45, glide: 0.8, pageTr: 'fade', pageTrDur: 0.7,
     splashTr: 'zoom', splashShake: 0, preset: 'cinema', anim: 'type', beatEvery: 4,
     soloLayouts: [['full', 6], ['page', 1]], faceLayouts: [['full', 1]],
-    hook: 3, faceDur: [2.5, 3.5], block: [12, 20], enterTr: 'fade', punchIn: 0.3, drift: 0.3, maxWords: 7, pagePool: ['fade', 'blur', 'dip', 'iris'],
+    hook: 3, faceDur: [2.5, 3.5], block: [12, 20], enterTr: 'fade', punchIn: 0.3, drift: 0.3, maxWords: 7, pagePool: ['fade', 'blur', 'dip', 'burn'],
   },
   manga: {
     label: 'Manga', desc: 'Lecture de droite à gauche, impacts, flashs et cadrages nerveux.',

@@ -10,7 +10,7 @@ import { peaks } from '../engine/audio';
 import { seek } from '../engine/transport';
 import { useMediaVersion } from '../lib/hooks';
 import { moveShot } from '../actions';
-import { clamp, fmtShort } from '../lib/util';
+import { clamp, fmtShort, fmtTime } from '../lib/util';
 
 const LANES: { kind: 'face' | 'video' | 'text' | 'fx' | AudioKind; label: string; icon: React.ReactNode }[] = [
   { kind: 'face', label: 'Visage', icon: <ScanFace size={14} /> },
@@ -30,6 +30,7 @@ export function Timeline() {
   const sel = useStore((s) => s.ui.selection);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drop, setDrop] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
 
   const timed = layoutShots(project);
   const overlay = !!project.aroll;
@@ -174,7 +175,8 @@ export function Timeline() {
         </div>
         <div className="tl-scroll" ref={scrollRef}>
           <div className="tl-inner" style={{ width }}>
-            <div className="tl-ruler" onPointerDown={scrub}>
+            <div className="tl-ruler" onPointerDown={scrub} onPointerMove={(e) => setHover(xToT(e.clientX))} onPointerLeave={() => setHover(null)}>
+              {hover != null && <div className="tl-hover" style={{ left: hover * pps }}><span>{fmtTime(hover, project.fps)}</span></div>}
               {ticks.map((t) => (
                 <div key={t} className={`tick ${t % (step * 2) === 0 ? 'major' : ''}`} style={{ left: t * pps }}>
                   {t % (step * 2) === 0 && <span>{t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`}</span>}

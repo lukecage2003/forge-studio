@@ -73,6 +73,9 @@ export function TopBar() {
       <div className="topbar-right">
         <button className="icon-btn" disabled={!canUndo} onClick={undo} title="Annuler (Ctrl+Z)"><Undo2 size={17} /></button>
         <button className="icon-btn" disabled={!canRedo} onClick={redo} title="Rétablir (Ctrl+Maj+Z)"><Redo2 size={17} /></button>
+        <button className="cmd-btn" onClick={() => setUI({ paletteOpen: true })} title="Toutes les commandes">
+          <span>Commandes</span><kbd>Ctrl K</kbd>
+        </button>
         <button className="icon-btn" onClick={() => setUI({ settingsOpen: true })} title="Réglages : Google AI, apprentissage"><Settings2 size={17} /></button>
         <button className="btn accent-outline" onClick={() => setUI({ autoOpen: true })} title="Montage automatique (A)">
           <Wand2 size={16} /> Montage auto

@@ -563,6 +563,48 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   ctx.restore();
 }
 
+/* ---------------------------------------------------- print & lens */
+
+let paperTile: HTMLCanvasElement | null = null;
+/** printed-comic feel: warm paper fibres and a faint halftone over the comic art */
+function drawPaper(ctx: Ctx, W: number, H: number, amount: number) {
+  if (amount <= 0) return;
+  if (!paperTile) {
+    paperTile = document.createElement('canvas');
+    paperTile.width = paperTile.height = 192;
+    const x = paperTile.getContext('2d')!;
+    const im = x.createImageData(192, 192);
+    for (let i = 0; i < im.data.length; i += 4) {
+      const p = i / 4, px = p % 192, py = (p / 192) | 0;
+      const fibre = Math.sin(px * 0.9 + Math.sin(py * 0.13) * 6) * 8 + (Math.random() - 0.5) * 26;
+      const dot = ((px % 6) - 3) ** 2 + ((py % 6) - 3) ** 2 < 3 ? -18 : 0;
+      const v = 236 + fibre + dot;
+      im.data[i] = v; im.data[i + 1] = v - 6; im.data[i + 2] = v - 18; im.data[i + 3] = 255;
+    }
+    x.putImageData(im, 0, 0);
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = 0.55 * amount;
+  ctx.fillStyle = ctx.createPattern(paperTile, 'repeat')!;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/** lens split on impacts: red and blue fringes that settle in a few frames */
+function chroma(ctx: Ctx, W: number, H: number, src: HTMLCanvasElement, amount: number) {
+  if (amount <= 0.02) return;
+  const d = Math.max(1, Math.round(Math.min(W, H) * 0.012 * amount));
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.5 * amount;
+  ctx.filter = 'sepia(1) saturate(6) hue-rotate(-50deg)';
+  ctx.drawImage(src, -d, 0);
+  ctx.filter = 'sepia(1) saturate(6) hue-rotate(170deg)';
+  ctx.drawImage(src, d, 0);
+  ctx.restore();
+}
+
 /* ---------------------------------------------------- vignette & grain */
 
 let grainTile: HTMLCanvasElement | null = null;
@@ -661,6 +703,12 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
     case 'pop': {
       scale = lerp(0.55, 1, easeOutBack(clamp(local / 0.3, 0, 1)));
       alpha = clamp(local / 0.1, 0, 1);
+      break;
+    }
+    case 'slide': {
+      const a = easeOutCubic(clamp(local / 0.35, 0, 1));
+      alpha = a;
+      ctx.translate(0, (1 - a) * size * 0.9);
       break;
     }
     case 'type': {
@@ -1008,6 +1056,7 @@ export function createRenderer(W: number, H: number): Renderer {
       }
     }
     ctx.restore();
+    if (layoutKind !== 'title') drawPaper(ctx, W, H, project.look?.paper ?? 0);
     if (shot.shake > 0 && project.look?.speedLines !== false && layoutKind !== 'title') speedLines(ctx, W, H, local, shot.shake);
     if (shot.pageId == null) {
       drawCaption(ctx, W, H, shot.caption, local, shot.duration, true, undefined, project.accent);
@@ -1024,6 +1073,16 @@ export function createRenderer(W: number, H: number): Renderer {
   }
 
   function overlays(ctx: Ctx, project: Project, t: number, total: number, st: State) {
+    if (project.look?.chroma !== false && st.kind === 'shot' && st.ts.shot.shake > 0) {
+      const local = t - st.ts.start;
+      const amt = Math.exp(-local * 9) * Math.min(1, st.ts.shot.shake);
+      if (amt > 0.02) {
+        actx.setTransform(1, 0, 0, 1, 0, 0);
+        actx.globalAlpha = 1;
+        actx.drawImage(ctx.canvas, 0, 0, W, H);
+        chroma(ctx, W, H, A, amt);
+      }
+    }
     drawLook(ctx, project, W, H, t);
     for (const f of project.fx ?? []) {
       if (f.kind === 'callout' && t >= f.start && t < f.start + f.duration) bigText(ctx, W, H, f, t - f.start, project.accent, false);
@@ -1192,6 +1251,26 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.drawImage(src, W * 0.012 * amt, 0);
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1;
+          break;
+        }
+        case 'burn': {
+          // film burn: a hot light leak sweeps across while the pictures cross
+          ctx.drawImage(A, 0, 0);
+          ctx.globalAlpha = clamp((a - 0.35) / 0.3, 0, 1);
+          ctx.drawImage(B, 0, 0);
+          ctx.globalAlpha = 1;
+          const k = Math.sin(Math.PI * a);
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          const cx = lerp(-W * 0.2, W * 1.2, e), cy = H * (0.3 + 0.4 * Math.sin(a * 3));
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.75);
+          g.addColorStop(0, `rgba(255,236,190,${0.95 * k})`);
+          g.addColorStop(0.25, `rgba(255,140,40,${0.75 * k})`);
+          g.addColorStop(0.6, `rgba(200,40,20,${0.35 * k})`);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, W, H);
+          ctx.restore();
           break;
         }
         case 'dip': {

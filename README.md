@@ -118,6 +118,14 @@ Après chaque montage auto et avant chaque export, Forge vérifie et répare le 
 - **Découpe au pixel** : flèches = 1 px (Maj 10 px), Alt+flèches = taille, aimantation sur les bords des autres cases et de la page (Alt pour désactiver), coordonnées affichées.
 - **Chapitres YouTube** copiés en un clic depuis l’export (couvertures, schémas, cartons).
 
+## 11. Confort
+
+- **Palette de commandes** (Ctrl+K) : toutes les actions au clavier (importer, montage auto, effets, schémas, formats, onglets…).
+- **Styles visuels en un clic** : Naturel, Cinéma, Pop TikTok, Noir comics, Papier rétro.
+- **Appliquer à tous** : même transition ou même mouvement de caméra sur tous les plans.
+- **Aperçu** plein écran et en boucle ; heure exacte au survol de la timeline.
+- **Effets en plus** : brûlure de pellicule (transition), aberration chromatique sur les impacts, texture papier BD, sous-titres « glissé ».
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

@@ -17,6 +17,8 @@ export interface UIState {
   exportOpen: boolean;
   autoOpen: boolean;
   settingsOpen: boolean;
+  paletteOpen: boolean;
+  loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';
 }
@@ -92,7 +94,7 @@ let state: State = {
   project: newProject(),
   ui: {
     selection: null, activePageId: null, playhead: 0, playing: false, mode: 'cut',
-    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, settingsOpen: false, busy: null, saved: 'saved',
+    pxPerSec: 60, safeZones: true, exportOpen: false, autoOpen: false, settingsOpen: false, paletteOpen: false, loop: false, busy: null, saved: 'saved',
   },
   past: [],
   future: [],

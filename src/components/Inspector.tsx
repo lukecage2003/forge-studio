@@ -62,7 +62,7 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
 const TRANSITIONS: [Transition, string][] = [
   ['cut', 'Cut'], ['glide', 'Glisse caméra'], ['fade', 'Fondu'], ['slide', 'Poussée'],
   ['whip', 'Whip'], ['zoom', 'Zoom'], ['flash', 'Flash'], ['slash', 'Coupe BD (diagonale)'],
-  ['iris', 'Iris'], ['glitch', 'Glitch'], ['dip', 'Passage au noir'], ['blur', 'Fondu flou'],
+  ['iris', 'Iris'], ['glitch', 'Glitch'], ['dip', 'Passage au noir'], ['blur', 'Fondu flou'], ['burn', 'Brûlure pellicule'],
 ];
 
 const PRESETS: { v: CaptionPreset; l: string }[] = [
@@ -83,7 +83,7 @@ function LayoutIcon({ l }: { l: Layout }) {
     </svg>
   );
 }
-const ANIMS: [CaptionAnim, string][] = [['none', 'Aucune'], ['pop', 'Pop'], ['type', 'Machine'], ['words', 'Mot à mot']];
+const ANIMS: [CaptionAnim, string][] = [['none', 'Aucune'], ['pop', 'Pop'], ['slide', 'Glissé'], ['type', 'Machine'], ['words', 'Mot à mot']];
 
 function ShotThumb({ shot }: { shot: Shot }) {
   useMediaVersion();
@@ -162,7 +162,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
       </Section>
 
       {!isTitle && (
-        <Section title="Caméra">
+        <Section title="Caméra" aside={<button className="link-btn" title="Même mouvement et intensité pour toutes les cases" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x) => (x.pageId ? { ...x, motion: shot.motion, intensity: shot.intensity, framing: shot.framing } : x)) }))}>Appliquer à tous</button>}>
           <Seg value={shot.framing} options={[['fit', 'Case entière'], ['fill', 'Plein cadre']]}
             onChange={(v) => patchShot(shot.id, { framing: v })} />
           <div className="motion-grid">
@@ -188,7 +188,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
       )}
 
       {(index > 0 || overlay) && (
-        <Section title="Transition d’entrée">
+        <Section title="Transition d’entrée" aside={<button className="link-btn" title="Même transition pour tous les plans" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x, i) => (i === 0 && !p.aroll ? x : { ...x, transition: shot.transition, transitionDur: Math.min(shot.transitionDur, x.duration * 0.45) })) }))}>Appliquer à tous</button>}>
           <select className="input" value={shot.transition} onChange={(e) => patchShot(shot.id, { transition: e.target.value as Transition })}>
             {TRANSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>

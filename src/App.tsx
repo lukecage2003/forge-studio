@@ -9,6 +9,7 @@ import { Timeline } from './components/Timeline';
 import { ExportModal } from './components/ExportModal';
 import { AutoModal } from './components/AutoModal';
 import { SettingsModal } from './components/SettingsModal';
+import { CommandPalette } from './components/CommandPalette';
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
@@ -26,6 +27,7 @@ export default function App() {
   const exportOpen = useStore((s) => s.ui.exportOpen);
   const autoOpen = useStore((s) => s.ui.autoOpen);
   const settingsOpen = useStore((s) => s.ui.settingsOpen);
+  const paletteOpen = useStore((s) => s.ui.paletteOpen);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
   const hasRush = useStore((s) => !!s.project.aroll);
@@ -57,8 +59,9 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen) return;
       const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
       if (e.code === 'Space') { e.preventDefault(); toggle(); return; }
@@ -142,6 +145,7 @@ export default function App() {
       {exportOpen && <ExportModal />}
       {autoOpen && <AutoModal onClose={() => setUI({ autoOpen: false })} />}
       {settingsOpen && <SettingsModal />}
+      {paletteOpen && <CommandPalette onClose={() => setUI({ paletteOpen: false })} />}
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">

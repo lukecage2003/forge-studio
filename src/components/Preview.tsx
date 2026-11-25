@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Pause, Play, SkipBack, SkipForward, ShieldCheck } from 'lucide-react';
+import { Pause, Play, SkipBack, SkipForward, ShieldCheck, Maximize, Repeat } from 'lucide-react';
 import { FORMATS } from '../types';
 import { createRenderer, loadFonts } from '../engine/render';
 import { useMediaVersion } from '../lib/hooks';
@@ -20,6 +20,8 @@ export function Preview() {
   const t = useStore((s) => s.ui.playhead);
   const playing = useStore((s) => s.ui.playing);
   const safe = useStore((s) => s.ui.safeZones);
+  const loop = useStore((s) => s.ui.loop);
+  const screenRef = useRef<HTMLDivElement>(null);
   const { w, h } = FORMATS[project.format];
   const W = Math.round(w * PREVIEW_SCALE), H = Math.round(h * PREVIEW_SCALE);
   const renderer = useMemo(() => createRenderer(W, H), [W, H]);
@@ -68,7 +70,7 @@ export function Preview() {
   return (
     <div className="stage preview">
       <div className="preview-box" ref={boxRef}>
-        <div className="screen" style={{ width: size.w, height: size.h }}>
+        <div className="screen" ref={screenRef} style={{ width: size.w, height: size.h }}>
           <canvas ref={canvasRef} width={W} height={H} onClick={() => toggle()} />
           {safe && project.format === '9:16' && (
             <div className="safe-zones" aria-hidden="true">
@@ -90,6 +92,8 @@ export function Preview() {
           <button className="icon-btn" onClick={() => jump(1)} title="Case suivante"><SkipForward size={17} /></button>
         </div>
         <span className="tc dim">{fmtTime(dur, project.fps)}</span>
+        <button className={`icon-btn ${loop ? 'active' : ''}`} title="Lecture en boucle" onClick={() => setUI({ loop: !loop })}><Repeat size={17} /></button>
+        <button className="icon-btn" title="Plein écran" onClick={() => void screenRef.current?.requestFullscreen?.().catch(() => {})}><Maximize size={17} /></button>
         <button className={`icon-btn ${safe ? 'active' : ''}`} title="Zones de sécurité TikTok (interface de l’appli)"
           onClick={() => { pause(); setUI({ safeZones: !safe }); }} disabled={project.format !== '9:16'}>
           <ShieldCheck size={17} />
