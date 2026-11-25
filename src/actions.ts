@@ -316,7 +316,8 @@ export async function analyzeComics(engine: 'local' | 'google') {
     if (engine === 'local') {
       const { ocrPages } = await import('./engine/understand');
       const texts = await ocrPages(p0, (i, n) => setUI({ busy: i < 0 ? 'Chargement du lecteur de bulles…' : `Lecture des bulles ${Math.min(i + 1, n)}/${n}…` }));
-      update((p) => ({ ...p, shots: p.shots.map((s) => (texts.has(s.id) ? { ...s, text: texts.get(s.id) } : s)) }));
+      const { tagCharacters } = await import('./engine/lexicon');
+      update((p) => tagCharacters({ ...p, shots: p.shots.map((s) => (texts.has(s.id) ? { ...s, text: texts.get(s.id) } : s)) }));
       toast(`Bulles lues sur ${texts.size} cases`);
       return;
     }
@@ -378,3 +379,23 @@ export function swapPanel(shotId: string, pageId: string, rect: Rect) {
 }
 export const confirmMatch = (shotId: string) =>
   update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId && s.match ? { ...s, match: { ...s.match, conf: 1 } } : s)) }));
+
+/** Google search in the background: identify the comics, cast, summary, key facts */
+export async function researchComics() {
+  const { geminiResearch, hasGoogle } = await import('./engine/google');
+  if (!hasGoogle()) { setUI({ settingsOpen: true }); return; }
+  const p = getState().project;
+  const titles = [...new Set(p.pages.map((pg) => (pg.source ?? pg.name).replace(/^[0-9a-f]{6,}-/i, '').replace(/_/g, ' ')))].slice(0, 6);
+  const hints = p.shots.map((s) => s.text).filter(Boolean).join(' ').slice(0, 1500);
+  setUI({ busy: 'Recherche Google sur les comics…' });
+  try {
+    const r = await geminiResearch(titles, hints);
+    const { tagCharacters } = await import('./engine/lexicon');
+    update((x) => tagCharacters({ ...x, research: r }));
+    toast(`Recherche : ${r.title} · ${r.characters.length} personnages`);
+  } catch (e) {
+    toast((e as Error).message, 'error');
+  } finally {
+    setUI({ busy: null });
+  }
+}

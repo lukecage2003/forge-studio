@@ -209,6 +209,8 @@ export interface Project {
   accent: string;
   fx: FxItem[];
   look: Look;
+  /** background research on the comics (Google search grounding) */
+  research?: { title: string; summary: string; characters: { name: string; aliases?: string[]; role?: string }[]; facts: string[]; sources?: string[] };
   /** optional script pasted by the user (narration text) */
   script?: string;
   /** automatic sound design: whooshes on transitions, impacts on splashes */

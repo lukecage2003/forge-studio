@@ -37,6 +37,7 @@ export interface AutoOptions {
   matches?: Record<string, number>;
   /** follow the narration: each sentence gets the panel that illustrates it */
   story?: 'auto' | 'local' | 'google' | false;
+  onProgress?: (label: string, p: number) => void;
 }
 
 interface StyleDef {
@@ -362,7 +363,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   if (o.story && narr.sentences.length && panels.length) {
     /* ============================ story mode: follow the narration ============================ */
     const sents = narr.sentences;
-    const plan = await planStory(proj, panels.map((x) => x.shot), sents, o.story);
+    const plan = await planStory(proj, panels.map((x) => x.shot), sents, o.story, o.onProgress);
     const byId = new Map(panels.map((x) => [x.shot.id, x]));
     const used = new Set<string>();
     const named = new Set<string>();

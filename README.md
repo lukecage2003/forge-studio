@@ -141,6 +141,15 @@ Donne ta voix (rush ou voix off transcrite) ou colle ton script, et tes PDF : Fo
 
 Sans voix transcrite, le script donne des durées estimées (~155 mots/minute) et sert de sous-titres. Une voix off se transcrit depuis son inspecteur (local ou Google).
 
+## 13. Compréhension locale (sans Google)
+
+Forge lit et comprend les comics tout seul ; Google n’est qu’un bonus.
+
+- **Lecture des bulles** : les bulles et récitatifs sont repérés (zones claires contenant du lettrage), agrandis puis lus un par un (Tesseract, anglais + français). Les pages sans bulles sont lues en entier.
+- **Compréhension du sens** : un modèle multilingue (paraphrase-multilingual-MiniLM, ~118 Mo, une seule fois) tourne dans le navigateur. Une phrase en français et une bulle en anglais qui disent la même chose sont rapprochées, puis l’alignement suit l’ordre de lecture.
+- **Lexique des noms** : personnages tirés des cases, du script, des mots récurrents et de la recherche. Il sert à étiqueter les cases avec leurs personnages et à **corriger les noms mal transcrits** (comparaison phonétique : « Laury » → « Laurie », « Ostermann » → « Osterman »).
+- **Recherche Google en arrière-plan** (optionnelle) : identifie le numéro, les personnages et leurs autres noms (identité civile, surnoms), le résumé et des faits clés, avec sources. Ces infos enrichissent le lexique, les étiquettes et l’association par Google.
+
 ## Autres fonctions
 
 - Formats 9:16, 16:9, 1:1, 4:5 et zones de sécurité TikTok.

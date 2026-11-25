@@ -3,7 +3,7 @@ import { Wand2, X, Zap, Film, BookOpen, Loader2, Mic2, GraduationCap, Sparkles }
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
-import { aiRecut, analyzeComics } from '../actions';
+import { aiRecut, analyzeComics, researchComics } from '../actions';
 import { narration } from '../engine/narration';
 import { toast } from './Toast';
 import { FORMATS } from '../types';
@@ -52,7 +52,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const run = async () => {
     try {
       let matches: Record<string, number> | undefined;
-      update((p) => ({ ...p, script }));
+      const { tagCharacters } = await import('../engine/lexicon');
+      update((p) => tagCharacters({ ...p, script }));
       if (story && !narration({ ...getState().project, script }).sentences.length) {
         toast('Pour suivre la narration : transcris la voix (rush ou voix off) ou colle ton script.', 'error');
         return;
@@ -62,6 +63,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         setBusy(storyEngine === 'google' ? 'Google lit les comics…' : 'Lecture des bulles…');
         await analyzeComics(storyEngine);
       } else if (aiCut && google && unsure) { setBusy('Google recoupe les pages incertaines…'); await aiRecut(); }
+      if (story && google && !getState().project.research) { setBusy('Recherche Google sur les comics…'); await researchComics(); }
       const p0 = getState().project;
       if (aiMatch && google && hasFace && hasWords) {
         setBusy('Google associe les cases au script…');
@@ -70,7 +72,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false });
+      const { project, report } = await autoMontage(getState().project, { style, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
       const bits = [`${report.shots} cases`, `${report.duration.toFixed(1)} s`];

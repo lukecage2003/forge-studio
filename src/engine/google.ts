@@ -22,8 +22,9 @@ export function setGoogle(s: GoogleSettings) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage blocked */ }
 }
 export const hasGoogle = () => !!getGoogle().apiKey;
+let lastSources: string[] = [];
 
-async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal) {
+async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal, tools?: unknown[]) {
   const g = getGoogle();
   if (!g.apiKey) throw new Error('Ajoute ta clé API Google (Gemini) dans les réglages.');
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`, {
@@ -32,6 +33,7 @@ async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': g.apiKey },
     body: JSON.stringify({
       contents: [{ role: 'user', parts }],
+      ...(tools ? { tools } : {}),
       generationConfig: { temperature: 0, ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}) },
     }),
   });
@@ -43,6 +45,7 @@ async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal
     throw new Error('Google : ' + msg);
   }
   const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
+  lastSources = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []).map((c: { web?: { uri?: string; title?: string } }) => c.web?.title || c.web?.uri).filter(Boolean);
   return text;
 }
 
@@ -250,7 +253,7 @@ export interface SchemaIdea { kind: 'timeline' | 'network' | 'versus' | 'ranking
  * (explanations, theories, cosmology, recaps: meaning, not just shared words),
  * plus a few schema ideas when the narration lists dates, relations or a duel.
  */
-export async function geminiMatchStory(sentences: string[], catalog: { id: string; line: string }[], signal?: AbortSignal): Promise<{ matches: StoryMatch[]; schemas: SchemaIdea[] }> {
+export async function geminiMatchStory(sentences: string[], catalog: { id: string; line: string }[], signal?: AbortSignal, context = ''): Promise<{ matches: StoryMatch[]; schemas: SchemaIdea[] }> {
   const text = await generate([{
     text:
       `Tu es monteur pour une chaîne YouTube qui explique les comics (histoire, théories, cosmologie, personnages). ` +
@@ -258,7 +261,7 @@ export async function geminiMatchStory(sentences: string[], catalog: { id: strin
       `Pour CHAQUE phrase, choisis 1 à 3 cases qui l'illustrent le mieux (sens, pas seulement les mots ; la narration peut être en français et les comics en anglais), ` +
       `dans l'ordre où les montrer, et une confiance entre 0 et 1 (bas si aucune case ne convient vraiment). ` +
       `Respecte autant que possible l'ordre de l'histoire. Propose aussi 0 à 3 schémas utiles (frise si des dates/époques s'enchaînent, réseau si des liens entre personnages, ` +
-      `versus si une opposition, ranking si un classement), avec les cases à utiliser.\n\nPHRASES :\n` +
+      `versus si une opposition, ranking si un classement), avec les cases à utiliser.\n\n${context}PHRASES :\n` +
       sentences.map((s, i) => `[${i}] ${s}`).join('\n') +
       `\n\nCASES :\n` + catalog.map((c) => `${c.id} : ${c.line}`).join('\n'),
   }], {
@@ -284,5 +287,27 @@ export async function geminiMatchStory(sentences: string[], catalog: { id: strin
     return { matches: o.matches ?? [], schemas: o.schemas ?? [] };
   } catch {
     throw new Error('Réponse de Google illisible pour l’association script ↔ cases.');
+  }
+}
+
+/**
+ * Background research with Google Search grounding: identifies the comics from
+ * their titles and cover text and returns the cast (with aliases), a summary
+ * and key facts. Feeds name correction, character tags and the matcher.
+ */
+export async function geminiResearch(titles: string[], hints: string, signal?: AbortSignal) {
+  const text = await generate([{
+    text:
+      `Recherche sur le web ces comics : ${titles.join(' ; ')}.\nIndices (texte lu dans les pages) : ${hints.slice(0, 1500)}\n\n` +
+      `Réponds UNIQUEMENT par un JSON : {"title": "...", "summary": "résumé en français (5-8 phrases : intrigue, époque, enjeux)", ` +
+      `"characters": [{"name": "nom principal", "aliases": ["autres noms, identité civile, surnoms"], "role": "rôle en quelques mots"}], ` +
+      `"facts": ["faits clés utiles pour une vidéo explicative : dates, auteurs, événements, concepts"]}`,
+  }], undefined, signal, [{ google_search: {} }]);
+  const json = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+  try {
+    const o = JSON.parse(json);
+    return { title: o.title ?? titles[0], summary: o.summary ?? '', characters: o.characters ?? [], facts: o.facts ?? [], sources: lastSources.slice(0, 8) };
+  } catch {
+    throw new Error('La recherche Google n’a pas renvoyé de résultat exploitable.');
   }
 }

@@ -3,7 +3,7 @@ import { ImagePlus, Mic, Music2, Square, Type, Volume2, AudioLines, Trash2, File
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { setUI, useStore } from '../store';
-import { addDiagram, addTitleCard, analyzeComics, classifyWithGoogle, importAudioFiles, importPages, removePage, setPageKind, togglePageSkip } from '../actions';
+import { addDiagram, addTitleCard, analyzeComics, classifyWithGoogle, researchComics, importAudioFiles, importPages, removePage, setPageKind, togglePageSkip } from '../actions';
 import { PAGE_KINDS, type PageKind } from '../types';
 import { hasGoogle } from '../engine/google';
 import { importRush } from '../rush';
@@ -84,6 +84,7 @@ export function Sidebar() {
             <span>Lire les comics</span>
             <button className="btn sm ghost" onClick={() => void analyzeComics('local')} title="Lit le texte des bulles sur ton ordinateur (OCR)">Bulles (local)</button>
             <button className="btn sm google" disabled={!hasGoogle()} onClick={() => void analyzeComics('google')} title="Google décrit chaque page et chaque case : personnages, action, dialogues">Google</button>
+            <button className="btn sm google" disabled={!hasGoogle()} onClick={() => void researchComics()} title="Recherche web : identifie le numéro, les personnages (et leurs autres noms), le résumé">Recherche</button>
           </div>
         )}
         <div className="two-btns">

@@ -8,6 +8,7 @@ import { geminiTranscribe, getGoogle } from './engine/google';
 import { buildSubtitles, timelineWords, STYLES } from './engine/auto';
 import { toast } from './components/Toast';
 import { trackFaces } from './engine/faces';
+import { comicNames, correctNames } from './engine/lexicon';
 import { getVideo } from './engine/media';
 
 const cache = new Map<string, { pcm: Float32Array; a: Analysis }>();
@@ -86,8 +87,9 @@ export async function transcribe(engine: 'whisper' | 'gemini', model: WhisperMod
       setUI({ busy: 'Chargement de Whisper…' });
       words = await whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label }));
     }
-    setAroll((x) => ({ ...x, words, transcriptSource: engine }));
-    toast(`${words.length} mots transcrits`);
+    const fix = correctNames(words, comicNames(getState().project));
+    setAroll((x) => ({ ...x, words: fix.words, transcriptSource: engine }));
+    toast(`${words.length} mots transcrits${fix.fixed ? ` · ${fix.fixed} noms corrigés d’après les comics` : ''}`);
     await roughCut();
   } catch (e) {
     toast((e as Error).message, 'error');
@@ -185,8 +187,9 @@ export async function transcribeClip(id: string, engine: 'whisper' | 'gemini', m
     const words = engine === 'gemini'
       ? await geminiTranscribe(pcm, (p) => setUI({ busy: `Transcription Google… ${Math.round(p * 100)} %` }))
       : await whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label }));
-    update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === id ? { ...x, words } : x)) }));
-    toast(`Voix off transcrite : ${words.length} mots`);
+    const fix = correctNames(words, comicNames(getState().project));
+    update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === id ? { ...x, words: fix.words } : x)) }));
+    toast(`Voix off transcrite : ${words.length} mots${fix.fixed ? ` · ${fix.fixed} noms corrigés` : ''}`);
   } catch (e) {
     toast((e as Error).message, 'error');
   } finally {
