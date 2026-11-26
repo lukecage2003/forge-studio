@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Download, Wand2, FolderOpen, FilePlus2, Redo2, Save, Undo2, Settings2, Crown, Bot, MessageSquareText } from 'lucide-react';
+import { Download, Wand2, FolderOpen, FilePlus2, FolderKanban, Redo2, Save, Undo2, Settings2, Crown, Bot, MessageSquareText } from 'lucide-react';
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
@@ -28,17 +28,28 @@ export function TopBar() {
       toast((e as Error).message, 'error');
     }
   };
-  const fresh = () => {
+  const where = useStore((s) => s.ui.where);
+  const whereName = useStore((s) => s.ui.whereName);
+  const fresh = async () => {
+    // with a project workspace the current project is saved first, nothing to confirm
+    const S = await import('../lib/studio');
+    if (S.workspace()) { await S.createProject('Nouveau projet'); toast('Nouveau projet créé (le précédent est dans Projets)'); return; }
     if (getState().project.shots.length && !confirm('Créer un nouveau projet ? Pense à enregistrer le projet actuel (.forge).')) return;
     loadProject(newProject());
   };
+  const reconnect = async () => {
+    const S = await import('../lib/studio');
+    toast((await S.reconnectFolder()) ? 'Dossier de projets reconnecté' : 'Accès au dossier refusé', 'info');
+  };
+  const savedTitle = saved !== 'saved' ? 'Sauvegarde…' : where === 'folder' ? `Enregistré dans le dossier « ${whereName} »` : where === 'reconnect' ? 'Gardé dans le navigateur : dossier à reconnecter' : where === 'browser' ? 'Enregistré dans ce navigateur' : 'Sauvegardé localement';
 
   return (
     <header className="topbar">
       <Wordmark size={30} />
       <div className="topbar-sep" />
       <div className="file-actions">
-        <button className="icon-btn" title="Nouveau projet" onClick={fresh}><FilePlus2 size={17} /></button>
+        <button className="icon-btn" title="Projets : liste, avancement, versions" aria-label="Projets" onClick={() => setUI({ projectsOpen: true })}><FolderKanban size={17} /></button>
+        <button className="icon-btn" title="Nouveau projet" onClick={() => void fresh()}><FilePlus2 size={17} /></button>
         <button className="icon-btn" title="Ouvrir un projet .forge" onClick={() => openRef.current?.click()}><FolderOpen size={17} /></button>
         <button className="icon-btn" title="Enregistrer le projet (.forge)" onClick={saveFile}><Save size={17} /></button>
         <input ref={openRef} type="file" accept=".forge,application/json,application/zip" hidden onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
@@ -49,7 +60,8 @@ export function TopBar() {
         aria-label="Nom du projet"
         onChange={(e) => update((p) => ({ ...p, name: e.target.value }), 'name')}
       />
-      <span className={`save-dot ${saved}`} title={saved === 'saved' ? 'Sauvegardé localement' : 'Sauvegarde…'} />
+      <span className={`save-dot ${where === 'reconnect' && saved === 'saved' ? 'reconnect' : saved}`} title={savedTitle} aria-label={savedTitle} role="status" />
+      {where === 'reconnect' && <button className="btn sm topbar-reconnect" onClick={() => void reconnect()}>Reconnecter le dossier</button>}
 
       <div className="topbar-center">
         <div className="seg" role="radiogroup" aria-label="Format">

@@ -15,6 +15,7 @@ Comic video editor (TikTok, Shorts, YouTube) in the browser: React 19 + TypeScri
 | Live services | `FORGE_LIVE=1 npx vitest run tests/live.test.ts` (no key needed) |
 | Build | `npm run build` |
 | Dev server | `npx vite --port 5199 --strictPort` (end-to-end scripts drive it with Playwright) |
+| End-to-end | `node tests/e2e/studio.e2e.cjs` against the dev server. Restart the dev server after editing sources first: Vite's HMR timestamps can load a second copy of a module (two stores), which breaks scripts that import modules directly. |
 
 ## Invariants (never break)
 - **Preview equals export.** One renderer, `createRenderer().draw(ctx, project, t)` in `src/engine/render.ts`, and it is a pure function of time.
@@ -32,6 +33,7 @@ Comic video editor (TikTok, Shorts, YouTube) in the browser: React 19 + TypeScri
 | Folder | Contents |
 |---|---|
 | `src/engine/` | Pure engines: `render` (frame), `auto` (auto edit), `direction` (8 creative profiles + effect budget), `director` (Creative Director: editorial sequences, treatments, camera grammar, transition diversity; runs after `direction`), `narrative` / `scriptIntel` (script understanding), `speech` (rough cut), `faces` (`cameraPath` = vertical reframing), `audio` / `loudness` / `denoise` / `voicepro` (sound), `library` (music), `export` (MP4 via mediabunny/WebCodecs), `otio` (DaVinci), `report` / `qc` (quality), `scene3d` (three.js), `gl/` (GPU transitions), `hardware` (PC profile), `panelAI` (local YOLO panel + balloon detector, model in `public/models`), `paddleOcr` (local PaddleOCR line detection + English reading of the lettering, Tesseract as fallback; `understand.ocrPages` groups lines by balloon), `classify` (page kinds), `ink` ("Encre" comic-print look of diagrams and maps), `hold` (display time per image), `styles` (8 art directions), `favorites` (user presets), `camerapath` (smooth keyed camera paths), `comicCamera` (comic camera engine: page glide, panel navigation, reveal, detail, shared composition, panel shapes) |
+| `src/lib/` | `workspace` (project storage: folder on disk or browser OPFS, versions, templates, shared media), `studio` (session side: autosave, crash recovery, open / create / duplicate projects), `projectFile` (.forge zip with every media), `db` (IndexedDB journal and media cache) |
 | `src/ai/` | Multi-AI orchestrator: `types`, `config`, `vault`, `ledger` (quotas, cost, cache, history), `providers/*`, `models`, `orchestrator`, `prompts`, `tasks` |
 | `src/components/` | UI, one modal per feature, lazy-loaded from `App.tsx` |
 | `bridge/` | Optional local Node helper (OS keychain, Cloudflare, NVIDIA, whisper.cpp) |

@@ -805,3 +805,43 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .crop { background-repeat: no-repeat; border-radius: 4px; }
 .crop.empty { width: 120px; background: #222; }
 .review-done { padding: 30px 0; display: grid; gap: 12px; justify-items: center; }
+
+/* ---------- projects (production studio) */
+.projects-modal { width: min(760px, 100%); }
+.pj-tabs { align-self: flex-start; flex-wrap: wrap; }
+.pj-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.pj-section { border-top: 0; padding-top: 0; }
+.pj-new { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pj-new .input { flex: 1 1 200px; min-width: 0; }
+.pj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pj-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.pj-list li.current { border-color: var(--ember); }
+.pj-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.pj-main b { font-size: 13.5px; overflow-wrap: anywhere; }
+.pj-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 11.5px; align-items: center; }
+.pj-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.pj-status { padding: 1px 8px; border-radius: 10px; background: var(--surface-3); color: var(--text-2); font-weight: 600; }
+.pj-status.s-montage, .pj-status.s-finition { background: var(--ember-soft); color: var(--text); }
+.pj-status.s-publie { background: rgba(74, 222, 128, 0.14); color: var(--ok); }
+.pj-auto { color: var(--muted); font-style: italic; }
+.pj-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pj-open-tag { font-size: 11.5px; font-weight: 600; color: var(--ember); padding: 0 6px; }
+.pj-confirm { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.pj-empty { color: var(--muted); font-size: 12.5px; justify-content: center !important; }
+.btn.danger { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.55); color: #fecaca; }
+.btn.danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.26); }
+.pj-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+.pj-step { height: 30px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--bg-2); color: var(--text-2); font-weight: 600; font-size: 12px; cursor: pointer; }
+.pj-step.done { color: var(--text); border-color: var(--border-2); }
+.pj-step.on { background: var(--ember-soft); border-color: var(--ember); color: var(--text); }
+.pj-step:focus-visible { outline: 2px solid var(--ember); outline-offset: 1px; }
+.pj-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pj-tasks li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-sm); }
+.pj-tasks li:hover { background: var(--bg-2); }
+.pj-tasks label { display: flex; gap: 8px; align-items: center; flex: 1; font-size: 13px; cursor: pointer; min-width: 0; }
+.pj-tasks li.done label { color: var(--muted); text-decoration: line-through; }
+.pj-phase { font-size: 11px; color: var(--muted); }
+.pj-where { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.pj-where svg { color: var(--ember); flex: none; margin-top: 2px; }
+.save-dot.reconnect { background: #facc15; }
+.topbar-reconnect { height: 28px; font-size: 12px; }
