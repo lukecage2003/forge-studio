@@ -13,7 +13,7 @@ import { FORMATS } from '../types';
 const ICONS = { explainer: GraduationCap, energetic: Mic2, dynamic: Zap, cinematic: Film, manga: BookOpen };
 const LENGTHS: { v: AutoLength; l: string }[] = [
   { v: 'auto', l: 'Auto' }, { v: 'voice', l: 'Suivre la voix' }, { v: 15, l: '15 s' }, { v: 30, l: '30 s' },
-  { v: 60, l: '60 s' }, { v: 90, l: '90 s' }, { v: 180, l: '3 min' },
+  { v: 60, l: '1 min' }, { v: 90, l: '90 s' }, { v: 120, l: '2 min' }, { v: 180, l: '3 min' }, { v: 240, l: '4 min' }, { v: 300, l: '5 min' },
 ];
 
 export function AutoModal({ onClose }: { onClose: () => void }) {

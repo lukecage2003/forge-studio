@@ -36,7 +36,7 @@ export const MODELS: Record<ProductionModel, { label: string; desc: string; prof
 };
 
 export type AutoStyle = 'explainer' | 'energetic' | 'dynamic' | 'cinematic' | 'manga';
-export type AutoLength = 'auto' | 'voice' | 15 | 30 | 60 | 90 | 180;
+export type AutoLength = 'auto' | 'voice' | 15 | 30 | 60 | 90 | 120 | 180 | 240 | 300;
 
 export interface AutoOptions {
   style: AutoStyle;
@@ -700,6 +700,19 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       }
     }
     if (o.length === 'voice' && !voiceEnd) notes.push('Pas de voix off : durée calculée automatiquement.');
+
+    // a long video from too few panels: no shot may outstay attention (about 6 s
+    // a panel, 9 s a grid or a talky panel); the video gets shorter and says why
+    if (target && !followedVoice && list.length) {
+      const cap = (x: Panel) => Math.max(readFloor(x) * 1.6, x.shot.group ? 9 : 6);
+      const most = list.reduce((a, x) => a + cap(x), 0) + hookDur + titleDur;
+      if (most < target * 0.92) {
+        const perPanel = 3.2;
+        const missing = Math.ceil((target - most) / perPanel);
+        notes.push(`Pas assez de cases pour ${Math.round(target / 60 * 10) / 10} min sans voix off : la vidéo dure ${Math.round(most)} s pour garder du rythme. Ajoute environ ${missing} cases (${Math.max(1, Math.round(missing / 6))} numéro(s) de plus) ou une voix off pour atteindre la durée.`);
+        target = Math.round(most);
+      }
+    }
 
     let durs = list.map((x) => st.base * x.w * pace * (x.shot.group ? 1 + x.shot.group.length * 0.5 : 1));
     if (target) {

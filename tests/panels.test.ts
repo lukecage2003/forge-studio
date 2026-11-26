@@ -86,3 +86,48 @@ describe('grille de cases justifiée', async () => {
     }
   });
 });
+
+describe('genre de page lu dans le texte', async () => {
+  const { readPageText, kindFromText } = await import('../src/engine/classify');
+  it('« EGO SUM » avec ses crédits est une page de titre, pas une planche', () => {
+    const ocr = 'EGO SUM J. MICHAEL STRACZYNSKI script ADAM HUGHES art LAURA MARTIN colors STEVE WANDS letters ADAM HUGHES cover NEAL ADAMS variant cover CAMILLA ZHANG asst. editor CHRIS CONROY assoc. editor MARK CHIARELLO editor WATCHMEN created by ALAN MOORE and DAVE GIBBONS';
+    const r = kindFromText(readPageText(ocr), 0, 0.7);
+    expect(r?.kind).toBe('title');
+  });
+  it('crédits en français', () => {
+    expect(kindFromText(readPageText('Scénario : Jean Dupont · Dessin : Marie Martin · Couleurs : Studio X'), 0, 0.6)?.kind).toBe('title');
+  });
+  it('une planche avec des dialogues ne devient pas une page de crédits', () => {
+    expect(kindFromText(readPageText('I AM LEAVING THE INTRINSIC FIELD CHAMBER TO HAVE LUNCH WITH JANEY. THE WATCH IS BROKEN.'), 6, 0.3)).toBeNull();
+  });
+  it('une publicité', () => {
+    expect(kindFromText(readPageText('NOW AVAILABLE in stores and on www.dccomics.com — subscribe today, order now'), 0, 0.8)?.kind).toBe('ad');
+  });
+});
+
+describe('pages hybrides et récitatifs', async () => {
+  const { readPageText, kindFromText } = await import('../src/engine/classify');
+  it('planche d’ouverture (récit + crédits) reste une planche, crédits retirés', () => {
+    const r = kindFromText(readPageText('AMEN. CHANGES IN PERSPECTIVE J. MICHAEL STRACZYNSKI script ADAM HUGHES art LAURA MARTIN colors STEVE WANDS letters'), 2, 0.3, 4);
+    expect(r?.kind).toBe('story');
+    expect(r?.dropCredits).toBe(true);
+  });
+  it('une planche pleine de récitatifs n’est pas une page de texte', () => {
+    const long = Array.from({ length: 160 }, (_, i) => 'reality' + (i % 7)).join(' ');
+    expect(kindFromText(readPageText(long), 1, 0.3, 5)).toBeNull();
+    expect(kindFromText(readPageText(long), 0, 0, 0)?.kind).toBe('text');
+  });
+  it('situe le bloc des crédits', () => {
+    const boxes = [
+      { t: 'AMEN.', x: 100, y: 300, w: 60, h: 20 },
+      { t: 'CHANGES', x: 80, y: 1000, w: 300, h: 70 }, { t: 'PERSPECTIVE', x: 80, y: 1080, w: 400, h: 70 },
+      { t: 'STRACZYNSKI', x: 80, y: 1180, w: 150, h: 20 }, { t: 'script', x: 240, y: 1180, w: 50, h: 20 },
+      { t: 'HUGHES', x: 320, y: 1180, w: 80, h: 20 }, { t: 'art', x: 410, y: 1180, w: 30, h: 20 },
+      { t: 'MARTIN', x: 80, y: 1210, w: 80, h: 20 }, { t: 'colors', x: 170, y: 1210, w: 60, h: 20 },
+    ];
+    const pt = readPageText(boxes.map((b) => b.t).join(' '), boxes);
+    expect(pt.creditsBox).toBeDefined();
+    expect(pt.creditsBox!.y).toBeLessThan(1000);
+    expect(pt.creditsBox!.y).toBeGreaterThan(400);
+  });
+});

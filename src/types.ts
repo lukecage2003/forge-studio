@@ -41,7 +41,7 @@ export const PAGE_KINDS: Record<PageKind, { label: string; skip: boolean }> = {
   story: { label: 'Planche', skip: false },
   cover: { label: 'Couverture', skip: false },
   variant: { label: 'Couverture variante', skip: true },
-  title: { label: 'Page de titre', skip: false },
+  title: { label: 'Titre / crédits', skip: true },
   splash: { label: 'Pleine page', skip: false },
   spread: { label: 'Double page', skip: false },
   text: { label: 'Texte / crédits', skip: true },

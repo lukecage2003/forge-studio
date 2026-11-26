@@ -4,7 +4,7 @@ import { getState, newShot, setUI, update } from './store';
 import { getImage, importAudio, importImage } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
-import { classifyPage, hashDistance, medianAspect, pageHash } from './engine/classify';
+import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, readPageText, trimBottomToArt, type PageText } from './engine/classify';
 import { comicOrder, cutPageSmart, detectWithAI } from './engine/panelAI';
 import type { PageCut } from './engine/detect';
 import { PAGE_KINDS, type PageKind } from './types';
@@ -46,6 +46,26 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
         if (cut.by === 'ia') byAI++;
       }
     }
+    // pages that may not be story pages (few balloons, or the first/last ones of a file):
+    // read their text, because credits, ads and prose say what they are better than the picture
+    const texts = new Map<string, PageText>();
+    if (opts.autoCut) {
+      const suspects = pages.filter((pg) => {
+        const c = cuts.get(pg.id);
+        const i = pg.srcIndex ?? 0, n = pg.srcCount ?? 1;
+        return (c?.bubbles ?? -1) <= 2 || i < 6 || i >= n - 4;
+      });
+      try {
+        const { pageText } = await import('./engine/understand');
+        for (let i = 0; i < suspects.length; i++) {
+          setUI({ busy: `Lecture du texte des pages spéciales ${i + 1}/${suspects.length}…` });
+          const a = getImage(suspects[i].mediaId);
+          if (a) { const r = await pageText(a.img, a.width, a.height); texts.set(suspects[i].id, readPageText(r.text, r.words)); }
+        }
+      } catch {
+        toast('Lecture du texte des pages indisponible (hors ligne ?) : classement par l’image seulement.', 'info');
+      }
+    }
     // scan duplicates: same picture as an earlier page of the import or of the project
     const seen = [...getState().project.pages, ...pages].map((pg) => {
       const a = getImage(pg.mediaId);
@@ -70,6 +90,21 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
             srcIndex: pg.srcIndex ?? 0, srcCount: pg.srcCount ?? 1, medianAspect: aspects.get(pg.source ?? '') ?? 0.65,
             hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined, bubbles: cut.bubbles,
           });
+          const pt = texts.get(pg.id);
+          const byText = pt && !(pg.kindWhy && cls.why === 'ComicInfo.xml') ? kindFromText(pt, cut.bubbles, cut.diag?.biggest ?? (cut.kind === 'splash' ? 1 : 0), cut.kind === 'panels' ? cut.rects.length : 0) : null;
+          // the first page of a file stays its cover even when it names its authors
+          if (byText && !(cls.kind === 'cover' && pg.srcIndex === 0)) { cls.kind = byText.kind; cls.why = byText.why; }
+          // opening page: panels that sit on the credits block are not story
+          if (byText?.dropCredits) cut.rects = cut.rects.map((r) => trimBottomToArt(a.img, a.width, a.height, r));
+          if (byText?.dropCredits && pt?.creditsBox) {
+            const cb = pt.creditsBox;
+            const over = (r: Rect) => { const w = Math.min(r.x + r.w, cb.x + cb.w) - Math.max(r.x, cb.x), h = Math.min(r.y + r.h, cb.y + cb.h) - Math.max(r.y, cb.y); return w > 0 && h > 0 ? (w * h) / (r.w * r.h) : 0; };
+            // a panel that runs into the block from above stops where the block starts;
+            // a panel inside the block goes
+            cut.rects = cut.rects
+              .map((r) => (over(r) > 0 && cb.y > r.y + r.h * 0.25 ? { ...r, h: Math.round(cb.y - r.y) } : r))
+              .filter((r) => over(r) < 0.4);
+          }
           prev = { source: pg.source, kind: cls.kind };
           pg.kind = cls.kind;
           pg.kindWhy = cls.why;

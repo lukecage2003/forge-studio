@@ -237,3 +237,20 @@ export function matchLocal(sentences: Sentence[], docs: Doc[], sim?: Float32Arra
     return { sentence: i, shotId: docs[chosen].id, conf, alts: ranked.filter((k) => k !== chosen && row[k] > 0).slice(0, 3).map((k) => docs[k].id) };
   });
 }
+
+/** whole-page reading (credits, ads, prose pages): local Tesseract, about 2–4 s a page */
+export async function pageText(img: CanvasImageSource, width: number, height: number): Promise<{ text: string; words: { t: string; x: number; y: number; w: number; h: number }[] }> {
+  const w = await ocrWorker();
+  const k = Math.min(2, 2000 / Math.max(width, height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(width * k); c.height = Math.round(height * k);
+  const x = c.getContext('2d')!;
+  x.filter = 'grayscale(1) contrast(1.5)';
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(img, 0, 0, c.width, c.height);
+  x.filter = 'none';
+  const { data } = await w.recognize(c);
+  const words = data.words.filter((wd) => wd.confidence >= 55)
+    .map((wd) => ({ t: wd.text, x: wd.bbox.x0 / k, y: wd.bbox.y0 / k, w: (wd.bbox.x1 - wd.bbox.x0) / k, h: (wd.bbox.y1 - wd.bbox.y0) / k }));
+  return { text: words.map((w) => w.t).join(' '), words };
+}
