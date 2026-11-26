@@ -9,7 +9,7 @@ import { play, seek } from '../engine/transport';
 import type { Project, Shot } from '../types';
 
 const LAYOUT_FR: Record<string, string> = { full: 'case plein écran', split: 'écran partagé', pip: 'bulle visage', grid: 'multi-cases', page: 'page entière' };
-const MOTION_FR: Record<string, string> = { auto: 'mouvement auto', static: 'fixe', 'zoom-in': 'zoom avant', 'zoom-out': 'zoom arrière', 'pan-left': 'panoramique ←', 'pan-right': 'panoramique →', 'pan-up': 'panoramique ↑', 'pan-down': 'panoramique ↓' };
+const MOTION_FR: Record<string, string> = { auto: 'mouvement auto', static: 'fixe', 'zoom-in': 'zoom avant', 'zoom-out': 'zoom arrière', 'pan-left': 'panoramique ←', 'pan-right': 'panoramique →', 'pan-up': 'panoramique ↑', 'pan-down': 'panoramique ↓', read: 'la caméra lit les bulles' };
 const mmss = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
 /** one line of the journal: what the shot is and why */

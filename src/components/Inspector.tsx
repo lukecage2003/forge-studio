@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   Copy, Trash2, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Sparkles, Pause as Still, Scissors, Plus, Minus, FileVideo,
+  MessageCircle,
 } from 'lucide-react';
 import type { AudioClip, CaptionAnim, CaptionPreset, Layout, Motion, Shot, Transition, Background, ARoll } from '../types';
 import { getState, patchCaption, patchShot, setUI, update, useStore } from '../store';
@@ -64,6 +65,7 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
   { v: 'pan-right', l: 'Droite', i: <ArrowRight size={16} /> },
   { v: 'pan-up', l: 'Haut', i: <ArrowUp size={16} /> },
   { v: 'pan-down', l: 'Bas', i: <ArrowDown size={16} /> },
+  { v: 'read', l: 'Bulles', i: <MessageCircle size={16} /> },
 ];
 
 const TR_GROUPS = (Object.keys(CATEGORIES) as Category[]).map((c) => ({ c, label: CATEGORIES[c], items: TRANSITIONS.filter((t) => t.category === c) }));
@@ -301,7 +303,7 @@ function ProjectPanel() {
       </div>
       <ReviewList />
       <Section title="Arrière-plan">
-        <Seg<Background> value={p.background} options={[['blur', 'Flou'], ['halftone', 'Trame'], ['page', 'Planche'], ['color', 'Uni']]} onChange={(v) => set({ background: v })} />
+        <Seg<Background> value={p.background} options={[['blur', 'Flou'], ['halftone', 'Trame'], ['page', 'Planche'], ['color', 'Uni'], ['paper', 'Papier']]} onChange={(v) => set({ background: v })} />
         {p.background === 'color' && (
           <label className="color-row">
             <input type="color" value={p.bgColor} onChange={(e) => set({ bgColor: e.target.value }, 'bgc')} />

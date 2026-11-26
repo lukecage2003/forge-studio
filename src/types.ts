@@ -51,7 +51,9 @@ export const PAGE_KINDS: Record<PageKind, { label: string; skip: boolean }> = {
 
 export type Motion =
   | 'auto' | 'static' | 'zoom-in' | 'zoom-out'
-  | 'pan-left' | 'pan-right' | 'pan-up' | 'pan-down';
+  | 'pan-left' | 'pan-right' | 'pan-up' | 'pan-down'
+  /** the camera reads the balloons of the panel one after the other */
+  | 'read';
 
 export type Framing = 'fit' | 'fill';
 
@@ -213,7 +215,7 @@ export interface RoughCutSettings {
 
 export interface Subtitle { s: number; e: number; text: string; words: { w: string; s: number; e: number }[] }
 
-export type Background = 'blur' | 'color' | 'page' | 'halftone';
+export type Background = 'blur' | 'color' | 'page' | 'halftone' | 'paper';
 
 export interface Project {
   id: string;

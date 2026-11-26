@@ -37,3 +37,24 @@ describe('découpe depuis le détecteur IA', () => {
     expect(cutFromDetection(det([R(0, 0, 1000, 700)], 0.2), 1000, 1500)).toBeNull();
   });
 });
+
+describe('caméra qui lit les bulles', async () => {
+  const { cameraAt, resolveMotion } = await import('../src/engine/render');
+  const shot = {
+    id: 's', pageId: 'p', rect: R(0, 0, 1000, 600), motion: 'auto', framing: 'fit', intensity: 0.6, duration: 4,
+    balloons: [R(50, 40, 160, 100), R(780, 420, 160, 100)],
+  } as unknown as Parameters<typeof cameraAt>[0];
+  it('choisit le mouvement « bulles » quand elles sont écartées', () => {
+    expect(resolveMotion(shot, 9 / 16, false).motion).toBe('read');
+    expect(resolveMotion({ ...shot, balloons: [R(50, 40, 100, 80), R(120, 60, 100, 80)] }, 9 / 16, false).motion).not.toBe('read');
+  });
+  it('part de la 1re bulle et finit sur la dernière, sans sortir de la case', () => {
+    const a = cameraAt(shot, 0, 9 / 16, false), b = cameraAt(shot, 1, 9 / 16, false);
+    expect(a.cx).toBeLessThan(b.cx);
+    expect(a.cy).toBeLessThan(b.cy);
+    for (const v of [a, b]) {
+      expect(v.cx - v.vw / 2).toBeGreaterThanOrEqual(-0.01);
+      expect(v.cx + v.vw / 2).toBeLessThanOrEqual(1000.01);
+    }
+  });
+});

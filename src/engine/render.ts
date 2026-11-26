@@ -50,8 +50,19 @@ export type FaceSource = (src: number) => CanvasImageSource | null;
 
 /* ---------------------------------------------------------------- camera */
 
+/** balloons far enough apart inside the panel for the camera to travel between them */
+export function readable(shot: Shot) {
+  const b = shot.balloons;
+  if (!b || b.length < 2) return false;
+  const cx = b.map((r) => r.x + r.w / 2), cy = b.map((r) => r.y + r.h / 2);
+  const spread = Math.max((Math.max(...cx) - Math.min(...cx)) / shot.rect.w, (Math.max(...cy) - Math.min(...cy)) / shot.rect.h);
+  return spread >= 0.3;
+}
+
 export function resolveMotion(shot: Shot, aspect: number, rtl: boolean) {
+  if (shot.motion === 'read') return readable(shot) ? { motion: 'read' as const, framing: 'fill' as const } : { motion: 'zoom-in' as const, framing: shot.framing };
   if (shot.motion !== 'auto') return { motion: shot.motion, framing: shot.framing };
+  if (readable(shot)) return { motion: 'read' as const, framing: 'fill' as const };
   const ratio = shot.rect.w / shot.rect.h / aspect;
   if (ratio > 1.35) return { motion: rtl ? 'pan-left' : 'pan-right', framing: 'fill' as const };
   if (ratio < 1 / 1.35) return { motion: 'pan-down' as const, framing: 'fill' as const };
@@ -93,6 +104,22 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
       const range = span > 1 ? span / 2 : vh * 0.06 * k;
       const d = motion === 'pan-down' ? lerp(-range, range, e) : lerp(range, -range, e);
       return { ...v, cy: v.cy + d };
+    }
+    case 'read': {
+      // the eye goes balloon to balloon: hold on each, then a smooth move to the next
+      const b = shot.balloons ?? [];
+      // close enough to read, never so close that a balloon is cut
+      const need = Math.max(...b.map((q) => Math.max(q.w * 1.25, q.h * 1.3 * aspect)));
+      const vw = Math.min(Math.max(v.vw * lerp(1, 0.84, k), need), Math.max(v.vw, r.w)), h2 = vw / aspect;
+      const fit = (x: number, y: number) => ({
+        cx: r.w > vw ? clamp(x, r.x + vw / 2, r.x + r.w - vw / 2) : r.x + r.w / 2,
+        cy: r.h > h2 ? clamp(y, r.y + h2 / 2, r.y + r.h - h2 / 2) : r.y + r.h / 2,
+      });
+      const pts = b.map((q) => fit(q.x + q.w / 2, q.y + q.h / 2));
+      const seg = clamp(p, 0, 1) * (pts.length - 1);
+      const i = Math.min(pts.length - 2, Math.floor(seg)), f = seg - i;
+      const m = easeInOutCubic(clamp((f - 0.45) / 0.55, 0, 1));
+      return { cx: lerp(pts[i].cx, pts[i + 1].cx, m), cy: lerp(pts[i].cy, pts[i + 1].cy, m), vw };
     }
     default: return v;
   }
@@ -196,6 +223,14 @@ function drawBackground(ctx: Ctx, project: Project, box: Box, pageId: string | n
     ctx.drawImage(halftone(Math.round(box.w), Math.round(box.h), project.accent), box.x, box.y, box.w, box.h);
     return;
   }
+  if (project.background === 'paper') {
+    // the panel lies on newsprint, like a page cut out of the comic
+    ctx.save();
+    ctx.translate(box.x, box.y);
+    paperBackground(ctx, box.w, box.h, project.accent, Math.min(box.w, box.h) * 0.035, 0);
+    ctx.restore();
+    return;
+  }
   if (project.background === 'blur' || project.background === 'page') {
     pageBlur(ctx, project, box, pageId, region);
   }}
@@ -216,12 +251,20 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
     ctx.fillStyle = `rgba(6,6,8,${opts.dimPage})`;
     ctx.fillRect(0, 0, asset.width, asset.height);
   }
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
-  ctx.shadowBlur = 44 / s;
-  ctx.shadowOffsetY = 12 / s;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(clip.x, clip.y, clip.w, clip.h);
-  ctx.shadowColor = 'transparent';
+  const paper = project.background === 'paper' && opts.bg !== false;
+  if (paper) {
+    // printed look: a hard ink shadow, no blur
+    const d = Math.min(box.w, box.h) * 0.016 / s;
+    ctx.fillStyle = INK;
+    ctx.fillRect(clip.x + d, clip.y + d, clip.w, clip.h);
+  } else {
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 44 / s;
+    ctx.shadowOffsetY = 12 / s;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(clip.x, clip.y, clip.w, clip.h);
+    ctx.shadowColor = 'transparent';
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(clip.x, clip.y, clip.w, clip.h);
@@ -237,6 +280,11 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   } else ctx.drawImage(asset.img, 0, 0);
   if (opts.balloons) drawBalloons(ctx, asset, opts.balloons);
   ctx.restore();
+  if (paper) {
+    ctx.lineWidth = Math.min(box.w, box.h) * 0.007 / s;
+    ctx.strokeStyle = INK;
+    ctx.strokeRect(clip.x, clip.y, clip.w, clip.h);
+  }
   if (opts.border) {
     ctx.lineWidth = opts.border / s;
     ctx.strokeStyle = '#fff';

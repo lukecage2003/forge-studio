@@ -5,7 +5,7 @@ import { getImage, importAudio, importImage } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, medianAspect, pageHash } from './engine/classify';
-import { cutPageSmart } from './engine/panelAI';
+import { comicOrder, cutPageSmart, detectWithAI } from './engine/panelAI';
 import type { PageCut } from './engine/detect';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
@@ -462,11 +462,15 @@ export async function prepareMotion(opts: { quiet?: boolean } = {}) {
     const pg = p.pages.find((x) => x.id === s.pageId);
     const a = pg && getImage(pg.mediaId);
     if (!pg || !a) continue;
-    if (!balloonCache.has(pg.id)) balloonCache.set(pg.id, findBalloons(a.img, a.width, a.height));
-    const inside = balloonCache.get(pg.id)!.filter((b) => {
+    if (!balloonCache.has(pg.id)) {
+      // the local AI detector knows real balloons and captions; the heuristic is the fallback
+      const det = await detectWithAI(pg.mediaId, a.img, a.width, a.height).catch(() => null);
+      balloonCache.set(pg.id, det ? det.bubbles.filter((b) => b.s >= 0.35).map(({ x, y, w, h }) => ({ x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) })) : findBalloons(a.img, a.width, a.height));
+    }
+    const inside = comicOrder(balloonCache.get(pg.id)!.filter((b) => {
       const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
       return cx > s.rect.x && cx < s.rect.x + s.rect.w && cy > s.rect.y && cy < s.rect.y + s.rect.h;
-    }).slice(0, 5);
+    }), getState().project.readingOrder === 'rtl').slice(0, 6);
     withBalloons.set(s.id, inside);
   }
   update((x) => ({ ...x, shots: x.shots.map((s) => (withBalloons.has(s.id) ? { ...s, balloons: withBalloons.get(s.id) } : s)) }), 'balloons');
