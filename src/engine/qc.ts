@@ -203,6 +203,10 @@ export function checkProject(p: Project): Issue[] {
       fix: { label: p.subtitleStyle.y > 0.5 ? 'Monter les sous-titres' : 'Descendre les sous-titres', apply: (x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, y: x.subtitleStyle.y > 0.5 ? 0.62 : 0.3 } }) } });
   }
 
+  // pages whose reading order is a guess, used in the edit: ask, don't assume
+  const doubtful = p.pages.filter((pg) => pg.orderDoubt && !pg.skip && p.shots.some((s) => s.pageId === pg.id));
+  if (doubtful.length) out.push({ level: 'warn', text: `${doubtful.length} page(s) dont l’ordre de lecture est incertain (ex. ${doubtful[0].name} : ${doubtful[0].orderDoubt}). Vérifie l’ordre des cases dans l’éditeur de planche (« plus tôt / plus tard »).` });
+
   // story placements still to check
   const review = p.shots.filter((s) => s.match && s.match.conf < 0.5).length;
   if (review) out.push({ level: 'warn', text: `${review} case(s) associée(s) avec peu de certitude : vérifie-les (inspecteur du projet → « À vérifier »).` });

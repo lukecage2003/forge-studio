@@ -4,6 +4,7 @@ import { roleOf, type Role } from './scriptIntel';
 import { TRANSITION } from './effects';
 import { hashSeed } from './rng';
 import { holdFor, important } from './hold';
+import { executeCamera, type PageInfo } from './comicCamera';
 
 /* ------------------------------------------------------------ motion matching */
 
@@ -181,8 +182,11 @@ function cameraFor(g: CameraGrammar, s: Shot, k: number, prev: Motion | null, as
  * Direct an edit. `shots` in timeline order (the auto editor's output).
  * Returns new shots (inputs untouched) and what was decided.
  */
-export function directSequences(shots: Shot[], aspect: number, opt: DirectorOptions = DIRECTOR_DEFAULT, rtl = false): { shots: Shot[]; report: DirectorReport } {
+export function directSequences(shots: Shot[], aspect: number, opt: DirectorOptions = DIRECTOR_DEFAULT, rtl = false, pages?: Map<string, PageInfo>): { shots: Shot[]; report: DirectorReport } {
   const out = shots.map((s) => ({ ...s }));
+  // a locked page is the user's: nothing automatic touches its shots
+  const lockedShot = (s: Shot) => !!(s.pageId && pages?.get(s.pageId)?.locked);
+  for (const s of out) if (lockedShot(s)) s.auto = undefined;
   const report: DirectorReport = { sequences: [], changedTransitions: 0, changedMotions: 0, notes: [] };
   if (!out.length) return { shots: out, report };
   const text = (s: Shot) => s.match?.sentence || s.caption.text || s.text || '';
@@ -242,6 +246,13 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
         if (m !== s.motion) { s.motion = m; report.changedMotions++; }
         s.intensity = +Math.min(1, Math.max(0.15, (s.intensity + tr.intensity) / 2)).toFixed(2);
         s.auto = { ...s.auto!, motion: m };
+        // the director said what; the comic camera engine decides how, from the page's geometry
+        const pinfo = s.pageId ? pages?.get(s.pageId) : undefined;
+        const ex = pinfo && executeCamera(s, pinfo, tr.camera, aspect, prevMotion);
+        if (ex) {
+          s.motion = ex.motion; s.path = ex.path; s.shared = ex.shared; s.auto = { ...s.auto!, motion: ex.motion };
+          s.why = `${s.why ? s.why + ' · ' : ''}${ex.why}`;
+        }
       }
       let decided = '';
       if (opt.transitions && opt.sequences && bySequence && s.auto && i > 0 && s.transition !== 'glide') {
@@ -303,7 +314,7 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
   if (opt.camera) {
     for (let i = 2; i < n; i++) {
       const s = out[i];
-      if (!ours(s) || !s.pageId || s.diagram) continue;
+      if (!ours(s) || !s.pageId || s.diagram || s.path?.length) continue;
       if (s.motion === out[i - 1].motion && s.motion === out[i - 2].motion && s.motion !== 'tour') {
         // reading balloons a third time in a row: explore the panel instead (it still visits the balloons)
         const alt: Motion = s.motion === 'read' ? 'tour' : s.motion === 'zoom-in' ? 'zoom-out' : s.motion === 'zoom-out' ? 'zoom-in' : s.motion.startsWith('pan') ? 'static' : 'zoom-in';

@@ -3,7 +3,7 @@ import { Eraser, Maximize, ScanSearch, MousePointerSquareDashed, Sparkles } from
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { patchShot, setUI, update, useStore } from '../store';
-import { addShotRect, aiRecut, clearPage, redetect, redetectClassic, wholePage } from '../actions';
+import { addShotRect, aiRecut, clearPage, movePanel, redetect, redetectClassic, togglePageLock, wholePage } from '../actions';
 import type { Rect } from '../types';
 import { clamp } from '../lib/util';
 
@@ -160,6 +160,15 @@ export function PageEditor() {
         <button className="btn sm ghost" onClick={() => clearPage(page.id)} title="Supprimer toutes les cases de la planche">
           <Eraser size={15} /> Vider
         </button>
+        <button className={`btn sm ${page.locked ? '' : 'ghost'}`} onClick={() => togglePageLock(page.id)} title="Verrouillée : ni la détection ni le montage automatique ne changent ses cases">
+          {page.locked ? '🔒 Verrouillée' : '🔓 Verrouiller'}
+        </button>
+        {sel?.kind === 'shot' && pageShots.some(({ s: q }) => q.id === sel.id) && (
+          <span className="seg sm" aria-label="Ordre de lecture">
+            <button onClick={() => movePanel(sel.id, -1)} title="Cette case est lue plus tôt">◀ plus tôt</button>
+            <button onClick={() => movePanel(sel.id, 1)} title="Cette case est lue plus tard">plus tard ▶</button>
+          </span>
+        )}
         <div className="toolbar-spacer" />
         <div className="seg sm" role="radiogroup" aria-label="Sens de lecture">
           <button className={!rtl ? 'on' : ''} onClick={() => update((p) => ({ ...p, readingOrder: 'ltr' }))} title="Lecture occidentale">BD →</button>
@@ -172,6 +181,9 @@ export function PageEditor() {
           ) : <span className="hint">Glisse pour tracer · flèches : 1 px (Maj : 10) · Alt+flèches : taille · Alt en glissant : sans aimant</span>;
         })()}
       </div>
+      {page.orderDoubt && (
+        <div className="order-doubt">Ordre de lecture à vérifier : {page.orderDoubt}. Sélectionne une case et utilise « plus tôt / plus tard » si besoin.</div>
+      )}
       <div className="stage-canvas" ref={stageRef}>
         <div className="page-wrap" style={{ width: W * fit, height: H * fit }}>
           {asset && <img src={asset.url} alt={page.name} draggable={false} />}

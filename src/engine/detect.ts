@@ -246,7 +246,7 @@ export function readingOrder(rects: Rect[], rtl = false): Rect[] {
 export type CutKind = 'panels' | 'splash' | 'zones';
 export let FLAT_MIN = 0.75;
 export const setFlatMin = (v: number) => { FLAT_MIN = v; };
-export interface PageCut { rects: Rect[]; kind: CutKind; note?: string; diag?: Record<string, number> }
+export interface PageCut { rects: Rect[]; kind: CutKind; note?: string; diag?: Record<string, number>; /** why the reading order may be wrong */ doubt?: string }
 
 const area = (r: Rect) => r.w * r.h;
 function inter(a: Rect, b: Rect) {

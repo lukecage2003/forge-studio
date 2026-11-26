@@ -783,3 +783,4 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .fav-io { display: flex; gap: 6px; }
 .art-panel details { margin-top: 6px; }
 .art-panel .field.row { display: grid; grid-template-columns: 1fr 1.3fr; align-items: center; gap: 6px; }
+.order-doubt { margin: 6px 10px 0; padding: 6px 10px; border-radius: 6px; background: rgba(255, 196, 0, 0.14); border: 1px solid rgba(255, 196, 0, 0.45); font-size: 12px; }

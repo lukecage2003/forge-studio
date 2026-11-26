@@ -123,7 +123,7 @@ function inter(a: Rect, b: Rect) {
  * vertical line (columns, left to right or right to left for manga). A tall
  * panel next to two stacked ones is read first, then the stack, as a reader does.
  */
-export function comicOrder(rects: Rect[], rtl = false): Rect[] {
+export function comicOrder(rects: Rect[], rtl = false, info?: { doubt?: string }): Rect[] {
   if (rects.length < 2) return [...rects];
   const split = (list: Rect[], axis: 'y' | 'x', f: number): Rect[][] | null => {
     const tol = (a: Rect) => Math.min(a.w, a.h) * f;
@@ -144,12 +144,14 @@ export function comicOrder(rects: Rect[], rtl = false): Rect[] {
     if (list.length < 2) return list;
     // detected boxes overlap a little: retry with a looser tolerance before giving up
     for (const f of [0.12, 0.25, 0.4]) {
+      if (f > 0.12 && info && !info.doubt) info.doubt = 'des cases débordent les unes sur les autres : l’ordre a été déduit avec une tolérance';
       const rows = split(list, 'y', f);
       if (rows) return rows.flatMap(walk);
       const cols = split(list, 'x', f);
       if (cols) return (rtl ? cols.reverse() : cols).flatMap(walk);
     }
-    // overlapping art: fall back to top-left first
+    // overlapping art: fall back to top-left first — and say it is a guess
+    if (info) info.doubt = 'cases imbriquées sans rangées ni colonnes nettes : ordre deviné (haut-gauche d’abord)';
     return [...list].sort((a, b) => (a.y - b.y) || (rtl ? b.x - a.x : a.x - b.x));
   };
   return walk(rects);
@@ -174,7 +176,9 @@ export function cutFromDetection(det: PanelDetection, width: number, height: num
   const diag = { n: list.length, coverage: +coverage.toFixed(2), biggest: +biggest.toFixed(2), bubbles: det.bubbles.filter((b) => b.s >= 0.35).length, ia: 1 };
   if (list.length === 1 && biggest > 0.6) return { rects: [{ x: 0, y: 0, w: width, h: height }], kind: 'splash', note: 'pleine page (IA)', diag };
   if (coverage < 0.35) return null;
-  return { rects: comicOrder(list, rtl), kind: 'panels', note: 'cases détectées par IA', diag };
+  const info: { doubt?: string } = {};
+  const rects = comicOrder(list, rtl, info);
+  return { rects, kind: 'panels', note: 'cases détectées par IA', diag, doubt: info.doubt };
 }
 
 /**

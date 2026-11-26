@@ -34,6 +34,10 @@ export interface Page {
   bubbles?: number;
   /** same picture as an earlier page (scan duplicate) */
   dupOf?: string;
+  /** the user locked the page: automatic edits never change its shots */
+  locked?: boolean;
+  /** why its reading order may be wrong (to be checked by the user) */
+  orderDoubt?: string;
 }
 
 export type PageKind = 'story' | 'cover' | 'variant' | 'title' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';
@@ -55,7 +59,9 @@ export type Motion =
   /** the camera reads the balloons of the panel one after the other */
   | 'read'
   /** one image explored in stages: wide, push to a detail, pan to another, back to wide */
-  | 'tour';
+  | 'tour'
+  /** page-level camera paths (comic camera engine): glide across the page, panel to panel, reveal from a detail */
+  | 'page-glide' | 'panel-nav' | 'reveal';
 
 export type Framing = 'fit' | 'fill';
 
@@ -121,6 +127,12 @@ export interface Shot {
   match?: { sentence: string; conf: number; alts: string[]; source: 'local' | 'google' };
   /** speech balloons inside the panel (page px), for the pop-in animation */
   balloons?: Rect[];
+  /** camera path in page pixels (engine/camerapath): when set, it drives the camera */
+  path?: { t: number; cx: number; cy: number; vw: number; hold?: number }[];
+  /** filmed inside the whole page (overlapping or irregular panels): no cut-out, the neighbours stay */
+  shared?: boolean;
+  /** real outline of the panel (slanted gutters), page px: a non-destructive mask */
+  shape?: { x: number; y: number }[];
   /** point of interest inside the panel (0..1 of rect): zooms aim here instead of the centre */
   focus?: { x: number; y: number };
   /** why the auto editor made this shot like this (shown in the live view) */

@@ -13,7 +13,7 @@ import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engin
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { ArtPanel } from './ArtPanel';
 import { FavoritesPanel } from './FavoritesPanel';
-import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
+import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, setCameraMode, swapPanel } from '../actions';
 import { PanelPicker } from './FxDiagram';
 import { transcribeClip } from '../rush';
 import { seek } from '../engine/transport';
@@ -69,6 +69,9 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
   { v: 'pan-down', l: 'Bas', i: <ArrowDown size={16} /> },
   { v: 'read', l: 'Bulles', i: <MessageCircle size={16} /> },
   { v: 'tour', l: 'Explorer', i: <Sparkles size={16} /> },
+  { v: 'page-glide', l: 'Travelling page', i: <ArrowRight size={16} /> },
+  { v: 'panel-nav', l: 'Case à case', i: <Copy size={16} /> },
+  { v: 'reveal', l: 'Révélation', i: <ZoomOut size={16} /> },
 ];
 
 const TR_GROUPS = (Object.keys(CATEGORIES) as Category[]).map((c) => ({ c, label: CATEGORIES[c], items: TRANSITIONS.filter((t) => t.category === c) }));
@@ -176,7 +179,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
             onChange={(v) => patchShot(shot.id, { framing: v })} />
           <div className="motion-grid">
             {MOTIONS.map((m) => (
-              <button key={m.v} className={shot.motion === m.v ? 'on' : ''} onClick={() => patchShot(shot.id, { motion: m.v })} title={m.l}>
+              <button key={m.v} className={shot.motion === m.v ? 'on' : ''} onClick={() => void setCameraMode(shot.id, m.v)} title={m.l}>
                 {m.i}<span>{m.l}</span>
               </button>
             ))}
@@ -196,7 +199,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </Section>
       )}
 
-      <Section title="Mes favoris"><FavoritesPanel kinds={['transition', 'animation']} shotId={shot.id} /></Section>
+      <Section title="Mes favoris"><FavoritesPanel kinds={['transition', 'animation', 'camera']} shotId={shot.id} /></Section>
 
       {(index > 0 || overlay) && (
         <Section title="Transition d’entrée" aside={<button className="link-btn" title="Même transition pour tous les plans" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x, i) => (i === 0 && !p.aroll ? x : { ...x, transition: shot.transition, tp: shot.tp, transitionDur: Math.min(shot.transitionDur, x.duration * 0.45) })) }))}>Appliquer à tous</button>}>

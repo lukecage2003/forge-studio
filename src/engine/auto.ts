@@ -393,7 +393,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (pg.skip) continue;
     const a = getImage(pg.mediaId);
     if (!a) continue;
-    let list: Shot[] = o.redetect ? [] : (kept.get(pg.id) ?? []).map((s) => ({ ...s, group: undefined }));
+    // a locked page keeps the user's own cut, even when re-detection is asked
+    let list: Shot[] = o.redetect && !pg.locked ? [] : (kept.get(pg.id) ?? []).map((s) => ({ ...s, group: undefined }));
     if (!list.length) {
       const old = kept.get(pg.id) ?? [];
       const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, readingOrder === 'rtl');
@@ -879,7 +880,14 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       let acc = 0;
       const timed = proj.shots.map((s, i) => { const t = s.start ?? acc; acc = t + s.duration; return { s, i, t }; }).sort((a, b) => a.t - b.t || a.i - b.i);
       const before = variety(timed.map((x) => x.s));
-      const d = directSequences(timed.map((x) => x.s), aspect, dopt, readingOrder === 'rtl');
+      // what the comic camera engine knows of each page: size, panels and balloons in reading order, lock
+      const pinfo = new Map(proj.pages.map((pg) => {
+        const det = cachedDetection(pg.mediaId);
+        const panels = p.shots.filter((s) => s.pageId === pg.id).map((s) => s.rect);
+        const balloons = det ? comicOrder(det.bubbles.filter((b) => b.s >= 0.35).map(({ x, y, w, h }) => ({ x, y, w, h })), readingOrder === 'rtl') : [];
+        return [pg.id, { w: pg.width, h: pg.height, kind: pg.kind, panels, balloons, locked: pg.locked }];
+      }));
+      const d = directSequences(timed.map((x) => x.s), aspect, dopt, readingOrder === 'rtl', pinfo);
       const byId = new Map(d.shots.map((s) => [s.id, s]));
       proj = { ...proj, shots: proj.shots.map((s) => byId.get(s.id) ?? s), direction: { ...(proj.direction ?? { profile: o.profile ?? 'premium' }), sequences: d.report.sequences } };
       const after = variety(timed.map((x) => byId.get(x.s.id)!));

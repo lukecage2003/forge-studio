@@ -9,6 +9,7 @@ import { getImage } from './media';
 import { hashSeed, rng } from './rng';
 import { TRANSITION, tp } from './effects';
 import { EASE, spring } from './motion';
+import { evalPath } from './camerapath';
 import { arrowHead, balloon, benDay, boil, bowPath, brush, caption, feltCircle, inkBox, INK, LETTER, PAPER_CARD, CAPTION, paperBackground, panelFrame, paperTexture, TITLE } from './ink';
 import { drawGlTransition, sharpenFrame } from './gl';
 import { draw3D, itemValues } from './scene3d';
@@ -60,6 +61,7 @@ export function readable(shot: Shot) {
 }
 
 export function resolveMotion(shot: Shot, aspect: number, rtl: boolean) {
+  if (shot.path?.length) return { motion: shot.motion, framing: 'fit' as const };
   if (shot.motion === 'tour') return { motion: 'tour' as const, framing: 'fit' as const };
   if (shot.motion === 'read') return readable(shot) ? { motion: 'read' as const, framing: 'fill' as const } : { motion: 'zoom-in' as const, framing: shot.framing };
   if (shot.motion !== 'auto') return { motion: shot.motion, framing: shot.framing };
@@ -77,6 +79,8 @@ function baseView(r: Rect, aspect: number, framing: 'fit' | 'fill', pad = 1.08):
 }
 
 export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r: Rect = shot.rect): View {
+  // a camera path (comic camera engine or the user's preset) drives everything
+  if (shot.path?.length && r === shot.rect) return evalPath(shot.path, p);
   const { motion, framing } = resolveMotion({ ...shot, rect: r }, aspect, rtl);
   const v = baseView(r, aspect, framing);
   const vh = v.vw / aspect;
@@ -300,7 +304,7 @@ export function justifiedBoxes(aspects: number[], area: { x: number; y: number; 
 let lastMag = 0;
 
 /** Draw a panel of a page inside `box`, seen through `view`, clipped to `clip`. */
-function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number; layers?: { L: Layers; dx: number; dy: number; s: number }; balloons?: BalloonAnim } = {}) {
+function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number; layers?: { L: Layers; dx: number; dy: number; s: number }; balloons?: BalloonAnim; shape?: { x: number; y: number }[] } = {}) {
   const page = project.pages.find((p) => p.id === pageId);
   const asset = page && getImage(page.mediaId);
   ctx.save();
@@ -317,22 +321,30 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
     ctx.fillRect(0, 0, asset.width, asset.height);
   }
   const paper = project.background === 'paper' && opts.bg !== false;
+  // outline of what is shown: the panel's real shape, or its box
+  const outline = (dx = 0, dy = 0) => {
+    ctx.beginPath();
+    if (opts.shape?.length) { opts.shape.forEach((q, i) => (i ? ctx.lineTo(q.x + dx, q.y + dy) : ctx.moveTo(q.x + dx, q.y + dy))); ctx.closePath(); }
+    else ctx.rect(clip.x + dx, clip.y + dy, clip.w, clip.h);
+  };
   if (paper) {
     // printed look: a hard ink shadow, no blur
     const d = Math.min(box.w, box.h) * 0.016 / s;
     ctx.fillStyle = INK;
-    ctx.fillRect(clip.x + d, clip.y + d, clip.w, clip.h);
+    outline(d, d); ctx.fill();
   } else {
     ctx.shadowColor = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur = 44 / s;
     ctx.shadowOffsetY = 12 / s;
     ctx.fillStyle = '#000';
-    ctx.fillRect(clip.x, clip.y, clip.w, clip.h);
+    outline(); ctx.fill();
     ctx.shadowColor = 'transparent';
   }
   ctx.save();
   ctx.beginPath();
-  ctx.rect(clip.x, clip.y, clip.w, clip.h);
+  // the panel's real outline (slanted gutters) when known: a mask, never a crop of the art
+  if (opts.shape?.length) { opts.shape.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath(); }
+  else ctx.rect(clip.x, clip.y, clip.w, clip.h);
   ctx.clip();
   ctx.imageSmoothingQuality = 'high';
   if (opts.layers) {
@@ -348,7 +360,7 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   if (paper) {
     ctx.lineWidth = Math.min(box.w, box.h) * 0.007 / s;
     ctx.strokeStyle = INK;
-    ctx.strokeRect(clip.x, clip.y, clip.w, clip.h);
+    outline(); ctx.stroke();
   }
   if (opts.border) {
     ctx.lineWidth = opts.border / s;
@@ -1733,7 +1745,10 @@ export function createRenderer(W: number, H: number): Renderer {
           layers = { L, dx, dy, s: sc };
         }
         const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration, follow: resolveMotion(shot, W / H, rtl).motion === 'read' } : undefined;
-        drawPanelIn(ctx, project, shot.pageId!, full, view, override?.clip ?? shot.rect, { dimPage: project.background === 'page' ? 0.72 : 0, layers, balloons });
+        // shared composition: filmed inside the whole page, the neighbouring art stays
+        const pg = shot.shared ? project.pages.find((x) => x.id === shot.pageId) : null;
+        const clipR = override?.clip ?? (pg ? { x: 0, y: 0, w: pg.width, h: pg.height } : shot.rect);
+        drawPanelIn(ctx, project, shot.pageId!, full, view, clipR, { dimPage: project.background === 'page' ? 0.72 : 0, layers: shot.shared || shot.path?.length ? undefined : layers, balloons, shape: override || shot.shared ? undefined : shot.shape });
         break;
       }
       case 'pip': {

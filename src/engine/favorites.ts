@@ -6,14 +6,16 @@ import type { ArtMix } from './styles';
  * any project (this browser; export/import as a file for another computer).
  * Distinct from Forge Brain, which only *learns* from corrections.
  */
-export type FavKind = 'art' | 'subtitles' | 'animation' | 'transition';
-export const FAV_FR: Record<FavKind, string> = { art: 'Combinaison visuelle', subtitles: 'Style de sous-titres', animation: 'Animation', transition: 'Transition' };
+export type FavKind = 'art' | 'subtitles' | 'animation' | 'transition' | 'camera';
+export const FAV_FR: Record<FavKind, string> = { art: 'Combinaison visuelle', subtitles: 'Style de sous-titres', animation: 'Animation', transition: 'Transition', camera: 'Trajectoire de caméra' };
 
 export interface FavData {
   art: ArtMix;
   subtitles: Pick<Project['subtitleStyle'], 'preset' | 'anim' | 'y' | 'size' | 'maxWords' | 'keywords'>;
   animation: { motion: Motion; intensity: number; captionAnim: Caption['anim']; shake: number };
   transition: { transition: Transition; transitionDur: number; tp?: Record<string, number> };
+  /** camera path relative to its frame (panel box, or the page when shared): reusable on any panel */
+  camera: { motion: Motion; intensity: number; shared: boolean; path?: { t: number; x: number; y: number; w: number; hold?: number }[] };
 }
 export interface Favorite<K extends FavKind = FavKind> { id: string; kind: K; name: string; created: string; data: FavData[K] }
 
@@ -43,10 +45,20 @@ export const capture = {
   subtitles: (p: Project): FavData['subtitles'] => { const s = p.subtitleStyle; return { preset: s.preset, anim: s.anim, y: s.y, size: s.size, maxWords: s.maxWords, keywords: s.keywords }; },
   animation: (s: Shot): FavData['animation'] => ({ motion: s.motion, intensity: s.intensity, captionAnim: s.caption.anim, shake: s.shake }),
   transition: (s: Shot): FavData['transition'] => ({ transition: s.transition, transitionDur: s.transitionDur, tp: s.tp }),
+  camera: (s: Shot, page?: { width: number; height: number }): FavData['camera'] => {
+    const R = s.shared && page ? { x: 0, y: 0, w: page.width, h: page.height } : s.rect;
+    return { motion: s.motion, intensity: s.intensity, shared: !!s.shared, path: s.path?.map((k) => ({ t: k.t, x: (k.cx - R.x) / R.w, y: (k.cy - R.y) / R.h, w: k.vw / R.w, hold: k.hold })) };
+  },
 };
 
 /** applying a favorite to a shot marks it as the user's choice (the director leaves it alone) */
-export function applyToShot(s: Shot, f: Favorite): Shot {
+export function applyToShot(s: Shot, f: Favorite, page?: { width: number; height: number }): Shot {
+  if (f.kind === 'camera') {
+    const d = f.data as FavData['camera'];
+    const R = d.shared && page ? { x: 0, y: 0, w: page.width, h: page.height } : s.rect;
+    const path = d.path?.map((k) => ({ t: k.t, cx: R.x + k.x * R.w, cy: R.y + k.y * R.h, vw: k.w * R.w, hold: k.hold }));
+    return { ...s, motion: d.motion, intensity: d.intensity, shared: d.shared || undefined, path, auto: undefined, why: `trajectoire favorite « ${f.name} »` };
+  }
   if (f.kind === 'animation') { const d = f.data as FavData['animation']; return { ...s, motion: d.motion, intensity: d.intensity, shake: d.shake, caption: { ...s.caption, anim: d.captionAnim }, auto: undefined, why: `favori « ${f.name} »` }; }
   if (f.kind === 'transition') { const d = f.data as FavData['transition']; return { ...s, transition: d.transition, transitionDur: d.transitionDur, tp: d.tp, auto: undefined, why: `favori « ${f.name} »` }; }
   return s;

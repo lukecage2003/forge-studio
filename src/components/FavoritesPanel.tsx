@@ -18,12 +18,13 @@ export function FavoritesPanel({ kinds, shotId }: { kinds: FavKind[]; shotId?: s
     else if (kind === 'subtitles') saveFavorite('subtitles', name, capture.subtitles(p));
     else if (kind === 'animation' && s) saveFavorite('animation', name, capture.animation(s));
     else if (kind === 'transition' && s) saveFavorite('transition', name, capture.transition(s));
+    else if (kind === 'camera' && s) saveFavorite('camera', name, capture.camera(s, p.pages.find((x) => x.id === s.pageId)));
     toast(`Favori enregistré : ${name || FAV_FR[kind]}`);
   };
   const apply = (f: Favorite) => {
     if (f.kind === 'art') update((p) => applyArt(p, f.data as ArtMix), 'fav');
     else if (f.kind === 'subtitles') update((p) => applySubtitles(p, f as Favorite<'subtitles'>), 'fav');
-    else if (shotId) update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId ? applyToShot(s, f) : s)) }), 'fav');
+    else if (shotId) update((p) => ({ ...p, shots: p.shots.map((s) => (s.id === shotId ? applyToShot(s, f, p.pages.find((x) => x.id === s.pageId)) : s)) }), 'fav');
     toast(`Favori appliqué : ${f.name}`);
   };
   const download = () => {

@@ -6,6 +6,7 @@ import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, readPageText, trimBottomToArt, type PageText } from './engine/classify';
 import { comicOrder, cutPageSmart, detectWithAI } from './engine/panelAI';
+import { panelShape } from './engine/comicCamera';
 import type { PageCut } from './engine/detect';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
@@ -114,12 +115,17 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
           if (pg.dupOf && cls.kind !== 'cover') { pg.skip = true; pg.kindWhy = `${cls.why} · doublon d'une page précédente`; }
           pg.cut = cut.kind;
           pg.cutBy = cut.by;
+          if (cut.doubt && cut.rects.length > 2) pg.orderDoubt = cut.doubt;
           pg.bubbles = cut.bubbles;
           kinds[cls.kind] = (kinds[cls.kind] ?? 0) + 1;
           const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'title' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
           if (!whole && cut.kind === 'zones') zones++;
           const rects = whole ? [{ x: 0, y: 0, w: a.width, h: a.height }] : cut.rects;
-          const shots = rects.map((rect) => newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind }));
+          // the real outline of each panel (slanted gutters): a mask, never a crop of the neighbour
+          const shots = rects.map((rect) => {
+            const shape = !whole && cut.kind === 'panels' ? panelShape(a.img, a.width, a.height, rect) : null;
+            return newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind, ...(shape ? { shape } : {}) });
+          });
           next = { ...next, shots: [...next.shots, ...shots] };
         }
       }
@@ -141,6 +147,7 @@ export async function redetect(pageId: string) {
   const pg = project.pages.find((p) => p.id === pageId);
   const a = pg && getImage(pg.mediaId);
   if (!pg || !a) return;
+  if (pg.locked) { toast('Page verrouillée : déverrouille-la pour relancer la détection.', 'error'); return; }
   setUI({ busy: 'Lecture des cases…' });
   const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, project.readingOrder === 'rtl').finally(() => setUI({ busy: null }));
   update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pageId ? { ...x, cut: cut.kind, cutBy: cut.by, bubbles: cut.bubbles } : x)) }));
@@ -530,4 +537,58 @@ export function acceptSuggestion(sg: import('./engine/scriptIntel').Suggestion, 
   update((p) => { const q = { ...p, shots: insertAtTime(p, shot, sg.at) }; return { ...q, shots: fixRepeats(q) }; }, 'accept-' + sg.id);
   const at = layoutShots(getState().project).find((t) => t.shot.id === shot.id);
   setUI({ selection: { kind: 'shot', id: shot.id }, ...(at ? { playhead: at.start + Math.min(1.2, at.shot.duration * 0.4) } : {}) });
+}
+
+/** the user locks a page: automatic edits (director, re-detection) leave its shots alone */
+export function togglePageLock(pageId: string) {
+  update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pageId ? { ...x, locked: !x.locked } : x)) }), 'lock');
+  const pg = getState().project.pages.find((x) => x.id === pageId);
+  toast(pg?.locked ? 'Page verrouillée : le montage automatique ne touchera plus ses cases.' : 'Page déverrouillée.');
+}
+
+/** reading order by hand: the panel swaps with the previous / next panel of the same page */
+export function movePanel(shotId: string, dir: -1 | 1) {
+  update((p) => {
+    const i = p.shots.findIndex((s) => s.id === shotId);
+    if (i < 0) return p;
+    const pageId = p.shots[i].pageId;
+    let j = i + dir;
+    while (j >= 0 && j < p.shots.length && p.shots[j].pageId !== pageId) j += dir;
+    if (j < 0 || j >= p.shots.length) return p;
+    const shots = [...p.shots];
+    [shots[i], shots[j]] = [shots[j], shots[i]];
+    // the order is now the user's: no more doubt on this page
+    return { ...p, shots, pages: p.pages.map((x) => (x.id === pageId ? { ...x, orderDoubt: undefined } : x)) };
+  }, 'order');
+}
+
+/**
+ * The user picks a camera move. Page-level moves (glide, panel to panel,
+ * reveal) get their path built from the page's geometry; any other move
+ * clears the path and the shared composition, so the panel is framed again.
+ */
+export async function setCameraMode(shotId: string, motion: import('./types').Motion) {
+  const { pageGlide, panelNavigation, reveal } = await import('./engine/comicCamera');
+  const { cachedDetection } = await import('./engine/panelAI');
+  const p = getState().project;
+  const s = p.shots.find((x) => x.id === shotId);
+  const pg = s?.pageId ? p.pages.find((x) => x.id === s.pageId) : null;
+  if (!s) return;
+  const pageLevel = motion === 'page-glide' || motion === 'panel-nav' || motion === 'reveal';
+  if (!pageLevel || !pg) {
+    update((x) => ({ ...x, shots: x.shots.map((q) => (q.id === shotId ? { ...q, motion, path: undefined, shared: undefined, auto: undefined } : q)) }), 'motion');
+    return;
+  }
+  const { w: W, h: H } = (await import('./types')).FORMATS[p.format];
+  const det = cachedDetection(pg.mediaId);
+  const info = {
+    w: pg.width, h: pg.height, kind: pg.kind,
+    panels: p.shots.filter((x) => x.pageId === pg.id && x.id !== shotId).map((x) => x.rect).concat(s.rect.w < pg.width * 0.95 ? [s.rect] : []),
+    balloons: det ? comicOrder(det.bubbles.filter((b) => b.s >= 0.35).map(({ x, y, w, h }) => ({ x, y, w, h })), p.readingOrder === 'rtl') : (s.balloons ?? []),
+  };
+  info.panels = comicOrder(info.panels, p.readingOrder === 'rtl');
+  const aspect = W / H;
+  const focus = info.balloons[0] ?? s.rect;
+  const path = motion === 'page-glide' ? pageGlide(info, aspect) : motion === 'panel-nav' ? panelNavigation(info, aspect) : reveal(info, focus, aspect);
+  update((x) => ({ ...x, shots: x.shots.map((q) => (q.id === shotId ? { ...q, motion, path, shared: true, auto: undefined } : q)) }), 'motion');
 }
