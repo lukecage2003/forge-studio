@@ -44,7 +44,11 @@ export interface VoiceReport { preset: VoicePreset; levelSpreadBefore: number; l
 
 /** spread (dB) between loud and quiet speech: 90th − 20th percentile of the voiced 400 ms levels */
 export function speechSpread(x: Float32Array, sr: number): number {
-  const lv = levels(x, sr, 0.4).filter((v) => v > -60).sort((a, b) => a - b);
+  const all = levels(x, sr, 0.4).sort((a, b) => a - b);
+  if (all.length < 5) return 0;
+  // speech only: windows within 25 dB of the loudest ones (pauses and room noise left out)
+  const top = all[Math.floor(all.length * 0.95)];
+  const lv = all.filter((v) => v > top - 25);
   if (lv.length < 5) return 0;
   return lv[Math.floor(lv.length * 0.9)] - lv[Math.floor(lv.length * 0.2)];
 }
