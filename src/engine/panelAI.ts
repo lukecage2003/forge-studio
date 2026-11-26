@@ -164,7 +164,8 @@ export function cutFromDetection(det: PanelDetection, width: number, height: num
       const x = Math.max(0, b.x), y = Math.max(0, b.y);
       return { x: Math.round(x), y: Math.round(y), w: Math.round(Math.min(width, b.x + b.w) - x), h: Math.round(Math.min(height, b.y + b.h) - y) };
     })
-    .filter((r) => r.w > 16 && r.h > 16 && area(r) / page > 0.012);
+    // slivers along the page edge (bleed, gutters) are not panels
+    .filter((r) => r.w > 16 && r.h > 16 && area(r) / page > 0.012 && r.w >= width * 0.08 && r.h >= height * 0.05);
   // nested boxes: keep the outer panel
   list = list.filter((r, i) => !list.some((o, j) => j !== i && area(o) >= area(r) && inter(r, o) > area(r) * 0.8));
   if (!list.length) return null;

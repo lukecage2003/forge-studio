@@ -96,6 +96,8 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
     }
     case 'pan-left':
     case 'pan-right': {
+      // a very wide panel in a tall frame: show at least half of it, never a blurry close-up
+      if (framing === 'fill') v.vw = Math.min(r.w, Math.max(v.vw, r.w * 0.5));
       const span = r.w - v.vw;
       const range = span > 1 ? span / 2 : v.vw * 0.06 * k;
       const d = motion === 'pan-right' ? lerp(-range, range, e) : lerp(range, -range, e);
@@ -113,7 +115,7 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
       const b = shot.balloons ?? [];
       // close enough to read, never so close that a balloon is cut
       const need = Math.max(...b.map((q) => Math.max(q.w * 1.25, q.h * 1.3 * aspect)));
-      const vw = Math.min(Math.max(v.vw * lerp(1, 0.84, k), need), Math.max(v.vw, r.w)), h2 = vw / aspect;
+      const vw = Math.min(Math.max(v.vw * lerp(1, 0.84, k), need, r.w * 0.45), Math.max(v.vw, r.w)), h2 = vw / aspect;
       const fit = (x: number, y: number) => ({
         cx: r.w > vw ? clamp(x, r.x + vw / 2, r.x + r.w - vw / 2) : r.x + r.w / 2,
         cy: r.h > h2 ? clamp(y, r.y + h2 / 2, r.y + r.h - h2 / 2) : r.y + r.h / 2,

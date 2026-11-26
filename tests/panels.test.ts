@@ -51,10 +51,17 @@ describe('caméra qui lit les bulles', async () => {
   it('part de la 1re bulle et finit sur la dernière, sans sortir de la case', () => {
     const a = cameraAt(shot, 0, 9 / 16, false), b = cameraAt(shot, 1, 9 / 16, false);
     expect(a.cx).toBeLessThan(b.cx);
-    expect(a.cy).toBeLessThan(b.cy);
+    expect(a.cy).toBeLessThanOrEqual(b.cy);
     for (const v of [a, b]) {
       expect(v.cx - v.vw / 2).toBeGreaterThanOrEqual(-0.01);
       expect(v.cx + v.vw / 2).toBeLessThanOrEqual(1000.01);
     }
+  });
+});
+
+describe('garde-fous de cadrage', () => {
+  it('ignore une fine bande au bord de la page', () => {
+    const det = { panels: [R(0, 0, 1431, 947), R(1345, 1056, 86, 466), R(0, 1568, 1431, 632)].map((p) => ({ ...p, s: 0.9 })), bubbles: [], ms: 1, device: 't' };
+    expect(cutFromDetection(det, 1431, 2200)!.rects.length).toBe(2);
   });
 });
