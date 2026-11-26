@@ -145,3 +145,38 @@ describe('favoris créatifs', async () => {
     expect(store.has('forge-brain')).toBe(false);
   });
 });
+
+describe('contrôle qualité éditorial', async () => {
+  const { checkProject } = await import('../src/engine/qc');
+  const { newProject } = await import('../src/store');
+  const base = () => {
+    const p = newProject();
+    p.pages = [{ id: 'p', name: 'p', mediaId: 'm', width: 1000, height: 1500 }, { id: 'v', name: 'v', mediaId: 'm2', width: 1000, height: 1500, kind: 'variant', skip: true }] as never;
+    return p;
+  };
+  it('signale image tenue pour rien, transition à contresens, page hors récit, avec une correction', () => {
+    const p = base();
+    p.shots = [
+      mk(0, '', { duration: 14, motion: 'static' }),
+      mk(1, '', { motion: 'pan-right' }),
+      mk(2, '', { motion: 'pan-left', transition: 'whip', transitionDur: 0.3 }),
+      mk(3, '', { pageId: 'v' }),
+    ];
+    const texts = checkProject(p).map((i) => i.text);
+    expect(texts.some((t) => /tenue/.test(t))).toBe(true);
+    expect(texts.some((t) => /contredisent le mouvement/.test(t))).toBe(true);
+    expect(texts.some((t) => /hors récit/.test(t))).toBe(true);
+    const fixed = checkProject(p).filter((i) => i.fix).reduce((x, i) => i.fix!.apply(x), p);
+    expect(fixed.shots.find((s) => s.id === 's0')!.motion).toBe('tour');
+    expect(fixed.shots.find((s) => s.id === 's2')!.transition).toBe('cut');
+    expect(fixed.shots.some((s) => s.pageId === 'v')).toBe(false);
+  });
+  it('signale des sous-titres clairs sans contour sur papier', () => {
+    const p = base();
+    p.background = 'paper';
+    p.subtitleStyle = { ...p.subtitleStyle, on: true, preset: 'cinema' };
+    p.subtitles = [{ s: 0, e: 2, text: 'il voit', words: [] }];
+    p.shots = [mk(0, '')];
+    expect(checkProject(p).some((i) => /fond clair/.test(i.text))).toBe(true);
+  });
+});

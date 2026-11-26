@@ -3,7 +3,9 @@ import { FORMATS } from '../types';
 import { getImage, getVideo } from './media';
 import { layoutShots, videoDuration } from './timeline';
 import { cameraAt, resolveMotion } from './render';
-import { directSequences, variety } from './director';
+import { directSequences, motionClash, variety } from './director';
+import { holdFor, HOLD_KIND_FR } from './hold';
+import type { SeqType } from './director';
 import { narration } from './narration';
 import { buildSubtitles, timelineWords } from './auto';
 
@@ -13,9 +15,6 @@ import { buildSubtitles, timelineWords } from './auto';
  */
 export interface Issue { level: 'error' | 'warn'; text: string; fix?: { label: string; apply: (p: Project) => Project }; at?: number }
 
-/** how long an image should stay, by kind (seconds, min–max): starting points, adjustable per project */
-export const DEFAULT_HOLDS = { simple: [2, 3], panel: [4, 6], page: [6, 9], reveal: [5, 8] } as const satisfies Record<string, readonly [number, number]>;
-export const HOLD_FR: Record<keyof typeof DEFAULT_HOLDS, string> = { simple: 'une image simple', panel: 'une case avec du texte', page: 'une planche détaillée', reveal: 'une révélation' };
 
 export function checkProject(p: Project): Issue[] {
   const out: Issue[] = [];
@@ -119,14 +118,64 @@ export function checkProject(p: Project): Issue[] {
     const shakes = timed.filter((t) => t.shot.shake > 0.2).length / (dur / 60);
     if (shakes > 8) out.push({ level: 'warn', text: `${Math.round(shakes)} secousses par minute : trop de mouvement, garde-les pour les vrais impacts.` });
   }
-  // how long each image stays, against its kind (adjustable ranges, starting points)
-  const H0 = p.holds ?? DEFAULT_HOLDS;
-  const kindOf = (s: Project['shots'][number]): keyof typeof DEFAULT_HOLDS => (s.layout === 'page' || s.zone === 'zones' ? 'page' : s.zone === 'splash' || /révélation/i.test(s.why ?? '') ? 'reveal' : (s.balloons?.length ?? 0) >= 2 ? 'panel' : 'simple');
-  const brief = timed.filter((t) => t.shot.pageId && !t.shot.diagram && t.shot.duration < H0[kindOf(t.shot)][0] * 0.6);
+  // how long each image stays, against what is in it (hold engine: balloons, reading time, kind, sequence)
+  const voiced = !!p.aroll || p.audio.some((c) => c.kind === 'voice');
+  const seqAt = (t: number) => p.direction?.sequences?.filter((q) => q.start <= t + 1e-3).pop()?.type as SeqType | undefined;
+  const holds = timed.filter((t) => t.shot.pageId && !t.shot.diagram).map((t) => ({ t, h: holdFor(t.shot, { seq: seqAt(t.start), ranges: p.holds, pace: voiced ? 0.6 : 0.75 }) }));
+  const brief = holds.filter(({ t, h }) => t.shot.duration < h.min * 0.6 && (h.kind !== 'simple' || t.shot.duration < 1));
   if (brief.length) {
-    const ex = brief[0].shot;
-    out.push({ level: 'warn', at: brief[0].start,
-      text: `${brief.length} image(s) montrée(s) nettement moins que le temps conseillé (ex. ${ex.duration.toFixed(1)} s pour ${HOLD_FR[kindOf(ex)]}, conseillé ${H0[kindOf(ex)][0]}–${H0[kindOf(ex)][1]} s). Sur une voix rapide c’est voulu ; sinon allonge-les ou laisse la caméra lire la case.` });
+    const ex = brief[0];
+    out.push({ level: 'warn', at: ex.t.start,
+      text: `${brief.length} image(s) qui disparaissent avant d’être comprises (ex. ${ex.t.shot.duration.toFixed(1)} s pour ${HOLD_KIND_FR[ex.h.kind]} : ${ex.h.why}, il faut au moins ${ex.h.min.toFixed(1)} s).${voiced ? ' La voix décide ici : garde la case sur toute la phrase ou montre-la deux fois.' : ''}`,
+      fix: voiced ? undefined : { label: 'Allonger jusqu’au temps de lecture', apply: (x) => ({ ...x, shots: x.shots.map((s) => { const m = brief.find((b) => b.t.shot.id === s.id); return m ? { ...s, duration: +m.h.min.toFixed(2) } : s; }) }) } });
+  }
+  // held for nothing: a long still image with a single framing
+  const idle = holds.filter(({ t, h }) => t.shot.duration > h.max * 1.3 && !['tour', 'read'].includes(t.shot.motion) && t.shot.layout === 'full');
+  if (idle.length) out.push({ level: 'warn', at: idle[0].t.start,
+    text: `${idle.length} image(s) tenue(s) plus longtemps qu’un seul cadrage ne le supporte (ex. ${idle[0].t.shot.duration.toFixed(1)} s, au-delà de ${idle[0].h.max.toFixed(1)} s) : le regard décroche.`,
+    fix: { label: 'Explorer l’image en étapes', apply: (x) => ({ ...x, shots: x.shots.map((s) => (idle.some((i) => i.t.shot.id === s.id) ? { ...s, motion: 'tour' as const } : s)) }) } });
+  // transitions that fight the movement around them
+  const clashes = timed.map((t, i) => (i ? { t, why: motionClash(timed[i - 1].shot, t.shot, t.shot.transition, seqAt(t.start)) } : null)).filter((x): x is { t: typeof timed[number]; why: string } => !!x?.why);
+  if (clashes.length) out.push({ level: 'warn', at: clashes[0].t.start,
+    text: `${clashes.length} transition(s) qui contredisent le mouvement (ex. ${clashes[0].why}) : une coupe franche passe mieux.`,
+    fix: { label: 'Remplacer par des coupes', apply: (x) => ({ ...x, shots: x.shots.map((s) => (clashes.some((c) => c.t.shot.id === s.id) ? { ...s, transition: 'cut' as const, transitionDur: 0, tp: undefined } : s)) }) } });
+  // too much animation overall
+  if (dur > 20) {
+    const moving = timed.filter((t) => ['whip', 'smear', 'slide', 'zoom', 'crosszoom', 'warp', 'warpspeed', 'impact', 'glitch', 'glitchdisplace'].includes(t.shot.transition)).length / (dur / 60);
+    const shakes = timed.filter((t) => t.shot.shake > 0.2).length / (dur / 60);
+    const strong = timed.filter((t) => t.shot.pageId).reduce((a, t) => a + t.shot.intensity, 0) / Math.max(1, timed.filter((t) => t.shot.pageId).length);
+    const load = moving / 8 + shakes / 8 + Math.max(0, strong - 0.6) * 2 + (p.look?.handheld ?? 0);
+    if (load > 2) out.push({ level: 'warn',
+      text: `Animation excessive : ${Math.round(moving)} transitions de mouvement et ${Math.round(shakes)} secousses par minute, caméra à ${Math.round(strong * 100)} %. Le spectateur regarde l’effet, plus l’histoire.`,
+      fix: { label: 'Calmer le montage', apply: (x) => ({ ...x, look: { ...x.look, handheld: Math.min(x.look.handheld ?? 0, 0.2) }, shots: x.shots.map((s) => ({ ...s, intensity: Math.min(s.intensity, 0.55), shake: Math.min(s.shake, 0.3) })) }) } });
+  }
+  // subtitles hard to read: too small, or white text without stroke or box on a light page
+  if (p.subtitleStyle.on && p.subtitles.length) {
+    const light = p.background === 'paper' || (p.background === 'color' && /^#?([c-f][0-9a-f]){3}/i.test(p.bgColor.replace('#', '')));
+    const bare = p.subtitleStyle.preset === 'cinema' || p.subtitleStyle.preset === 'neon';
+    if (p.subtitleStyle.size < 0.7) out.push({ level: 'warn', text: `Sous-titres trop petits pour un téléphone (taille ${Math.round(p.subtitleStyle.size * 100)} %).`, fix: { label: 'Agrandir', apply: (x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, size: 0.9 } }) } });
+    if (light && bare) out.push({ level: 'warn', text: 'Sous-titres clairs sans contour sur un fond clair : ils se lisent mal.', fix: { label: 'Style « Propre » (fond sombre)', apply: (x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, preset: 'clean' as const } }) } });
+  }
+  // pages that are not story (variant cover, credits, ad) used in the edit
+  const offStory = timed.filter((t) => { const pg = p.pages.find((x) => x.id === t.shot.pageId); return pg && pg.skip && pg.kind !== 'cover'; });
+  if (offStory.length) out.push({ level: 'warn', at: offStory[0].start,
+    text: `${offStory.length} plan(s) montrent une page hors récit (${[...new Set(offStory.map((t) => p.pages.find((x) => x.id === t.shot.pageId)?.kind))].join(', ')}) : elle n’illustre pas l’histoire.`,
+    fix: { label: 'Retirer ces plans', apply: (x) => ({ ...x, shots: x.shots.filter((s) => !offStory.some((t) => t.shot.id === s.id)) }) } });
+  // a panel placed for a sentence, but shown at another moment
+  if (voiced) {
+    const sents = narration(p).sentences;
+    const drift = timed.filter((t) => { if (!t.shot.match) return false; const se = sents.find((x) => x.text === t.shot.match!.sentence); return se && (t.end < se.s - 0.5 || t.start > se.e + 0.5); });
+    if (drift.length) out.push({ level: 'warn', at: drift[0].start, text: `${drift.length} case(s) montrée(s) à un autre moment que la phrase qu’elles illustrent (« ${drift[0].shot.match!.sentence.slice(0, 50)}… »). Recale-les ou relance le montage qui suit la narration.` });
+  }
+  // monotone stretch: same layout and only plain cuts for a long time
+  let runStart = 0;
+  for (let i = 1; i <= timed.length; i++) {
+    const same = i < timed.length && timed[i].shot.layout === timed[i - 1].shot.layout && timed[i].shot.transition === 'cut' && timed[i].shot.motion === timed[i - 1].shot.motion;
+    if (!same) {
+      const span = timed[i - 1].end - timed[runStart].start;
+      if (span > 25 && i - runStart >= 6) { out.push({ level: 'warn', at: timed[runStart].start, text: `Séquence monotone de ${Math.round(span)} s (même mise en page, même mouvement, rien que des coupes) : change de traitement au milieu.`, fix: redirect }); break; }
+      runStart = i;
+    }
   }
   // what is said with names or dates, while only the face is on screen
   if (p.aroll) {
