@@ -152,7 +152,7 @@ describe('phase 3 : déterminisme, jetons, catalogue', () => {
       expect(t.desc.length).toBeGreaterThan(5);
       for (const p of t.params) { expect(p.min).toBeLessThan(p.max); expect(p.def).toBeGreaterThanOrEqual(p.min); expect(p.def).toBeLessThanOrEqual(p.max); }
     }
-    expect(ids.size).toBe(22);
+    expect(ids.size).toBe(25);
   });
   it('un réglage absent prend la valeur du catalogue', () => {
     const shot = { transition: 'whip', tp: { spread: 1.5 } } as never;
