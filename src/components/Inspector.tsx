@@ -12,6 +12,7 @@ import { toast } from './Toast';
 import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engine/effects';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { ArtPanel } from './ArtPanel';
+import { FavoritesPanel } from './FavoritesPanel';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
 import { PanelPicker } from './FxDiagram';
 import { transcribeClip } from '../rush';
@@ -195,6 +196,8 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </Section>
       )}
 
+      <Section title="Mes favoris"><FavoritesPanel kinds={['transition', 'animation']} shotId={shot.id} /></Section>
+
       {(index > 0 || overlay) && (
         <Section title="Transition d’entrée" aside={<button className="link-btn" title="Même transition pour tous les plans" onClick={() => update((p) => ({ ...p, shots: p.shots.map((x, i) => (i === 0 && !p.aroll ? x : { ...x, transition: shot.transition, tp: shot.tp, transitionDur: Math.min(shot.transitionDur, x.duration * 0.45) })) }))}>Appliquer à tous</button>}>
           <select className="input" value={shot.transition} onChange={(e) => {
@@ -336,6 +339,7 @@ function ProjectPanel() {
       <LookSection />
       <Section title="Habillage">
         <ArtPanel />
+        <FavoritesPanel kinds={['art', 'subtitles']} />
         <label className="color-row">
           <input type="color" value={p.accent} onChange={(e) => set({ accent: e.target.value }, 'accent')} />
           <span>Couleur d’accent · {p.accent}</span>

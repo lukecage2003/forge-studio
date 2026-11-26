@@ -126,3 +126,22 @@ describe('bibliothèque de directions artistiques', async () => {
     expect(p.look.grade).toBe('warm');
   });
 });
+
+describe('favoris créatifs', async () => {
+  const store = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
+  const F = await import('../src/engine/favorites');
+  it('enregistre, réapplique, exporte et réimporte, sans toucher au Brain', async () => {
+    const s = mk(0, '', { transition: 'inkframe', transitionDur: 0.7 });
+    F.saveFavorite('transition', 'Ma case encrée', F.capture.transition(s));
+    expect(F.favorites('transition').length).toBe(1);
+    const applied = F.applyToShot(mk(1, ''), F.favorites('transition')[0]);
+    expect(applied.transition).toBe('inkframe');
+    expect(applied.auto).toBeUndefined(); // the director leaves the user's choice alone
+    const blob = F.exportFavorites();
+    F.removeFavorite(F.favorites()[0].id);
+    expect(F.favorites().length).toBe(0);
+    expect(await F.importFavorites(blob)).toBe(1);
+    expect(store.has('forge-brain')).toBe(false);
+  });
+});

@@ -772,3 +772,14 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .live-log li.on { background: var(--ember-soft); color: var(--text); }
 @media (max-width: 900px) { .live-log { left: 8px; right: 8px; width: auto; bottom: 8px; } }
 .machine { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; background: var(--bg-2); font-size: 12.5px; }
+
+/* creative favorites */
+.favorites { display: grid; gap: 8px; margin-top: 6px; }
+.fav-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; opacity: .9; }
+.fav-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip.fav { display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; }
+.chip.fav .link { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; padding: 0 2px; }
+.chip.fav .x { opacity: .6; }
+.fav-io { display: flex; gap: 6px; }
+.art-panel details { margin-top: 6px; }
+.art-panel .field.row { display: grid; grid-template-columns: 1fr 1.3fr; align-items: center; gap: 6px; }
