@@ -38,6 +38,7 @@ function png(dataUrl) { return Buffer.from(dataUrl.split(',')[1], 'base64'); }
       if (S.renderGl) Object.assign(res, await S.renderGl());
       if (S.renderScenes) Object.assign(res, await S.renderScenes());
       if (S.renderMotion) Object.assign(res, await S.renderMotion());
+      if (S.renderSharpen) Object.assign(res, await S.renderSharpen());
       return res;
     });
     await browser.close();

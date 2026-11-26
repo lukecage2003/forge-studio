@@ -94,10 +94,23 @@ function program(name: string): Prog | null {
 
 export const glSupported = () => !!context();
 
-/** sharpen a finished frame in place (contrast-adaptive); false without WebGL */
+let soft: boolean | null = null;
+/** WebGL emulated on the CPU (SwiftShader, llvmpipe): full-frame passes cost ~150 ms there */
+export function softwareGl(): boolean {
+  if (soft != null) return soft;
+  const g = context();
+  if (!g) return (soft = true);
+  const dbg = g.getExtension('WEBGL_debug_renderer_info');
+  const name = String(dbg ? g.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER));
+  return (soft = /swiftshader|llvmpipe|software|basic render/i.test(name));
+}
+/** tests and benchmarks can force full-frame passes on software WebGL */
+export const forceGlPasses = (on: boolean) => { soft = on ? false : null; };
+
+/** sharpen a finished frame in place (contrast-adaptive); false without a real GPU */
 export function sharpenFrame(ctx: CanvasRenderingContext2D, amount: number, radius = 1): boolean {
   const src = ctx.canvas as unknown as HTMLCanvasElement;
-  if (amount <= 0 || !src.width) return false;
+  if (amount <= 0 || !src.width || softwareGl()) return false;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;

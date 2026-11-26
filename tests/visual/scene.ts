@@ -155,3 +155,17 @@ export async function renderMotion(): Promise<Record<string, string>> {
   }
   return out;
 }
+
+/** the sharpening pass, forced on (CI has software WebGL, where Forge skips it) */
+export async function renderSharpen(): Promise<Record<string, string>> {
+  const G = await import('../../src/engine/gl');
+  const p = await buildScene({ sharpen: 0.8, handheld: 0 }, ['cut']);
+  p.shots = p.shots.map((s) => ({ ...s, rect: { x: 60, y: 60, w: 200, h: 120 }, motion: 'static', shake: 0 }));
+  const W = 640, H = 360;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const out: Record<string, string> = {};
+  G.forceGlPasses(true);
+  try { createRenderer(W, H).draw(c.getContext('2d')!, p, 1); out['sharpen-forced'] = c.toDataURL('image/png'); }
+  finally { G.forceGlPasses(false); }
+  return out;
+}
