@@ -1232,7 +1232,18 @@ function drawLook(ctx: Ctx, project: Project, W: number, H: number, t: number) {
   }
 }
 
-function drawTitleCard(ctx: Ctx, W: number, H: number, shot: Shot, local: number, accent: string) {
+function drawTitleCard(ctx: Ctx, W: number, H: number, shot: Shot, local: number, accent: string, inkStyle = false) {
+  if (inkStyle && !shot.titleBg) {
+    // printed look: newsprint, a band of spot-colour dots, a panel border
+    const U = Math.min(W, H) * 0.035;
+    paperBackground(ctx, W, H, accent, U, local);
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W * 0.55, 0); ctx.lineTo(0, H * 0.35); ctx.closePath(); ctx.clip();
+    benDay(ctx, 0, 0, W, H, INK, U * 0.7, 'left', 0.18);
+    ctx.restore();
+    panelFrame(ctx, W, H, U, 7 + boil(local));
+    return;
+  }
   ctx.fillStyle = shot.titleBg || '#0E0E11';
   ctx.fillRect(0, 0, W, H);
   const g = ctx.createRadialGradient(W * 0.5, H * (0.55 - local * 0.01), 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
@@ -1540,7 +1551,7 @@ export function createRenderer(W: number, H: number): Renderer {
           drawEndScreen(ctx, W, H, brandOf(project), local);
         } else if (shot.diagram) {
           drawDiagram(ctx, project, W, H, shot.diagram, local, shot.duration);
-        } else drawTitleCard(ctx, W, H, shot, local, project.accent);
+        } else drawTitleCard(ctx, W, H, shot, local, project.accent, (project.diagramStyle ?? 'encre') === 'encre');
         break;
       case 'full': {
         const view = override?.view ?? cameraAt(shot, p, W / H, rtl);
