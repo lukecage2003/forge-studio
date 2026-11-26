@@ -153,3 +153,19 @@ describe('script calé sur les respirations de la voix', async () => {
     expect(scriptOnVoice(script, segs, [{ t: 11.5, d: 0.3 }])).toEqual(scriptOnVoice(script, segs));
   });
 });
+
+describe('pont français → anglais pour les bulles', async () => {
+  const { matchLocal } = await import('../src/engine/understand');
+  const doc = (id: string, order: number, text: string) => ({ id, order, text, chars: [] });
+  it('relie une narration française aux bulles anglaises par racines et glossaire', () => {
+    const docs = [
+      doc('a', 0, 'OCTOBER. I AM HOLDING THE PHOTOGRAPH IN MY HAND.'),
+      doc('b', 1, 'HOW LONG DID IT TAKE BEFORE YOU WERE GOOD AT FIXING WATCHES?'),
+      doc('c', 2, 'IT WAS THE SECOND WORLD WAR. THE TANKS ROLLED INTO TOWN.'),
+      doc('d', 3, 'WE WILL TAKE THE WAGON AND LEAVE IN THE SNOW.'),
+    ];
+    const sents = ['En octobre, il tient une photo.', 'Il demandait combien de temps pour réparer des montres.', 'La guerre arrive, avec les chars.', 'Ils fuient dans la neige avec une charrette.']
+      .map((text, i) => ({ text, s: i * 3, e: i * 3 + 2.5, words: [] }));
+    expect(matchLocal(sents, docs).map((a) => a.shotId)).toEqual(['a', 'b', 'c', 'd']);
+  });
+});

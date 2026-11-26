@@ -25,6 +25,15 @@ async function semantic(sentences: Sentence[], docs: Doc[], onProgress?: (l: str
 }
 
 export async function planStory(p: Project, panels: Shot[], sentences: Sentence[], engine: 'auto' | 'local' | 'google', onProgress?: (l: string, p: number) => void): Promise<StoryPlan> {
+  // matching needs to know what each panel SAYS: read the balloons now if nobody did (once; kept in the project)
+  const unread = panels.filter((s) => !s.text?.trim() && !s.desc?.trim());
+  if (unread.length > panels.length * 0.4) {
+    try {
+      const { ocrPages } = await import('./understand');
+      const texts = await ocrPages({ ...p, shots: unread }, (i, n) => onProgress?.(i < 0 ? 'Lecture des bulles : chargement du lecteur…' : `Lecture des bulles ${Math.min(n, i + 1)}/${n} (une seule fois)…`, n ? 0.1 + 0.25 * (i / n) : 0.1));
+      for (const s of unread) { const t = texts.get(s.id); if (t) s.text = t; }
+    } catch { /* offline: names in the script and the order of the story still guide the match */ }
+  }
   const useGoogle = engine === 'google' || (engine === 'auto' && hasGoogle());
   if (useGoogle) {
     // short aliases keep the request small: P1, P2…

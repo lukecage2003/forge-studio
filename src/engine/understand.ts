@@ -1,5 +1,7 @@
 import type { Project, Rect, Shot } from '../types';
 import { getImage } from './media';
+import { cachedDetection } from './panelAI';
+import { stem, translations } from './bridge-fr-en';
 import type { Sentence } from './narration';
 
 /* =========================================================================
@@ -105,7 +107,11 @@ export async function ocrPages(p: Project, onProgress: (i: number, n: number) =>
       const sh = shots.find((s) => inside(cxp, cyp, s.rect)) ?? shots[0];
       if (sh && text) bucket.set(sh.id, [...(bucket.get(sh.id) ?? []), text]);
     };
-    const balloons = findBalloons(a.img, a.width, a.height);
+    // speech balloons from the AI detector + caption boxes from the heuristic (the network misses captions)
+    const ai = cachedDetection(pg.mediaId)?.bubbles.filter((b) => b.s >= 0.35).map(({ x, y, w, h }) => ({ x, y, w, h })) ?? [];
+    const heur = findBalloons(a.img, a.width, a.height);
+    const ov = (r: Rect, q: Rect) => { const w = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x), h = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y); return w > 0 && h > 0 ? (w * h) / Math.min(r.w * r.h, q.w * q.h) : 0; };
+    const balloons = [...ai, ...heur.filter((q) => !ai.some((r) => ov(r, q) > 0.5))];
     if (balloons.length) {
       for (const b of balloons) {
         const pad = 6;
@@ -176,6 +182,11 @@ export function matchLocal(sentences: Sentence[], docs: Doc[], sim?: Float32Arra
   const df = new Map<string, number>();
   for (const s of dtoks) for (const t of s) df.set(t, (df.get(t) ?? 0) + 1);
   const idf = (t: string) => Math.log(1 + M / (df.get(t) ?? M));
+  // French narration, English balloons: shared stems (cognates) and a fixed glossary bridge the languages
+  const dstems = dtoks.map((s) => new Set([...s].map(stem).filter((x): x is string => !!x)));
+  const sdf = new Map<string, number>();
+  for (const s of dstems) for (const t of s) sdf.set(t, (sdf.get(t) ?? 0) + 1);
+  const sidf = (t: string) => Math.log(1 + M / (sdf.get(t) ?? M));
   const names: Uint8Array[] = [];
   const emit: Float32Array[] = sentences.map((se) => {
     const row = new Float32Array(M);
@@ -184,7 +195,14 @@ export function matchLocal(sentences: Sentence[], docs: Doc[], sim?: Float32Arra
     for (let j = 0; j < M; j++) {
       let sc = 0;
       for (const t of st) {
-        if (!dtoks[j].has(t.n)) continue;
+        if (!dtoks[j].has(t.n)) {
+          // translated word, else cognate stem: weaker evidence than the same word
+          const tr = translations(t.n).filter((x) => dtoks[j].has(x));
+          if (tr.length) { sc += Math.max(...tr.map(idf)) * 0.8; continue; }
+          const sm = stem(t.n);
+          if (sm && dstems[j].has(sm)) sc += sidf(sm) * 0.7;
+          continue;
+        }
         const name = /^\p{Lu}/u.test(t.raw) && t.raw.length > 2;
         const num = /^\d+$/.test(t.n);
         if (name || num) nm[j]++;

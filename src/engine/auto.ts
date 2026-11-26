@@ -495,8 +495,18 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       const ws = se.s, we = i + 1 < sents.length ? sents[i + 1].s : Math.min(T, se.e + 0.8);
       const len = we - ws;
       if (len < 0.3) return;
-      // uncertain over a face cam: show the speaker rather than a wrong panel
-      if (!a?.shotId || (hasFace && a.conf < 0.35)) return;
+      // uncertain over a face cam: show the speaker rather than a wrong panel —
+      // unless the story's order vouches for it: it sits between the sure panels
+      // of the sentences around it (a narration moves through the comic in order)
+      if (!a?.shotId) return;
+      if (hasFace && a.conf < 0.35) {
+        const sure = (j: number) => { const b = plan.assign.find((x) => x.sentence === j); return b?.shotId && b.conf >= 0.35 ? order.indexOf(b.shotId) : null; };
+        let lo = -1, hi = order.length;
+        for (let j = i - 1; j >= 0; j--) { const v = sure(j); if (v != null) { lo = v; break; } }
+        for (let j = i + 1; j < sents.length; j++) { const v = sure(j); if (v != null) { hi = v; break; } }
+        const k = order.indexOf(a.shotId);
+        if (a.conf < 0.2 || k < lo || k > hi) return;
+      }
       let ids = [a.shotId, ...a.more].filter((id) => byId.has(id));
       // long sentence: continue with the next panels of the story
       const want = Math.max(1, Math.min(3, Math.round(len / (st.base * pace * 1.1))));

@@ -13,7 +13,8 @@ const WPS = 2.6; // ~155 words / minute, a typical YouTube narration pace
 
 export function narrationWords(p: Project): Word[] {
   const out: Word[] = [];
-  if (p.aroll?.words.length) out.push(...timelineWords(p));
+  // a rush: its transcript, or the pasted script laid on its voice when there is no transcript
+  if (p.aroll && (p.aroll.words.length || p.script?.trim())) out.push(...timelineWords(p));
   for (const c of p.audio) {
     if (c.kind !== 'voice' || !c.words?.length) continue;
     for (const w of c.words) {
