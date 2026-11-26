@@ -28,13 +28,20 @@ export interface Page {
   summary?: string;
   /** how the page was cut: real panels, a full-page splash, or reading-order zones */
   cut?: 'panels' | 'splash' | 'zones';
+  /** who cut it: the local AI detector or the classic gutter algorithm */
+  cutBy?: 'ia' | 'algo';
+  /** speech balloons and captions found on the page (-1 = unknown) */
+  bubbles?: number;
+  /** same picture as an earlier page (scan duplicate) */
+  dupOf?: string;
 }
 
-export type PageKind = 'story' | 'cover' | 'variant' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';
+export type PageKind = 'story' | 'cover' | 'variant' | 'title' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';
 export const PAGE_KINDS: Record<PageKind, { label: string; skip: boolean }> = {
   story: { label: 'Planche', skip: false },
   cover: { label: 'Couverture', skip: false },
   variant: { label: 'Couverture variante', skip: true },
+  title: { label: 'Page de titre', skip: false },
   splash: { label: 'Pleine page', skip: false },
   spread: { label: 'Double page', skip: false },
   text: { label: 'Texte / crédits', skip: true },

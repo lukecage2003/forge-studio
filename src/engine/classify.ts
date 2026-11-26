@@ -15,6 +15,8 @@ export interface PageCtx {
   hint?: string;
   /** kind of the previous page of the same file (covers come in a row) */
   prevKind?: PageKind;
+  /** speech balloons + captions found by the AI detector (-1 or undefined = unknown) */
+  bubbles?: number;
 }
 
 const HINTS: Record<string, PageKind> = {
@@ -90,15 +92,49 @@ export function classifyPage(img: CanvasImageSource, width: number, height: numb
   if (st.text && cut.kind !== 'panels') return { kind: 'text', why: 'surtout du texte' };
   const n = cut.kind === 'panels' ? cut.rects.length : (cut.diag?.n ?? cut.rects.length);
   const biggest = cut.diag?.biggest ?? 0;
-  // covers: one illustration plus a logo band and a credit strip at most
+  const b = ctx.bubbles ?? -1;
+  const last = ctx.srcCount >= 8 && ctx.srcIndex >= ctx.srcCount - 3;
+  if (b >= 0) {
+    // Balloons are the surest sign of a story page: covers, title pages, pin-ups
+    // and ads have none (a caption or two at most).
+    if (b >= 3) return { kind: n <= 1 ? 'splash' : 'story', why: `${b} bulles${n > 1 ? `, ${n} cases` : ''}` };
+    const silent = b === 0;
+    if (ctx.srcIndex === 0 && silent && n <= 3) return { kind: 'cover', why: 'première page, sans bulles' };
+    if ((ctx.prevKind === 'cover' || ctx.prevKind === 'variant') && silent && n <= 3) return { kind: 'variant', why: 'suit la couverture, sans bulles' };
+    if (last && silent) return biggest > 0.6 || n <= 1
+      ? { kind: 'variant', why: 'fin du numéro, une image sans bulles' }
+      : { kind: 'ad', why: 'fin du numéro, sans bulles ni récit' };
+    // lots of paper around one picture and the credits: the chapter title page
+    if (silent && ctx.srcIndex <= 6 && st.flat > 0.3 && n <= 2) return { kind: 'title', why: 'page de titre (image + crédits)' };
+    if (n <= 1 || biggest > 0.8) return { kind: 'splash', why: silent ? 'une seule image' : 'pleine page' };
+    return { kind: 'story', why: `${n} cases` };
+  }
+  // no AI reading: geometry only
   const coverLike = n <= 3 && (biggest > 0.45 || cut.kind !== 'panels');
   if (ctx.srcIndex === 0 && coverLike) return { kind: 'cover', why: 'première page du fichier' };
   if ((ctx.prevKind === 'cover' || ctx.prevKind === 'variant') && coverLike) return { kind: 'variant', why: 'suit la couverture' };
-  if (ctx.srcCount >= 8 && ctx.srcIndex >= ctx.srcCount - 3 && coverLike && biggest > 0.6) return { kind: 'variant', why: 'fin du numéro, une seule image' };
+  if (last && coverLike && biggest > 0.6) return { kind: 'variant', why: 'fin du numéro, une seule image' };
   const single = cut.kind === 'splash' || (n <= 1) || biggest > 0.8;
   if (single) return { kind: 'splash', why: 'une seule image' };
   return { kind: 'story', why: cut.kind === 'panels' ? 'cases détectées' : 'planche (bandes)' };
 }
+
+/**
+ * 64-bit difference hash: two scans of the same page (or the same cover
+ * printed twice) differ by a few bits only.
+ */
+export function pageHash(img: CanvasImageSource, width: number, height: number): string {
+  const c = document.createElement('canvas');
+  c.width = 9; c.height = 8;
+  const x = c.getContext('2d', { willReadFrequently: true })!;
+  x.drawImage(img, 0, 0, width, height, 0, 0, 9, 8);
+  const d = x.getImageData(0, 0, 9, 8).data;
+  const L = (i: number) => d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+  let bits = '';
+  for (let y = 0; y < 8; y++) for (let xx = 0; xx < 8; xx++) bits += L(y * 9 + xx) > L(y * 9 + xx + 1) ? '1' : '0';
+  return bits;
+}
+export const hashDistance = (a: string, b: string) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
 
 export function medianAspect(list: { width: number; height: number }[]) {
   const a = list.map((p) => p.width / p.height).filter((x) => x < 1.2).sort((x, y) => x - y);

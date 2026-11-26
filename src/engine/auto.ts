@@ -1,7 +1,7 @@
 import type { CaptionAnim, CaptionPreset, Layout, Motion, Project, Rect, Shot, Subtitle, Transition, Word } from '../types';
 import { FORMATS } from '../types';
 import { clamp, uid } from '../lib/util';
-import { cutPage } from './detect';
+import { cutPageSmart } from './panelAI';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
@@ -347,7 +347,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     let list: Shot[] = o.redetect ? [] : (kept.get(pg.id) ?? []).map((s) => ({ ...s, group: undefined }));
     if (!list.length) {
       const old = kept.get(pg.id) ?? [];
-      const cut = cutPage(a.img, a.width, a.height, readingOrder === 'rtl');
+      const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, readingOrder === 'rtl');
       list = cut.rects.map((rect, i) =>
         newShot(proj, { pageId: pg.id, rect, zone: cut.kind === 'panels' ? undefined : cut.kind, caption: old[i]?.caption ?? { text: '', ...proj.defaultCaption } }));
     }

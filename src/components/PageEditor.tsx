@@ -3,7 +3,7 @@ import { Eraser, Maximize, ScanSearch, MousePointerSquareDashed, Sparkles } from
 import { getImage } from '../engine/media';
 import { useMediaVersion } from '../lib/hooks';
 import { patchShot, setUI, update, useStore } from '../store';
-import { addShotRect, aiRecut, clearPage, redetect, wholePage } from '../actions';
+import { addShotRect, aiRecut, clearPage, redetect, redetectClassic, wholePage } from '../actions';
 import type { Rect } from '../types';
 import { clamp } from '../lib/util';
 
@@ -145,8 +145,11 @@ export function PageEditor() {
   return (
     <div className="stage cut">
       <div className="stage-toolbar">
-        <button className="btn sm" onClick={() => redetect(page.id)} title="Re-détecte les cases de cette planche (remplace les cases existantes)">
+        <button className="btn sm" onClick={() => void redetect(page.id)} title="Re-détecte les cases et les bulles avec l'IA locale (gratuite, hors ligne), l'algorithme classique en secours">
           <ScanSearch size={15} /> Détection auto
+        </button>
+        <button className="btn sm ghost" onClick={() => redetectClassic(page.id)} title="Découpe par les gouttières seulement (algorithme classique), utile si l'IA se trompe">
+          <ScanSearch size={15} /> Classique
         </button>
         <button className="btn sm google" onClick={() => void aiRecut([page.id])} title="Détection précise des cases par Google Gemini (clé dans les réglages)">
           <Sparkles size={15} /> IA Google

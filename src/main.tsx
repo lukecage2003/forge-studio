@@ -9,11 +9,12 @@ import App from './App';
 import { agreement, cutPage, detectBlobs, detectPanels, setFlatMin } from './engine/detect';
 import { getImage } from './engine/media';
 import { pageStats } from './engine/classify';
+import { cutPageSmart, comicOrder } from './engine/panelAI';
 import { getState } from './store';
 
 // small hook for automated tests and power users (no effect on the app)
 import { layersFor } from './engine/layers';
-(window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
+(window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, cutPageSmart, comicOrder, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
 
 import { loadVault } from './ai/vault';
 import { migrateGoogleKey } from './engine/google';

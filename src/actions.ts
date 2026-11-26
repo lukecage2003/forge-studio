@@ -4,7 +4,9 @@ import { getState, newShot, setUI, update } from './store';
 import { getImage, importAudio, importImage } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
-import { classifyPage, medianAspect } from './engine/classify';
+import { classifyPage, hashDistance, medianAspect, pageHash } from './engine/classify';
+import { cutPageSmart } from './engine/panelAI';
+import type { PageCut } from './engine/detect';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
 import { layoutShots } from './engine/timeline';
@@ -30,8 +32,31 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
         toast(`${imgs[i].name} : image illisible, ignorée.`, 'error');
       }
     }
-    let zones = 0;
+    let zones = 0, byAI = 0;
     const kinds: Partial<Record<PageKind, number>> = {};
+    // 1. read every page first (AI panels + balloons, async), 2. then classify with the issue's context
+    const cuts = new Map<string, PageCut & { by: 'ia' | 'algo'; bubbles: number }>();
+    const rtl = getState().project.readingOrder === 'rtl';
+    if (opts.autoCut) {
+      for (let i = 0; i < pages.length; i++) {
+        setUI({ busy: `Lecture des cases et des bulles ${i + 1}/${pages.length}…` });
+        const pg = pages[i], a = getImage(pg.mediaId)!;
+        const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, rtl);
+        cuts.set(pg.id, cut);
+        if (cut.by === 'ia') byAI++;
+      }
+    }
+    // scan duplicates: same picture as an earlier page of the import or of the project
+    const seen = [...getState().project.pages, ...pages].map((pg) => {
+      const a = getImage(pg.mediaId);
+      return { pg, h: a ? pageHash(a.img, a.width, a.height) : '' };
+    });
+    let dups = 0;
+    for (let i = 0; i < seen.length; i++) {
+      if (!pages.includes(seen[i].pg) || !seen[i].h) continue;
+      const twin = seen.slice(0, i).find((o) => o.h && hashDistance(o.h, seen[i].h) <= 4 && Math.abs(o.pg.width / o.pg.height - seen[i].pg.width / seen[i].pg.height) < 0.02);
+      if (twin) { seen[i].pg.dupOf = twin.pg.id; dups++; }
+    }
     update((p) => {
       let next: Project = { ...p, pages: [...p.pages, ...pages] };
       if (opts.autoCut) {
@@ -40,18 +65,21 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
         let prev: { source?: string; kind?: PageKind } = {};
         for (const pg of pages) {
           const a = getImage(pg.mediaId)!;
-          const cut = cutPage(a.img, a.width, a.height, p.readingOrder === 'rtl');
+          const cut = cuts.get(pg.id) ?? { ...cutPage(a.img, a.width, a.height, p.readingOrder === 'rtl'), by: 'algo' as const, bubbles: -1 };
           const cls = classifyPage(a.img, a.width, a.height, cut, {
             srcIndex: pg.srcIndex ?? 0, srcCount: pg.srcCount ?? 1, medianAspect: aspects.get(pg.source ?? '') ?? 0.65,
-            hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined,
+            hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined, bubbles: cut.bubbles,
           });
           prev = { source: pg.source, kind: cls.kind };
           pg.kind = cls.kind;
           pg.kindWhy = cls.why;
           pg.skip = PAGE_KINDS[cls.kind].skip;
+          if (pg.dupOf && cls.kind !== 'cover') { pg.skip = true; pg.kindWhy = `${cls.why} · doublon d'une page précédente`; }
           pg.cut = cut.kind;
+          pg.cutBy = cut.by;
+          pg.bubbles = cut.bubbles;
           kinds[cls.kind] = (kinds[cls.kind] ?? 0) + 1;
-          const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
+          const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'title' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
           if (!whole && cut.kind === 'zones') zones++;
           const rects = whole ? [{ x: 0, y: 0, w: a.width, h: a.height }] : cut.rects;
           const shots = rects.map((rect) => newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind }));
@@ -65,21 +93,35 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
     toast(`${pages.length} page${pages.length > 1 ? 's' : ''} importée${pages.length > 1 ? 's' : ''} · ${n} plans${zones ? ` · ${zones} page${zones > 1 ? 's' : ''} animée${zones > 1 ? 's' : ''} par bandes` : ''}`);
     const skipped = Object.entries(kinds).filter(([k]) => PAGE_KINDS[k as PageKind].skip).map(([k, v]) => `${v} ${PAGE_KINDS[k as PageKind].label.toLowerCase()}`);
     const covers = kinds.cover ?? 0;
-    toast(`Pages reconnues : ${covers} couverture${covers > 1 ? 's' : ''}, ${kinds.story ?? 0} planches${kinds.splash ? `, ${kinds.splash} pleines pages` : ''}${kinds.spread ? `, ${kinds.spread} doubles pages` : ''}${skipped.length ? ` · exclues : ${skipped.join(', ')}` : ''}`);
+    toast(`Pages reconnues : ${covers} couverture${covers > 1 ? 's' : ''}, ${kinds.story ?? 0} planches${kinds.splash ? `, ${kinds.splash} pleines pages` : ''}${kinds.spread ? `, ${kinds.spread} doubles pages` : ''}${kinds.title ? `, ${kinds.title} page${kinds.title > 1 ? 's' : ''} de titre` : ''}${dups ? ` · ${dups} doublon${dups > 1 ? 's' : ''} écarté${dups > 1 ? 's' : ''}` : ''}${byAI ? ` · cases lues par l'IA locale sur ${byAI}/${pages.length} pages` : ''}${skipped.length ? ` · exclues : ${skipped.join(', ')}` : ''}`);
   } finally {
     setUI({ busy: null });
   }
 }
 
-export function redetect(pageId: string) {
+export async function redetect(pageId: string) {
+  const { project } = getState();
+  const pg = project.pages.find((p) => p.id === pageId);
+  const a = pg && getImage(pg.mediaId);
+  if (!pg || !a) return;
+  setUI({ busy: 'Lecture des cases…' });
+  const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, project.readingOrder === 'rtl').finally(() => setUI({ busy: null }));
+  update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pageId ? { ...x, cut: cut.kind, cutBy: cut.by, bubbles: cut.bubbles } : x)) }));
+  replacePageShots(pageId, cut.rects, cut.kind === 'panels' ? undefined : cut.kind);
+  const who = cut.by === 'ia' ? ' (IA locale)' : '';
+  toast(cut.kind === 'panels' ? `${cut.rects.length} cases détectées${who}` : cut.kind === 'splash' ? `Pleine page${who}` : `Cases non fiables : page animée par zones (${cut.rects.length})`);
+}
+
+/** classic gutter algorithm only, for comparison or when the AI cut is wrong */
+export function redetectClassic(pageId: string) {
   const { project } = getState();
   const pg = project.pages.find((p) => p.id === pageId);
   const a = pg && getImage(pg.mediaId);
   if (!pg || !a) return;
   const cut = cutPage(a.img, a.width, a.height, project.readingOrder === 'rtl');
-  update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pageId ? { ...x, cut: cut.kind } : x)) }));
+  update((p) => ({ ...p, pages: p.pages.map((x) => (x.id === pageId ? { ...x, cut: cut.kind, cutBy: 'algo' } : x)) }));
   replacePageShots(pageId, cut.rects, cut.kind === 'panels' ? undefined : cut.kind);
-  toast(cut.kind === 'panels' ? `${cut.rects.length} cases détectées` : `Cases non fiables : page animée par zones (${cut.rects.length})`);
+  toast(cut.kind === 'panels' ? `${cut.rects.length} cases (algorithme classique)` : `Algorithme classique : zones (${cut.rects.length})`);
 }
 
 export function wholePage(pageId: string) {
