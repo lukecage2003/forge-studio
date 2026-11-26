@@ -260,7 +260,9 @@ export interface Project {
   /** sound engine: voice clean-up and loudness target of the export (LUFS, null = untouched) */
   mix?: { voiceClean: boolean; target: number | null; /** adaptive noise reduction of the voice (engine/denoise) */ denoise?: 'off' | 'auto' | 'light' | 'strong'; /** radio = broadcast chain computed on the take; natural = light live chain */ voice?: 'radio' | 'natural' | 'off' };
   /** creative direction profile used by the last auto edit */
-  direction?: { profile: string };
+  /** display time ranges by kind of image (seconds), used by the review: simple, panel, page, reveal */
+  holds?: { simple: readonly [number, number]; panel: readonly [number, number]; page: readonly [number, number]; reveal: readonly [number, number] };
+  direction?: { profile: string; /** editorial sequences chosen by the creative director (engine/director) */ sequences?: { type: string; treatment: string; label: string; from: number; to: number; start: number }[] };
 }
 
 export type Selection =

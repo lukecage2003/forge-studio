@@ -19,7 +19,8 @@ const LENGTHS: { v: AutoLength; l: string }[] = [
 export function AutoModal({ onClose }: { onClose: () => void }) {
   const format = useStore((s) => s.project.format);
   const hasFace = useStore((s) => !!s.project.aroll);
-  const hasWords = useStore((s) => !!s.project.aroll?.words.length);
+  // words to subtitle and match: a transcript, or the pasted script laid on the voice
+  const hasWords = useStore((s) => !!s.project.aroll?.words.length || (!!s.project.aroll && !!s.project.script?.trim()));
   const hasVoice = useStore((s) => s.project.audio.some((a) => a.kind === 'voice'));
   const hasMusic = useStore((s) => s.project.audio.some((a) => a.kind === 'music'));
   const pages = useStore((s) => s.project.pages.length);
@@ -38,6 +39,9 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const [hooks, setHooks] = useState<string[]>([]);
   const [redetect, setRedetect] = useState(false);
   const [beatSync, setBeatSync] = useState(true);
+  // creative director: each kind of decision can be left to the editor (remembered)
+  const [dir, setDir] = useState(() => { try { return { transitions: true, camera: true, sequences: true, ...JSON.parse(localStorage.getItem('forge-director') || '{}') }; } catch { return { transitions: true, camera: true, sequences: true }; } });
+  const setD = (k: 'transitions' | 'camera' | 'sequences') => (v: boolean) => { const n = { ...dir, [k]: v }; setDir(n); try { localStorage.setItem('forge-director', JSON.stringify(n)); } catch { /* private mode */ } };
   const [captionStyle, setCaptionStyle] = useState(true);
   const [subtitles, setSubtitles] = useState(true);
   const [aiMatch, setAiMatch] = useState(hasGoogle() && hasWords);
@@ -82,7 +86,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
+      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
       setUI({ mode: 'preview', playhead: 0, selection: null });
       void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
@@ -203,11 +207,14 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="toggles">
+          <Toggle on={dir.sequences} set={setD('sequences')} label="Directeur créatif : traiter le montage par séquences" hint="Introduction, contexte, révélation… chacune reçoit un traitement visuel adapté, jamais deux fois le même d’affilée" />
+          <Toggle on={dir.camera} set={setD('camera')} label="Le directeur choisit les mouvements de caméra" hint="Désactivé : mouvements automatiques simples, à régler toi-même" />
+          <Toggle on={dir.transitions} set={setD('transitions')} label="Le directeur choisit les transitions" hint="Pas de transition répétée de près, pas de zoom sur zoom, coupe franche quand un effet n’apporte rien" />
           {hasFace ? (
             <>
-              <Toggle on={subtitles} set={setSubtitles} disabled={!hasWords} label="Sous-titres automatiques mot à mot" hint={hasWords ? undefined : 'Transcris le rush dans l’onglet Rush pour les activer'} />
+              <Toggle on={subtitles} set={setSubtitles} disabled={!hasWords} label="Sous-titres automatiques mot à mot" hint={hasWords ? undefined : 'Transcris le rush ou colle ton script pour les activer'} />
               <Toggle on={aiMatch} set={setAiMatch} disabled={!google || !hasWords} label="Placer chaque case sur la phrase qu’elle illustre (Google)"
-                hint={!google ? 'Ajoute une clé Google dans les réglages' : !hasWords ? 'Nécessite la transcription' : 'Sinon les cases suivent l’ordre de lecture'} />
+                hint={!google ? 'Ajoute une clé Google dans les réglages' : !hasWords ? 'Nécessite la transcription ou ton script' : 'Sinon les cases suivent l’ordre de lecture'} />
             </>
           ) : (
             <Toggle on={beatSync} set={setBeatSync} disabled={!hasMusic} label="Couper sur le beat de la musique" hint={hasMusic ? undefined : 'Ajoute une musique pour l’activer'} />

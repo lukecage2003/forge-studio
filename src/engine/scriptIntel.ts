@@ -84,7 +84,7 @@ const RX = {
   question: /\?\s*$/,
 };
 
-function roleOf(text: string, i: number, n: number, beat: Beat): Role {
+export function roleOf(text: string, i: number, n: number, beat: Beat): Role {
   const t = norm(text);
   if (i === 0 || (i === 1 && RX.question.test(norm(text)))) return 'accroche';
   if (i >= n - 2 && (RX.conclusion.test(t) || i === n - 1)) return 'conclusion';

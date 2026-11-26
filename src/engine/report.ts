@@ -11,6 +11,7 @@ import { sfxEvents } from './sfx';
 import { voiceIntervals, type MixInfo } from './audio';
 import { TRANSITION } from './effects';
 import { PROFILE, type ProfileId } from './direction';
+import { SEQ_FR, variety } from './director';
 import { noiseReport, voiceReport } from './media';
 import { voiceOf } from './audio';
 
@@ -41,6 +42,7 @@ const f1 = (v: number) => v.toFixed(1).replace('.', ',');
 const mmss = (s: number) => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')} s`;
 
 export function buildReport(p: Project, mix?: MixInfo | null): Report {
+  const vr = variety(layoutShots(p).map((t) => t.shot));
   const timed = layoutShots(p);
   const dur = videoDuration(p);
   const min = Math.max(dur / 60, 1e-6);
@@ -76,6 +78,10 @@ export function buildReport(p: Project, mix?: MixInfo | null): Report {
       ...(prof ? [{ label: 'Effets forts par minute', value: `${f1(strong / min)} (budget ${prof.budget.strong})`, level: lv(dur > 30 && strong / min > Math.max(1, prof.budget.strong) + 0.5) } as Row] : []),
       { label: 'Même transition deux fois de suite', value: String(repeats), level: lv(repeats > 0) },
       { label: 'Répartition', value: Object.entries(hist).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${TRANSITION[k as 'fade']?.label ?? k} ${n}`).join(' · '), level: 'ok' },
+      { label: 'Séquences du directeur créatif', value: p.direction?.sequences?.length ? p.direction.sequences.map((q) => `${SEQ_FR[q.type as keyof typeof SEQ_FR] ?? q.type} (${q.label})`).join(' → ') : 'aucune (montage manuel ou directeur désactivé)', level: 'ok' },
+      { label: 'Plus longue suite du même mouvement de caméra', value: String(vr.maxMotionRun), level: lv(vr.maxMotionRun >= 4), hint: 'Au-delà de 3, le regard s’endort.' },
+      { label: 'Transitions réutilisées de près', value: String(vr.closeRepeats), level: lv(vr.closeRepeats > 0), hint: 'Une même transition à moins de trois transitions d’intervalle s’use.' },
+      { label: 'Variété', value: `${vr.motions} mouvements de caméra, ${vr.transitions} transitions différentes`, level: 'ok' },
     ] },
     { title: 'Son', rows: [
       ...(mix ? [

@@ -1,7 +1,8 @@
 import type { CaptionAnim, CaptionPreset, Layout, Motion, Project, Rect, Shot, Subtitle, Transition, Word } from '../types';
 import { FORMATS } from '../types';
 import { clamp, uid } from '../lib/util';
-import { cachedDetection, cutPageSmart } from './panelAI';
+import { cachedDetection, comicOrder, cutPageSmart } from './panelAI';
+import { directSequences, variety, type DirectorOptions } from './director';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
@@ -56,6 +57,8 @@ export interface AutoOptions {
   profile?: ProfileId;
   /** production model: what the video is made of (see MODELS) */
   model?: ProductionModel;
+  /** creative director: which decisions it may take (all on by default) */
+  director?: Partial<DirectorOptions>;
   onProgress?: (label: string, p: number) => void;
 }
 
@@ -837,6 +840,17 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
 
   proj = { ...proj, shots };
 
+  // balloons already read at import: the director needs them to choose a reading camera
+  proj = { ...proj, shots: proj.shots.map((s) => {
+    if (s.balloons || !s.pageId) return s;
+    const pg = proj.pages.find((x) => x.id === s.pageId);
+    const det = pg && cachedDetection(pg.mediaId);
+    if (!det) return s;
+    const inside = det.bubbles.filter((b) => b.s >= 0.35 && b.x + b.w / 2 > s.rect.x && b.x + b.w / 2 < s.rect.x + s.rect.w && b.y + b.h / 2 > s.rect.y && b.y + b.h / 2 < s.rect.y + s.rect.h)
+      .map(({ x, y, w, h }) => ({ x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }));
+    return inside.length ? { ...s, balloons: comicOrder(inside, readingOrder === 'rtl').slice(0, 6) } : s;
+  }) };
+
   o.onProgress?.('Direction créative : transitions selon le récit…', 0.8);
   /* creative direction: transitions from the narration, under the effects budget */
   if (prof) {
@@ -845,6 +859,22 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     const beats = Object.entries(d.report.beats).filter(([b]) => b !== 'plain' && b !== 'hook').sort((a, b) => b[1] - a[1]).slice(0, 3)
       .map(([b, n]) => `${n} ${BEAT_FR[b as keyof typeof BEAT_FR]}`).join(', ');
     notes.push(`Direction « ${prof.label} » : ${d.report.strong} effet(s) fort(s), ${d.report.accents} accent(s)${d.report.scenes ? `, ${d.report.scenes} scène(s) 3D` : ''}, le reste en coupes franches.${beats ? ' Temps forts repérés : ' + beats + '.' : ''}`);
+  }
+
+  /* creative director: sequences, treatments, camera grammar, transition diversity */
+  {
+    const dopt: DirectorOptions = { transitions: true, camera: true, sequences: true, ...o.director };
+    if (dopt.transitions || dopt.camera) {
+      let acc = 0;
+      const timed = proj.shots.map((s, i) => { const t = s.start ?? acc; acc = t + s.duration; return { s, i, t }; }).sort((a, b) => a.t - b.t || a.i - b.i);
+      const before = variety(timed.map((x) => x.s));
+      const d = directSequences(timed.map((x) => x.s), aspect, dopt, readingOrder === 'rtl');
+      const byId = new Map(d.shots.map((s) => [s.id, s]));
+      proj = { ...proj, shots: proj.shots.map((s) => byId.get(s.id) ?? s), direction: { ...(proj.direction ?? { profile: o.profile ?? 'premium' }), sequences: d.report.sequences } };
+      const after = variety(timed.map((x) => byId.get(x.s.id)!));
+      notes.push(...d.report.notes);
+      if (before.maxMotionRun > after.maxMotionRun || before.closeRepeats > after.closeRepeats) notes.push(`Variété : plus longue suite de mouvements identiques ${before.maxMotionRun} → ${after.maxMotionRun}, transitions répétées de près ${before.closeRepeats} → ${after.closeRepeats}.`);
+    }
   }
 
   /* production model: visuals the script calls for, built from the user's panels */
