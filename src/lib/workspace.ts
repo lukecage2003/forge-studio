@@ -61,7 +61,9 @@ const safeId = (id: string) => id.replace(/[^\w.-]/g, '_');
 export class Workspace {
   /** media already on disk: avoids re-checking on every save */
   private known = new Set<string>();
-  constructor(readonly root: DirLike, readonly kind: 'folder' | 'browser') {}
+  readonly root: DirLike;
+  readonly kind: 'folder' | 'browser';
+  constructor(root: DirLike, kind: 'folder' | 'browser') { this.root = root; this.kind = kind; }
 
   async init() {
     if (!(await exists(this.root, 'forge-workspace.json'))) await writeFile(this.root, 'forge-workspace.json', JSON.stringify({ app: 'Forge', layout: LAYOUT, created: new Date().toISOString() }));
