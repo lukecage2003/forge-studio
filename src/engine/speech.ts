@@ -77,6 +77,17 @@ export function voiceMask(a: Analysis, thresholdDb: number) {
 
 interface Island { a: number; b: number } // frame indices [a,b)
 
+/** breaths between phrases (source seconds): centre and length of every gap ≥ 0.12 s inside the speech */
+export function pausesOf(a: Analysis, thresholdDb: number): { t: number; d: number }[] {
+  const isl = islands(voiceMask(a, thresholdDb).mask);
+  const out: { t: number; d: number }[] = [];
+  for (let k = 1; k < isl.length; k++) {
+    const d = (isl[k].a - isl[k - 1].b) * HOP;
+    if (d >= 0.12) out.push({ t: +(((isl[k - 1].b + isl[k].a) / 2) * HOP).toFixed(3), d: +d.toFixed(3) });
+  }
+  return out;
+}
+
 function islands(mask: Uint8Array): Island[] {
   const out: Island[] = [];
   let i = 0;

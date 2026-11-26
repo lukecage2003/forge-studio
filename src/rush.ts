@@ -2,7 +2,7 @@ import { transcriptQuality } from './engine/transcriptCheck';
 import type { ARoll, Cut, Word } from './types';
 import { getState, setUI, update } from './store';
 import { getAudio, importVideo, ensureVideo } from './engine/media';
-import { analyse, defaultRoughCut, proposeCuts, toMono16k, keepSegments, segsDuration, voicedSeconds, type Analysis } from './engine/speech';
+import { analyse, defaultRoughCut, pausesOf, proposeCuts, toMono16k, keepSegments, segsDuration, voicedSeconds, type Analysis } from './engine/speech';
 import { hesitationBias, observeCutToggle, observeManualCut, retakeBias, tuneRoughCut } from './engine/brain';
 import { whisperTranscribe, type WhisperModel } from './engine/whisper';
 import { geminiTranscribe, getGoogle } from './engine/google';
@@ -63,7 +63,7 @@ export async function roughCut(silent = false) {
     if (check && !check.ok) toast(`Transcription peu fiable (${check.reason}) : aucune coupe faite d’après le texte. Essaie le modèle « Précis » ou colle ton script.`, 'error');
     const auto = proposeCuts(a, words, tuneRoughCut(ar.settings), { hesitation: hesitationBias(), retake: retakeBias() });
     const manual = ar.cuts.filter((c) => c.reason === 'manual');
-    setAroll((x) => ({ ...x, cuts: [...auto, ...manual].sort((p, q) => p.s - q.s) }));
+    setAroll((x) => ({ ...x, cuts: [...auto, ...manual].sort((p, q) => p.s - q.s), pauses: pausesOf(a, x.settings.threshold) }));
     const nx = getState().project.aroll!;
     const kept = segsDuration(keepSegments(nx));
     const count = (r: Cut['reason']) => nx.cuts.filter((c) => c.reason === r && c.on).length;

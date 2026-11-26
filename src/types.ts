@@ -195,6 +195,8 @@ export interface ARoll {
   /** proposed cuts on the source (toggle `on` to apply) */
   cuts: Cut[];
   words: Word[];
+  /** breaths in the voice (source seconds, length): where script sentences end when there is no transcript */
+  pauses?: { t: number; d: number }[];
   transcriptSource?: 'whisper' | 'gemini' | 'manual' | 'ai';
   /** result of the reliability check (engine/transcriptCheck): an unreliable transcript is never used to cut */
   transcriptCheck?: { ok: boolean; reason?: string };

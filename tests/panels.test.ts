@@ -131,3 +131,25 @@ describe('pages hybrides et récitatifs', async () => {
     expect(pt.creditsBox!.y).toBeGreaterThan(400);
   });
 });
+
+describe('script calé sur les respirations de la voix', async () => {
+  const { scriptOnVoice } = await import('../src/engine/auto');
+  const script = 'Jon est seul sur Mars avec une photo. Il se souvient de Janey. Puis tout bascule dans la chambre.';
+  const segs = [{ s: 0, e: 12, t: 0 }];
+  it('chaque phrase commence juste après une pause réelle', () => {
+    const plain = scriptOnVoice(script, segs);
+    const firstOf = (ws: { w: string; s: number }[], word: string) => ws.find((w) => w.w === word)!.s;
+    // real breaths 0.5 s away from the proportional guess
+    const g1 = firstOf(plain, 'Il'), g2 = firstOf(plain, 'Puis');
+    const pauses = [{ t: g1 + 0.5, d: 0.45 }, { t: g2 - 0.5, d: 0.5 }, { t: 3.0, d: 0.13 }];
+    const al = scriptOnVoice(script, segs, pauses);
+    expect(Math.abs(firstOf(al, 'Il') - (g1 + 0.5))).toBeLessThan(0.05);
+    expect(Math.abs(firstOf(al, 'Puis') - (g2 - 0.5))).toBeLessThan(0.05);
+    // words stay in order and inside the voice
+    for (let i = 1; i < al.length; i++) expect(al[i].s).toBeGreaterThan(al[i - 1].s);
+    expect(al[al.length - 1].e).toBeLessThanOrEqual(12.001);
+  });
+  it('sans pause proche, garde la répartition proportionnelle', () => {
+    expect(scriptOnVoice(script, segs, [{ t: 11.5, d: 0.3 }])).toEqual(scriptOnVoice(script, segs));
+  });
+});

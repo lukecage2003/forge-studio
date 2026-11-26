@@ -201,23 +201,63 @@ export function panelThumb(project: Project, pageId: string, r: Rect, size = 384
  * The script laid on the kept voice: each word gets a share of the speaking
  * time proportional to its length, through the spoken segments only.
  */
-export function scriptOnVoice(script: string, segs: Seg[]): Word[] {
-  const toks = script.replace(/[«»"“”]/g, ' ').split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w));
+export function scriptOnVoice(script: string, segs: Seg[], pauses: { t: number; d: number }[] = []): Word[] {
   const spans = segs.map((g) => [g.t, g.t + (g.e - g.s)] as [number, number]);
   const total = spans.reduce((a, [s, e]) => a + e - s, 0);
-  const weight = toks.map((w) => w.length + 1);
-  const W = weight.reduce((a, b) => a + b, 0);
+  if (!total) return [];
+  // spoken time ↔ timeline time (removed silences are skipped)
   const at = (f: number) => {
     let left = f * total;
     for (const [s, e] of spans) { if (left <= e - s) return s + left; left -= e - s; }
     return spans.length ? spans[spans.length - 1][1] : 0;
   };
-  let acc = 0;
-  return toks.map((w, i) => {
-    const s = at(acc / W);
-    acc += weight[i];
-    return { w, s, e: Math.max(s + 0.05, at(acc / W) - 0.02) };
+  const spoken = (t: number) => {
+    let acc = 0;
+    for (const [s, e] of spans) { if (t <= s) return acc; if (t <= e) return acc + t - s; acc += e - s; }
+    return acc;
+  };
+  const sentences = (script.replace(/[«»"“”]/g, ' ').replace(/\s+/g, ' ').match(/[^.!?…]+[.!?…]*/g) ?? [])
+    .map((x) => x.trim().split(' ').filter((w) => /[\p{L}\d]/u.test(w))).filter((x) => x.length);
+  const weight = (ws: string[]) => ws.reduce((a, w) => a + w.length + 1, 0);
+  const W = sentences.reduce((a, ws) => a + weight(ws), 0);
+  // where the voice breathes, on the timeline: inner pauses, plus the joins of removed silences
+  const cand: { t: number; d: number }[] = [];
+  for (const p of pauses) {
+    const g = segs.find((x) => p.t >= x.s && p.t <= x.e);
+    if (g) cand.push({ t: g.t + (p.t - g.s), d: p.d });
+  }
+  for (let i = 1; i < segs.length; i++) cand.push({ t: segs[i].t, d: Math.max(0.3, segs[i].s - segs[i - 1].e) });
+  cand.sort((x, y) => x.t - y.t);
+  // proportional guess for each sentence end, then snapped to the best nearby breath, in order
+  const bounds: number[] = [0];
+  let acc = 0, last = 0;
+  for (let k = 0; k < sentences.length - 1; k++) {
+    acc += weight(sentences[k]);
+    const guess = acc / W * total;
+    const win = Math.max(0.6, (weight(sentences[k]) / W) * total * 0.4);
+    let best = guess, score = Infinity;
+    for (const c of cand) {
+      const sp = spoken(c.t);
+      if (sp <= last + 0.3 || Math.abs(sp - guess) > win) continue;
+      // nearer is better, a longer breath is a more likely sentence end
+      const sc = Math.abs(sp - guess) / win - Math.min(1, c.d / 0.6) * 0.6;
+      if (sc < score) { score = sc; best = sp; }
+    }
+    bounds.push(best);
+    last = best;
+  }
+  bounds.push(total);
+  const out: Word[] = [];
+  sentences.forEach((ws, k) => {
+    const s0 = bounds[k], s1 = bounds[k + 1], Wk = weight(ws);
+    let a2 = 0;
+    for (const w of ws) {
+      const s = at((s0 + (a2 / Wk) * (s1 - s0)) / total);
+      a2 += w.length + 1;
+      out.push({ w, s, e: Math.max(s + 0.05, at((s0 + (a2 / Wk) * (s1 - s0)) / total) - 0.02) });
+    }
   });
+  return out;
 }
 
 /** Transcript words placed on the edited timeline (cut words removed). */
@@ -226,7 +266,8 @@ export function timelineWords(p: Project): Word[] {
   if (!ar) return [];
   const segs = segmentsOf(ar);
   // an unreliable transcript is not shown: the pasted script is laid on the voice instead
-  if (ar.transcriptCheck && !ar.transcriptCheck.ok) return p.script?.trim() ? scriptOnVoice(p.script, segs) : [];
+  // no usable transcript: the pasted script is laid on the voice, its sentences ending on the breaths
+  if ((ar.transcriptCheck && !ar.transcriptCheck.ok) || (!ar.words.length && p.script?.trim())) return p.script?.trim() ? scriptOnVoice(p.script, segs, ar.pauses) : [];
   // with a script: its words (correct spelling, names) on the transcript's timing
   let source = ar.words;
   if (p.script?.trim()) {
