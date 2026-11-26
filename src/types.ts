@@ -75,7 +75,7 @@ export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 
  */
 export type Layout = 'full' | 'split' | 'pip' | 'grid' | 'page';
 
-export type CaptionPreset = 'tiktok' | 'comic' | 'clean' | 'impact' | 'cinema' | 'neon';
+export type CaptionPreset = 'tiktok' | 'comic' | 'clean' | 'impact' | 'cinema' | 'neon' | 'editorial';
 export type CaptionAnim = 'none' | 'pop' | 'type' | 'words' | 'slide';
 
 export interface Caption {
@@ -245,6 +245,10 @@ export interface Project {
   watermark: string;
   progressBar: boolean;
   accent: string;
+  /** art direction (engine/styles): base direction, components borrowed from others, overrides */
+  art?: { base: string; from?: Record<string, string>; accent?: string };
+  /** look of title cards (engine/styles TitleStyle) */
+  titleStyle?: string;
   /** look of diagrams and maps: 'encre' = printed comic (ink, halftone, captions), 'neon' = the earlier dark cards */
   diagramStyle?: 'encre' | 'neon';
   fx: FxItem[];

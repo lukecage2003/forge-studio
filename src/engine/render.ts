@@ -1299,8 +1299,95 @@ function drawLook(ctx: Ctx, project: Project, W: number, H: number, t: number) {
   }
 }
 
-function drawTitleCard(ctx: Ctx, W: number, H: number, shot: Shot, local: number, accent: string, inkStyle = false) {
-  if (inkStyle && !shot.titleBg) {
+/** typography that belongs to each title staging */
+const TITLE_PRESET: Record<string, Caption['preset']> = { encre: 'comic', news: 'tiktok', minimal: 'editorial', archive: 'editorial', cinema: 'cinema', cosmic: 'cinema', tactical: 'clean' };
+
+/** title card staging per art direction (backgrounds only: the text is the shot's caption) */
+function drawTitleStyle(ctx: Ctx, W: number, H: number, style: string, local: number, accent: string, bg: string): boolean {
+  const U = Math.min(W, H) * 0.035;
+  const r = rng(hashSeed('title-' + style));
+  switch (style) {
+    case 'news': {
+      // newsroom: deep blue, a red alert band that slides in, thin data rules running
+      ctx.fillStyle = '#0b1630'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+      for (let y = 0; y < H; y += U * 1.2) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      const e = easeOutCubic(clamp(local / 0.45, 0, 1));
+      ctx.fillStyle = accent; ctx.fillRect(0, H * 0.62, W * e, U * 1.6);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, H * 0.62 + U * 1.6, W * e * 0.7, U * 0.25);
+      const off = (local * W * 0.25) % (U * 4);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      for (let x = -off; x < W; x += U * 4) ctx.fillRect(x, H * 0.62 + U * 2.2, U * 2.2, U * 0.12);
+      return true;
+    }
+    case 'minimal': {
+      ctx.fillStyle = bg && bg !== '#0E0E11' ? bg : '#f4f2ee'; ctx.fillRect(0, 0, W, H);
+      const e = easeOutCubic(clamp(local / 0.6, 0, 1));
+      ctx.fillStyle = '#111';
+      ctx.fillRect(W * 0.08, H * 0.36, (W * 0.84) * e, Math.max(1, U * 0.06));
+      ctx.fillRect(W * 0.08 + W * 0.84 * (1 - e), H * 0.64, W * 0.84 * e, Math.max(1, U * 0.06));
+      return true;
+    }
+    case 'cinema': {
+      ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, W, H);
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.6);
+      g.addColorStop(0, hexA(accent, 0.12)); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const bar = H * 0.12 * easeOutCubic(clamp(local / 0.8, 0, 1));
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+      return true;
+    }
+    case 'cosmic': {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#05040c'); g.addColorStop(1, '#120a2a');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      // stars drifting slowly toward the viewer
+      for (let i = 0; i < 160; i++) {
+        const x0 = r() - 0.5, y0 = r() - 0.5, z = ((r() + local * 0.06) % 1) + 0.05;
+        const x = W / 2 + (x0 / z) * W * 0.25, y = H / 2 + (y0 / z) * H * 0.25;
+        if (x < 0 || x > W || y < 0 || y > H) continue;
+        ctx.fillStyle = `rgba(255,255,255,${Math.min(1, 0.25 / z)})`;
+        ctx.fillRect(x, y, Math.max(1, 1.6 / z), Math.max(1, 1.6 / z));
+      }
+      const neb = ctx.createRadialGradient(W * 0.7, H * 0.3, 0, W * 0.7, H * 0.3, Math.max(W, H) * 0.5);
+      neb.addColorStop(0, hexA(accent, 0.25)); neb.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = neb; ctx.fillRect(0, 0, W, H);
+      return true;
+    }
+    case 'tactical': {
+      ctx.fillStyle = bg || '#0a1418'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = hexA(accent, 0.12); ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += U * 2) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += U * 2) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      // a scanning line and corner brackets
+      const sy = (local * 0.35 % 1) * H;
+      ctx.fillStyle = hexA(accent, 0.18); ctx.fillRect(0, sy, W, U * 0.15);
+      ctx.strokeStyle = accent; ctx.lineWidth = U * 0.12;
+      const m = U * 1.5, l = U * 2.5;
+      for (const [x, y, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) {
+        ctx.beginPath(); ctx.moveTo(x, y + dy * l); ctx.lineTo(x, y); ctx.lineTo(x + dx * l, y); ctx.stroke();
+      }
+      return true;
+    }
+    case 'archive': {
+      // aged paper, sepia, a thin double frame
+      paperBackground(ctx, W, H, '#8a5a2b', U, 0);
+      ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgba(181,120,60,0.22)'; ctx.fillRect(0, 0, W, H); ctx.restore();
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(60,35,10,0.45)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(60,35,10,0.7)'; ctx.lineWidth = U * 0.12;
+      ctx.strokeRect(U * 1.2, U * 1.2, W - U * 2.4, H - U * 2.4);
+      ctx.lineWidth = U * 0.05; ctx.strokeRect(U * 1.6, U * 1.6, W - U * 3.2, H - U * 3.2);
+      return true;
+    }
+    default: return false;
+  }
+}
+
+function drawTitleCard(ctx: Ctx, W: number, H: number, shot: Shot, local: number, accent: string, inkStyle = false, style?: string, bg?: string) {
+  if (!shot.titleBg && style && style !== 'encre' && style !== 'neon' && drawTitleStyle(ctx, W, H, style, local, accent, bg ?? '')) return;
+  if (inkStyle && !shot.titleBg && style !== 'neon') {
     // printed look: newsprint, a band of spot-colour dots, a panel border
     const U = Math.min(W, H) * 0.035;
     paperBackground(ctx, W, H, accent, U, local);
@@ -1343,6 +1430,8 @@ const PRESET = {
   impact: { font: FONT_STACK.bangers, weight: '400', upper: true, fill: '#FFD400', stroke: '#000000', strokeW: 0.14, hi: '#FF5A1F', box: null, rot: -4, lh: 1.0, scale: 1.45, glow: false },
   cinema: { font: FONT_STACK.grotesk, weight: '600', upper: false, fill: '#FFFFFF', stroke: null, strokeW: 0, hi: '#FFB020', box: null, rot: 0, lh: 1.25, scale: 0.6, glow: false },
   neon: { font: FONT_STACK.grotesk, weight: '700', upper: true, fill: '#FFFFFF', stroke: null, strokeW: 0, hi: '#FF5A1F', box: null, rot: 0, lh: 1.1, scale: 0.85, glow: true },
+  // dark ink on a light page (magazine, archive, minimal titles); the key word takes the accent
+  editorial: { font: FONT_STACK.inter, weight: '800', upper: false, fill: '#141414', stroke: null, strokeW: 0, hi: '#C8102E', box: null, rot: 0, lh: 1.16, scale: 0.95, glow: false },
 };
 
 /**
@@ -1353,7 +1442,7 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
   const raw = cap.text.trim();
   if (!raw) return;
   const P = PRESET[cap.preset] ?? PRESET.tiktok;
-  const hiColor = cap.preset === 'neon' || cap.preset === 'impact' ? accent : P.hi;
+  const hiColor = cap.preset === 'neon' || cap.preset === 'impact' || (cap.preset === 'editorial' && accent.toLowerCase() !== '#111111') ? accent : P.hi;
   const text = P.upper ? raw.toUpperCase() : raw;
   const size = Math.min(W, H) * 0.075 * cap.size * P.scale * (isTitle ? 1.4 : 1);
   ctx.save();
@@ -1628,7 +1717,7 @@ export function createRenderer(W: number, H: number): Renderer {
           drawEndScreen(ctx, W, H, brandOf(project), local);
         } else if (shot.diagram) {
           drawDiagram(ctx, project, W, H, shot.diagram, local, shot.duration);
-        } else drawTitleCard(ctx, W, H, shot, local, project.accent, (project.diagramStyle ?? 'encre') === 'encre');
+        } else drawTitleCard(ctx, W, H, shot, local, project.accent, (project.diagramStyle ?? 'encre') === 'encre', project.titleStyle, project.bgColor);
         break;
       case 'full': {
         const view = override?.view ?? cameraAt(shot, p, W / H, rtl);
@@ -1761,7 +1850,8 @@ export function createRenderer(W: number, H: number): Renderer {
     if (layoutKind !== 'title') drawPaper(ctx, W, H, project.look?.paper ?? 0);
     if (shot.shake > 0 && project.look?.speedLines !== false && layoutKind !== 'title') speedLines(ctx, W, H, local, shot.shake);
     if (shot.pageId == null) {
-      if (!['brand', 'intro', 'outro'].includes(shot.titleBg ?? '')) drawCaption(ctx, W, H, shot.caption, local, shot.duration, true, undefined, project.accent);
+      // the art direction's title typography goes with its title staging
+      if (!['brand', 'intro', 'outro'].includes(shot.titleBg ?? '')) drawCaption(ctx, W, H, project.titleStyle && !shot.titleBg && TITLE_PRESET[project.titleStyle] ? { ...shot.caption, preset: TITLE_PRESET[project.titleStyle] } : shot.caption, local, shot.duration, true, undefined, project.accent);
     } else {
       drawCaption(ctx, W, H, shot.caption, local, shot.duration, false, undefined, project.accent);
       if (shot.nameTag) drawNameTag(ctx, W, H, shot.nameTag, local, shot.duration, project.accent);

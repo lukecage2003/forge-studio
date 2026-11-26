@@ -11,6 +11,7 @@ import { Slider } from './Slider';
 import { toast } from './Toast';
 import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engine/effects';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
+import { ArtPanel } from './ArtPanel';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
 import { PanelPicker } from './FxDiagram';
 import { transcribeClip } from '../rush';
@@ -73,7 +74,7 @@ const TR_GROUPS = (Object.keys(CATEGORIES) as Category[]).map((c) => ({ c, label
 
 const PRESETS: { v: CaptionPreset; l: string }[] = [
   { v: 'tiktok', l: 'TikTok' }, { v: 'comic', l: 'Récitatif' }, { v: 'impact', l: 'Impact' },
-  { v: 'clean', l: 'Propre' }, { v: 'cinema', l: 'Cinéma' }, { v: 'neon', l: 'Néon' },
+  { v: 'clean', l: 'Propre' }, { v: 'cinema', l: 'Cinéma' }, { v: 'neon', l: 'Néon' }, { v: 'editorial', l: 'Éditorial' },
 ];
 
 const LAYOUTS: Layout[] = ['full', 'split', 'pip', 'grid', 'page'];
@@ -334,6 +335,7 @@ function ProjectPanel() {
       </Section>
       <LookSection />
       <Section title="Habillage">
+        <ArtPanel />
         <label className="color-row">
           <input type="color" value={p.accent} onChange={(e) => set({ accent: e.target.value }, 'accent')} />
           <span>Couleur d’accent · {p.accent}</span>

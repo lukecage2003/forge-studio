@@ -102,3 +102,27 @@ describe('caméra « Explorer »', async () => {
     expect(cameraAt(s, 0.72, 9 / 16, false).cy).toBeGreaterThan(mid.cy);
   });
 });
+
+describe('bibliothèque de directions artistiques', async () => {
+  const { STYLES, resolveArt, applyArt, COMPONENTS } = await import('../src/engine/styles');
+  it('8 directions complètes, chacune avec ses 9 composantes', () => {
+    expect(STYLES.length).toBe(8);
+    for (const s of STYLES) for (const k of COMPONENTS) expect(s[k]).toBeTruthy();
+    // a direction is not a colour: titles, transitions and composition differ
+    expect(new Set(STYLES.map((s) => s.titles)).size).toBeGreaterThanOrEqual(7);
+    expect(new Set(STYLES.map((s) => s.transitions.accent.join())).size).toBeGreaterThanOrEqual(6);
+  });
+  it('mélange : la typographie d’une direction, les transitions d’une autre', () => {
+    const a = resolveArt({ base: 'comic', from: { transitions: 'news', titles: 'cosmic' } });
+    expect(a.typography.caption).toBe('comic');
+    expect(a.transitions.accent).toEqual(resolveArt({ base: 'news' }).transitions.accent);
+    expect(a.titles).toBe('cosmic');
+    expect(a.label).toMatch(/\+/);
+  });
+  it('appliquer une direction règle le projet entier', () => {
+    const p = applyArt({ accent: '#000', look: {}, defaultCaption: { preset: 'tiktok' }, subtitleStyle: { preset: 'tiktok' } } as never, { base: 'historical' });
+    expect(p.titleStyle).toBe('archive');
+    expect(p.background).toBe('paper');
+    expect(p.look.grade).toBe('warm');
+  });
+});

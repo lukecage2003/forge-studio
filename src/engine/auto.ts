@@ -4,6 +4,7 @@ import { clamp, uid } from '../lib/util';
 import { cachedDetection, comicOrder, cutPageSmart } from './panelAI';
 import { directSequences, seqTypeOf, variety, type DirectorOptions } from './director';
 import { holdFor, important } from './hold';
+import { artProfile, resolveArt, type ArtMix } from './styles';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
@@ -359,7 +360,10 @@ export function buildSubtitles(words: Word[], maxWords: number): Subtitle[] {
 interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean; cover?: string; /** balloons + captions inside (AI detector), -1 unknown */ bubbles: number }
 
 export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project: Project; report: AutoReport }> {
-  const prof = o.profile ? PROFILE[o.profile] : null;
+  // an art direction on the project dresses the creative profile (transitions, rhythm, composition, sound)
+  const art = p.art ? resolveArt(p.art as ArtMix) : null;
+  const prof0 = o.profile ? PROFILE[o.profile] : art ? PROFILE[art.profile] : null;
+  const prof = prof0 && art ? artProfile(prof0, art) : prof0;
   const st: StyleDef = prof ? {
     ...STYLES[o.style],
     base: prof.rhythm.base, min: prof.rhythm.min, max: prof.rhythm.max, intensity: prof.rhythm.intensity, maxWords: prof.rhythm.maxWords,
