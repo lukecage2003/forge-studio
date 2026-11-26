@@ -4,7 +4,7 @@
  * different model family, the previous one is unloaded first so two large
  * models never sit in memory together. The light work (preview, UI) is never queued.
  */
-type Family = 'whisper' | 'vision' | 'audio' | 'llm' | 'panels';
+type Family = 'whisper' | 'vision' | 'audio' | 'llm' | 'panels' | 'ocr';
 const releases = new Map<Family, () => void>();
 let chain: Promise<unknown> = Promise.resolve();
 let current: Family | null = null;

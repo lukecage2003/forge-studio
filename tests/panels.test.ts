@@ -181,3 +181,27 @@ describe('ouverture Marvel : une grande image bavarde avec les crédits dessus',
     expect(kindFromText(readPageText('AL EWING writer KENNETH ROCAFORT artist DAN BROWN color artist'), 0, 0.8, 1)?.kind).toBe('title');
   });
 });
+
+describe('lecture PaddleOCR : regroupement des lignes', () => {
+  const L = (text: string, x: number, y: number, w = 200, h = 20, conf = 0.95) => ({ text, conf, x, y, w, h });
+  it('range les lignes par bulle, bulles dans l’ordre de lecture, et chaque bulle dans sa case', async () => {
+    const { groupLines } = await import('../src/engine/understand');
+    const shots = [{ id: 'a', rect: R(0, 0, 500, 500) }, { id: 'b', rect: R(0, 510, 500, 500) }];
+    const bubbles = [R(300, 20, 180, 80), R(20, 20, 220, 100), R(20, 600, 300, 80)];
+    const lines = [
+      L('SECOND BALLOON', 310, 30, 160), L('FIRST LINE', 30, 30), L('SECOND LINE', 30, 60),
+      L('NEXT PANEL', 30, 610), L('~~', 30, 700, 20, 20), L('BLURRY WORDS', 30, 640, 200, 20, 0.4),
+    ];
+    const r = groupLines(lines, shots, bubbles);
+    expect(r.get('a')).toBe('FIRST LINE SECOND LINE SECOND BALLOON');
+    expect(r.get('b')).toBe('NEXT PANEL'); // unreadable or doubtful lines are left out
+  });
+  it('compare pluriel et singulier, et D/P confondus par la lecture', async () => {
+    const { ocrCanon } = await import('../src/engine/understand');
+    expect(ocrCanon('guns')).toBe(ocrCanon('gun'));
+    expect(ocrCanon('problems')).toBe(ocrCanon('problem'));
+    expect(ocrCanon('panvers')).toBe(ocrCanon('danvers'));
+    expect(ocrCanon('glass')).toBe('glass'); // a double s is not a plural
+    expect(ocrCanon('was')).toBe('was');
+  });
+});

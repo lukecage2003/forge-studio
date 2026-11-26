@@ -3,6 +3,7 @@ import { getImage } from './media';
 import { cachedDetection } from './panelAI';
 import { stem, translations } from './bridge-fr-en';
 import type { Sentence } from './narration';
+import { readLines, type TextLine } from './paddleOcr';
 
 /* =========================================================================
    1. Reading the comics
@@ -92,6 +93,8 @@ function cleanOcr(t: string) {
  */
 export async function ocrPages(p: Project, onProgress: (i: number, n: number) => void): Promise<Map<string, string>> {
   onProgress(-1, 0);
+  const fast = await ocrPagesPaddle(p, onProgress);
+  if (fast) return fast;
   const w = await ocrWorker();
   const out = new Map<string, string>();
   const pages = p.pages.filter((pg) => !pg.skip);
@@ -145,6 +148,57 @@ export async function ocrPages(p: Project, onProgress: (i: number, n: number) =>
   return out;
 }
 
+/**
+ * PaddleOCR path: every text line of the page is found and read, then lines
+ * are grouped by speech balloon (AI detector) and given to the panel that
+ * holds them, balloon by balloon in reading order (top to bottom, left to
+ * right), lines top to bottom. Null when the models can't run (Tesseract then).
+ */
+async function ocrPagesPaddle(p: Project, onProgress: (i: number, n: number) => void): Promise<Map<string, string> | null> {
+  const out = new Map<string, string>();
+  const pages = p.pages.filter((pg) => !pg.skip);
+  for (let i = 0; i < pages.length; i++) {
+    onProgress(i, pages.length);
+    const pg = pages[i], a = getImage(pg.mediaId);
+    if (!a) continue;
+    const lines = await readLines(pg.mediaId, a.img, a.width, a.height);
+    if (!lines) return i === 0 ? null : out;
+    const shots = p.shots.filter((s) => s.pageId === pg.id);
+    for (const [id, text] of groupLines(lines, shots, cachedDetection(pg.mediaId)?.bubbles.filter((b) => b.s >= 0.35) ?? [])) out.set(id, text);
+  }
+  onProgress(pages.length, pages.length);
+  return out;
+}
+
+/** lines → text per panel (pure, tested) */
+export function groupLines(lines: TextLine[], shots: { id: string; rect: Rect }[], bubbles: Rect[]): Map<string, string> {
+  const ok = lines.filter((l) => l.conf >= 0.6 && /\p{L}{2}/u.test(l.text));
+  // a line belongs to the balloon that holds its centre; lines outside balloons (captions, sounds) group by proximity
+  const groups: { r: Rect; lines: TextLine[] }[] = [];
+  for (const l of ok) {
+    const c = { x: l.x + l.w / 2, y: l.y + l.h / 2 };
+    const b = bubbles.find((r) => inside(c.x, c.y, r));
+    let g = b ? groups.find((q) => q.r === b) : groups.find((q) => !bubbles.includes(q.r as never) && Math.abs(q.r.x + q.r.w / 2 - c.x) < Math.max(q.r.w, l.w) * 0.6 && l.y - (q.r.y + q.r.h) < l.h * 1.2 && l.y >= q.r.y - l.h * 0.5);
+    if (!g) { g = { r: b ?? { x: l.x, y: l.y, w: l.w, h: l.h }, lines: [] }; groups.push(g); }
+    g.lines.push(l);
+    if (!b) { const r = g.r, x0 = Math.min(r.x, l.x), y0 = Math.min(r.y, l.y); g.r = { x: x0, y: y0, w: Math.max(r.x + r.w, l.x + l.w) - x0, h: Math.max(r.y + r.h, l.y + l.h) - y0 }; }
+  }
+  const bucket = new Map<string, { r: Rect; t: string }[]>();
+  for (const g of groups) {
+    const cx = g.r.x + g.r.w / 2, cy = g.r.y + g.r.h / 2;
+    const sh = shots.find((s) => inside(cx, cy, s.rect)) ?? shots.find((s) => g.lines.some((l) => inside(l.x + l.w / 2, l.y + l.h / 2, s.rect))) ?? shots[0];
+    if (!sh) continue;
+    const ls = [...g.lines].sort((a, b) => (Math.abs(a.y - b.y) < Math.min(a.h, b.h) * 0.5 ? a.x - b.x : a.y - b.y));
+    bucket.set(sh.id, [...(bucket.get(sh.id) ?? []), { r: g.r, t: ls.map((l) => l.text).join(' ') }]);
+  }
+  const res = new Map<string, string>();
+  for (const [id, gs] of bucket) {
+    gs.sort((a, b) => (a.r.y + a.r.h <= b.r.y + b.r.h * 0.3 ? -1 : b.r.y + b.r.h <= a.r.y + a.r.h * 0.3 ? 1 : a.r.x - b.r.x));
+    res.set(id, cleanOcr(gs.map((g) => g.t).join(' ')));
+  }
+  return res;
+}
+
 /* =========================================================================
    2. Matching narration ↔ panels
    ========================================================================= */
@@ -163,8 +217,15 @@ export function panelDocs(p: Project, panels: Shot[]): Doc[] {
   });
 }
 
-/** comic lettering read by OCR mixes up D and P (« PANVERS », « IPEA »): both sides are compared with D → P */
-const ocrCanon = (n: string) => n.replace(/d/g, 'p');
+/**
+ * Canonical form compared on both sides: comic lettering read by OCR mixes up
+ * D and P (« PANVERS », « IPEA »), and a
+ * plural must find its singular (« problems » ↔ PROBLEM): D → P, final S dropped.
+ */
+export const ocrCanon = (n: string) => {
+  const c = n.replace(/d/g, 'p');
+  return c.length >= 4 && /[^s]s$/.test(c) ? c.slice(0, -1) : c;
+};
 
 function tokens(text: string) {
   return text.split(/[\s,.;:!?()«»"“”…—–/-]+/).map((raw) => ({ raw, o: norm(raw) })).filter((t) => t.o.length >= 3 && !STOP.has(t.o))
