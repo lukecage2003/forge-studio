@@ -197,7 +197,8 @@ export function kindFromText(pt: PageText, bubbles: number, biggest: number, pan
     const what = pt.roles.slice(0, 4).join(', ');
     // story panels AND a credits block on the same page (a chapter opening):
     // still a story page, the credits block itself is never shown
-    if (panels >= 2 && bubbles >= 1) return { kind: 'story', why: `planche d’ouverture : récit + bloc titre/crédits (${what}), crédits non montrés`, dropCredits: true };
+    // (Marvel openings are often one big image full of balloons, with the credits printed on it)
+    if ((panels >= 2 && bubbles >= 1) || bubbles >= 3) return { kind: 'story', why: `planche d’ouverture : récit + bloc titre/crédits (${what}), crédits non montrés`, dropCredits: true };
     return biggest > 0.35 || bubbles <= 0
       ? { kind: 'title', why: `page de titre et crédits (${what})` }
       : { kind: 'text', why: `crédits (${what})` };

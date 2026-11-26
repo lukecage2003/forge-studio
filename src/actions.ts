@@ -94,6 +94,8 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
           const byText = pt && !(pg.kindWhy && cls.why === 'ComicInfo.xml') ? kindFromText(pt, cut.bubbles, cut.diag?.biggest ?? (cut.kind === 'splash' ? 1 : 0), cut.kind === 'panels' ? cut.rects.length : 0) : null;
           // the first page of a file stays its cover even when it names its authors
           if (byText && !(cls.kind === 'cover' && pg.srcIndex === 0)) { cls.kind = byText.kind; cls.why = byText.why; }
+          // front matter with names and no balloons: the cast / team roster page, not story
+          else if (!byText && pt && (pg.srcIndex ?? 9) <= 5 && cut.bubbles === 0 && pt.words >= 20 && cls.kind === 'story') { cls.kind = 'text'; cls.why = `page de présentation (${pt.words} mots, aucune bulle, début du numéro)`; }
           // opening page: panels that sit on the credits block are not story
           if (byText?.dropCredits) cut.rects = cut.rects.map((r) => trimBottomToArt(a.img, a.width, a.height, r));
           if (byText?.dropCredits && pt?.creditsBox) {

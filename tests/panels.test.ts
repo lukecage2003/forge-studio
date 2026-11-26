@@ -169,3 +169,15 @@ describe('pont français → anglais pour les bulles', async () => {
     expect(matchLocal(sents, docs).map((a) => a.shotId)).toEqual(['a', 'b', 'c', 'd']);
   });
 });
+
+describe('ouverture Marvel : une grande image bavarde avec les crédits dessus', async () => {
+  const { readPageText, kindFromText } = await import('../src/engine/classify');
+  it('reste du récit, crédits retirés', () => {
+    const r = kindFromText(readPageText('NO LONGER MY SON! FATHER, HELP ME. AL EWING writer KENNETH ROCAFORT artist DAN BROWN color artist VC’S JOE SABINO letterer'), 6, 0.9, 1);
+    expect(r?.kind).toBe('story');
+    expect(r?.dropCredits).toBe(true);
+  });
+  it('une vraie page de crédits sans bulles reste écartée', () => {
+    expect(kindFromText(readPageText('AL EWING writer KENNETH ROCAFORT artist DAN BROWN color artist'), 0, 0.8, 1)?.kind).toBe('title');
+  });
+});
