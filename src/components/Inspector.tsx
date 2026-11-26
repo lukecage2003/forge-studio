@@ -66,6 +66,7 @@ const MOTIONS: { v: Motion; l: string; i: ReactNode }[] = [
   { v: 'pan-up', l: 'Haut', i: <ArrowUp size={16} /> },
   { v: 'pan-down', l: 'Bas', i: <ArrowDown size={16} /> },
   { v: 'read', l: 'Bulles', i: <MessageCircle size={16} /> },
+  { v: 'tour', l: 'Explorer', i: <Sparkles size={16} /> },
 ];
 
 const TR_GROUPS = (Object.keys(CATEGORIES) as Category[]).map((c) => ({ c, label: CATEGORIES[c], items: TRANSITIONS.filter((t) => t.category === c) }));

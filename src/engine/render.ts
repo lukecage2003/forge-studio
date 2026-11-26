@@ -60,6 +60,7 @@ export function readable(shot: Shot) {
 }
 
 export function resolveMotion(shot: Shot, aspect: number, rtl: boolean) {
+  if (shot.motion === 'tour') return { motion: 'tour' as const, framing: 'fit' as const };
   if (shot.motion === 'read') return readable(shot) ? { motion: 'read' as const, framing: 'fill' as const } : { motion: 'zoom-in' as const, framing: shot.framing };
   if (shot.motion !== 'auto') return { motion: shot.motion, framing: shot.framing };
   if (readable(shot)) return { motion: 'read' as const, framing: 'fill' as const };
@@ -109,6 +110,27 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
       const range = span > 1 ? span / 2 : vh * 0.06 * k;
       const d = motion === 'pan-down' ? lerp(-range, range, e) : lerp(range, -range, e);
       return { ...v, cy: v.cy + d };
+    }
+    case 'tour': {
+      // wide → push to the first point of interest → pan to the second → back to wide
+      const pts = (shot.balloons?.length ? shot.balloons.map((q) => ({ x: q.x + q.w / 2, y: q.y + q.h / 2 }))
+        : [shot.focus ? { x: r.x + shot.focus.x * r.w, y: r.y + shot.focus.y * r.h } : { x: r.x + r.w * 0.35, y: r.y + r.h * 0.35 }, { x: r.x + r.w * 0.68, y: r.y + r.h * 0.65 }]);
+      const A = pts[0], B = pts.length > 1 ? pts[pts.length - 1] : null;
+      const close = Math.max(v.vw * lerp(0.62, 0.48, k), Math.min(r.w, r.h * aspect) * 0.45);
+      const ch = close / aspect;
+      const fit = (x: number, y: number) => ({
+        cx: r.w > close ? clamp(x, r.x + close / 2, r.x + r.w - close / 2) : r.x + r.w / 2,
+        cy: r.h > ch ? clamp(y, r.y + ch / 2, r.y + r.h - ch / 2) : r.y + r.h / 2,
+      });
+      const wide = { cx: v.cx, cy: v.cy, vw: v.vw };
+      const a = { ...fit(A.x, A.y), vw: close }, b = B ? { ...fit(B.x, B.y), vw: close } : a;
+      const keys: [number, View][] = B ? [[0, wide], [0.14, wide], [0.34, a], [0.5, a], [0.66, b], [0.78, b], [1, wide]] : [[0, wide], [0.18, wide], [0.45, a], [0.75, a], [1, wide]];
+      const q = clamp(p, 0, 1);
+      let i = 0;
+      while (i < keys.length - 2 && q > keys[i + 1][0]) i++;
+      const [t0, v0] = keys[i], [t1, v1] = keys[i + 1];
+      const m = easeInOutCubic(clamp((q - t0) / Math.max(1e-6, t1 - t0), 0, 1));
+      return { cx: lerp(v0.cx, v1.cx, m), cy: lerp(v0.cy, v1.cy, m), vw: lerp(v0.vw, v1.vw, m) };
     }
     case 'read': {
       // the eye goes balloon to balloon: hold on each, then a smooth move to the next

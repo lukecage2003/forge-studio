@@ -53,7 +53,9 @@ export type Motion =
   | 'auto' | 'static' | 'zoom-in' | 'zoom-out'
   | 'pan-left' | 'pan-right' | 'pan-up' | 'pan-down'
   /** the camera reads the balloons of the panel one after the other */
-  | 'read';
+  | 'read'
+  /** one image explored in stages: wide, push to a detail, pan to another, back to wide */
+  | 'tour';
 
 export type Framing = 'fit' | 'fill';
 

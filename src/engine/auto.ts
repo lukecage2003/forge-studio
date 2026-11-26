@@ -2,7 +2,8 @@ import type { CaptionAnim, CaptionPreset, Layout, Motion, Project, Rect, Shot, S
 import { FORMATS } from '../types';
 import { clamp, uid } from '../lib/util';
 import { cachedDetection, comicOrder, cutPageSmart } from './panelAI';
-import { directSequences, variety, type DirectorOptions } from './director';
+import { directSequences, seqTypeOf, variety, type DirectorOptions } from './director';
+import { holdFor, important } from './hold';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
@@ -511,8 +512,13 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
         if (a.conf < 0.2 || k < lo || k > hi) return;
       }
       let ids = [a.shotId, ...a.more].filter((id) => byId.has(id));
-      // long sentence: continue with the next panels of the story
-      const want = Math.max(1, Math.min(3, Math.round(len / (st.base * pace * 1.1))));
+      // long sentence: an important image (revelation, splash, many details) is kept and
+      // explored in stages; an ordinary one hands over to the next panels of the story
+      const main = byId.get(ids[0])!;
+      const hold = holdFor({ ...main.shot, balloons: Array.from({ length: Math.max(0, main.bubbles) }, () => ({ x: 0, y: 0, w: 1, h: 1 })) },
+        { seq: seqTypeOf(se.text, i, sents.length), density: clamp((main.w - 0.65) / 0.9, 0, 1.5), ranges: proj.holds, pace: 0.6 });
+      const keepOne = important(hold) && len <= hold.max * 1.3;
+      const want = keepOne ? 1 : Math.max(1, Math.min(3, Math.round(len / (st.base * pace * 1.1))));
       for (let k = order.indexOf(ids[ids.length - 1]) + 1; ids.length < want && k < order.length; k++) if (!used.has(order[k])) ids.push(order[k]);
       ids = ids.slice(0, want);
       const per = len / ids.length;
@@ -542,9 +548,10 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
         if (conf < 0.5) reviewN++;
         out.push({
           ...shot, id: shot.id + (out.some((x) => x.id === shot.id) ? uid('_') : ''), start: +start.toFixed(3), duration: +per.toFixed(3),
+          ...(keepOne && per > 3.6 && layout === 'full' ? { motion: 'tour' as const, why: `image importante (${hold.why}) gardée ${per.toFixed(1)} s et explorée en étapes` } : {}),
           transition: tr, transitionDur: Math.min(td, per * 0.45), nameTag,
           match: { sentence: se.text, conf, alts: k === 0 ? a.alts : [], source: plan.engine },
-          auto: { duration: per, layout, motion: shot.motion, style: o.style },
+          auto: { duration: per, layout, motion: keepOne && per > 3.6 && layout === 'full' ? 'tour' : shot.motion, style: o.style },
         });
         prevPage = pn.shot.pageId;
       });

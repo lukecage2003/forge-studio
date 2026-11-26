@@ -3,6 +3,31 @@ import { beatOf, type Beat } from './narrative';
 import { roleOf, type Role } from './scriptIntel';
 import { TRANSITION } from './effects';
 import { hashSeed } from './rng';
+import { holdFor, important } from './hold';
+
+/* ------------------------------------------------------------ motion matching */
+
+const LATERAL: Transition[] = ['whip', 'slide', 'smear', 'warp'];
+const LOUD: Transition[] = ['impact', 'flash', 'whip', 'smear', 'glitch', 'glitchdisplace', 'warpspeed', 'gravitylens', 'crosszoom'];
+const panSign = (m: Motion) => (m === 'pan-right' ? 1 : m === 'pan-left' ? -1 : 0);
+const still = (m: Motion) => m === 'static';
+
+/**
+ * Does this transition fight the movement around it? Returns the reason, or null.
+ * Movement cuts read best when the motion carries through the cut; a lateral
+ * whip between two pans going opposite ways, a whoosh between two still
+ * images, a zoom transition out of a pull-back, a loud effect between two
+ * calm shots outside a fight: the eye feels the jolt without a reason.
+ */
+export function motionClash(prev: Shot, next: Shot, tr: Transition, seq?: SeqType): string | null {
+  if (tr === 'cut' || tr === 'glide') return null;
+  const a = prev.motion, b = next.motion;
+  if (LATERAL.includes(tr) && panSign(a) && panSign(b) && panSign(a) !== panSign(b)) return 'panoramiques en sens contraire de part et d’autre';
+  if (LATERAL.includes(tr) && still(a) && still(b) && seq !== 'confrontation') return 'effet de vitesse entre deux images immobiles';
+  if ((tr === 'zoom' || tr === 'crosszoom') && a === 'zoom-out') return 'zoom avant juste après un recul';
+  if (LOUD.includes(tr) && prev.intensity < 0.4 && next.intensity < 0.4 && seq !== 'confrontation' && seq !== 'revelation') return 'effet spectaculaire entre deux plans calmes';
+  return null;
+}
 
 /**
  * FORGE CREATIVE DIRECTOR
@@ -198,7 +223,12 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
     for (let i = q.from; i <= q.to; i++) {
       const s = out[i], k = i - q.from;
       const tag = `${SEQ_FR[q.type]} · ${tr.label}`;
-      if (opt.camera && opt.sequences && ours(s) && s.pageId && !s.diagram) {
+      // a long shot on a rich image: explore it in stages rather than one long push
+      if (opt.camera && ours(s) && s.pageId && !s.diagram && s.layout === 'full' && s.motion !== 'tour' && s.duration > 4.2 && important(holdFor(s, { seq: q.type }))) {
+        s.motion = 'tour'; s.auto = { ...s.auto!, motion: 'tour' }; report.changedMotions++;
+        s.why = `${s.why ? s.why + ' · ' : ''}image riche tenue ${s.duration.toFixed(1)} s → explorée en étapes`;
+      }
+      if (opt.camera && opt.sequences && ours(s) && s.pageId && !s.diagram && s.motion !== 'tour') {
         const m = cameraFor(tr.camera, s, k, prevMotion, aspect, rtl);
         if (m !== s.motion) { s.motion = m; report.changedMotions++; }
         s.intensity = +Math.min(1, Math.max(0.15, (s.intensity + tr.intensity) / 2)).toFixed(2);
@@ -243,6 +273,13 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
         s.why = `${s.why ?? ''} · transition déjà vue juste avant → coupe franche`;
         continue;
       }
+      // the transition must go with the movement around it, not against it
+      const clash = motionClash(out[i - 1], s, s.transition, types[i]);
+      if (clash) {
+        s.transition = 'cut'; s.transitionDur = 0; report.changedTransitions++;
+        s.why = `${s.why ?? ''} · ${clash} → coupe franche (raccord dans le mouvement)`;
+        continue;
+      }
       // zoom into a push-in into a push-in: one movement too many
       if (isZoomTr(s.transition) && out[i - 1].motion === 'zoom-in' && s.motion === 'zoom-in') {
         s.transition = 'cut'; s.transitionDur = 0; report.changedTransitions++;
@@ -258,7 +295,7 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
     for (let i = 2; i < n; i++) {
       const s = out[i];
       if (!ours(s) || !s.pageId || s.diagram) continue;
-      if (s.motion === out[i - 1].motion && s.motion === out[i - 2].motion && s.motion !== 'read') {
+      if (s.motion === out[i - 1].motion && s.motion === out[i - 2].motion && s.motion !== 'read' && s.motion !== 'tour') {
         const alt: Motion = s.motion === 'zoom-in' ? 'zoom-out' : s.motion === 'zoom-out' ? 'zoom-in' : s.motion.startsWith('pan') ? 'static' : 'zoom-in';
         s.motion = alt; s.auto = { ...s.auto!, motion: alt }; report.changedMotions++;
         s.why = `${s.why ?? ''} · troisième mouvement identique évité`;

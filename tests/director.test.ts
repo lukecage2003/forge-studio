@@ -63,3 +63,42 @@ describe('directeur créatif', () => {
     expect(a.shots).toEqual(b.shots);
   });
 });
+
+describe('durée d’affichage intelligente', async () => {
+  const { holdFor, important } = await import('../src/engine/hold');
+  const B = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i * 10, y: 0, w: 5, h: 5 }));
+  it('une case bavarde reste plus longtemps qu’une image simple, une révélation plus encore', () => {
+    const simple = holdFor(mk(0, ''));
+    const talky = holdFor(mk(1, '', { balloons: B(4), text: 'I AM TRAPPED INSIDE THE INTRINSIC FIELD CHAMBER. NOBODY CAN HEAR ME. IT IS AUGUST 20, 1959.' }));
+    const reveal = holdFor(mk(2, '', { zone: 'splash' }));
+    expect(talky.min).toBeGreaterThan(simple.min);
+    expect(reveal.kind).toBe('reveal');
+    expect(important(reveal)).toBe(true);
+    expect(important(simple)).toBe(false);
+    expect(talky.why).toMatch(/bulles/);
+  });
+  it('les plages réglables changent le résultat', () => {
+    expect(holdFor(mk(0, ''), { ranges: { simple: [5, 7] } }).min).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('raccords de mouvement', async () => {
+  const { motionClash } = await import('../src/engine/director');
+  it('refuse un whip entre deux panoramiques opposés et un effet fort entre deux plans calmes', () => {
+    expect(motionClash(mk(0, '', { motion: 'pan-right' }), mk(1, '', { motion: 'pan-left' }), 'whip')).toMatch(/contraire/);
+    expect(motionClash(mk(0, '', { motion: 'zoom-in', intensity: 0.2 }), mk(1, '', { motion: 'zoom-in', intensity: 0.3 }), 'impact')).toMatch(/calmes/);
+    expect(motionClash(mk(0, '', { motion: 'zoom-in', intensity: 0.2 }), mk(1, '', { motion: 'zoom-in', intensity: 0.3 }), 'impact', 'confrontation')).toBeNull();
+    expect(motionClash(mk(0, '', { motion: 'pan-right' }), mk(1, '', { motion: 'pan-right' }), 'whip')).toBeNull();
+  });
+});
+
+describe('caméra « Explorer »', async () => {
+  const { cameraAt } = await import('../src/engine/render');
+  it('plan général, détail, retour au plan général', () => {
+    const s = mk(0, '', { motion: 'tour', rect: { x: 0, y: 0, w: 1000, h: 1500 }, balloons: [{ x: 50, y: 50, w: 200, h: 120 }, { x: 700, y: 1200, w: 200, h: 120 }] });
+    const a = cameraAt(s, 0, 9 / 16, false), mid = cameraAt(s, 0.42, 9 / 16, false), end = cameraAt(s, 1, 9 / 16, false);
+    expect(mid.vw).toBeLessThan(a.vw);
+    expect(end.vw).toBeCloseTo(a.vw, 3);
+    expect(cameraAt(s, 0.72, 9 / 16, false).cy).toBeGreaterThan(mid.cy);
+  });
+});
