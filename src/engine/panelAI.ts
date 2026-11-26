@@ -182,6 +182,42 @@ export function cutFromDetection(det: PanelDetection, width: number, height: num
  * sound, the classic gutter detectors otherwise. Never throws.
  */
 export async function cutPageSmart(key: string, img: CanvasImageSource, width: number, height: number, rtl = false): Promise<PageCut & { by: 'ia' | 'algo'; bubbles: number }> {
+  // a double page squeezed into the network's square input makes its panels tiny:
+  // read each half on its own, then left half before right half (manga: the reverse)
+  if (width / height > 1.2) {
+    try {
+      const half = Math.round(width / 2);
+      const parts = await Promise.all([0, 1].map(async (k) => {
+        const x0 = k ? half : 0, w = k ? width - half : half;
+        const c = document.createElement('canvas');
+        c.width = w; c.height = height;
+        c.getContext('2d')!.drawImage(img, x0, 0, w, height, 0, 0, w, height);
+        const det = await detectWithAI(`${key}#${k}`, c, w, height);
+        return { det, x0, w };
+      }));
+      if (parts.every((q) => q.det)) {
+        const cuts = parts.map((q) => ({ ...q, cut: cutFromDetection(q.det!, q.w, height, rtl) }));
+        if (cuts.every((q) => q.cut)) {
+          const shift = (r: Rect, x0: number) => ({ ...r, x: r.x + x0 });
+          const ordered = rtl ? [...cuts].reverse() : cuts;
+          let rects = ordered.flatMap((q) => q.cut!.rects.map((r) => shift(r, q.x0)));
+          // panels drawn ACROSS the two pages come from the whole-page reading; the halves
+          // only add what lies outside them (never slice a spread-wide image in two)
+          const whole = await detectWithAI(key + '#whole', img, width, height);
+          const wc = whole && cutFromDetection(whole, width, height, rtl);
+          const across = wc ? wc.rects.filter((r) => r.x < half - width * 0.05 && r.x + r.w > half + width * 0.05) : [];
+          if (across.length) {
+            const inside = (r: Rect, o: Rect) => { const w = Math.min(r.x + r.w, o.x + o.w) - Math.max(r.x, o.x), h = Math.min(r.y + r.h, o.y + o.h) - Math.max(r.y, o.y); return w > 0 && h > 0 ? (w * h) / (r.w * r.h) : 0; };
+            rects = comicOrder([...across, ...rects.filter((r) => !across.some((o) => inside(r, o) > 0.5))], rtl);
+          }
+          const bubbles = parts.reduce((a, q) => a + q.det!.bubbles.filter((b) => b.s >= 0.35).length, 0);
+          // keep the page-level detection for the balloon camera
+          cache.set(key, { panels: [], bubbles: parts.flatMap((q) => q.det!.bubbles.map((b) => ({ ...b, x: b.x + q.x0 }))), ms: 0, device: parts[0].det!.device });
+          return { rects, kind: 'panels', note: 'double page lue moitié par moitié (IA)', diag: { n: rects.length, ia: 1, bubbles }, by: 'ia', bubbles };
+        }
+      }
+    } catch { /* fall back to the whole-page reading below */ }
+  }
   try {
     const det = await detectWithAI(key, img, width, height);
     if (det) {
