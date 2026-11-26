@@ -240,6 +240,40 @@ function drawBackground(ctx: Ctx, project: Project, box: Box, pageId: string | n
     pageBlur(ctx, project, box, pageId, region);
   }}
 
+/**
+ * Lay panels out like a comic page: consecutive panels share a row whose height
+ * makes them fill the width exactly (keeping each panel's own shape). Every way
+ * of splitting the list into rows is tried; the one that covers the most of the
+ * frame, without making one panel tiny next to the others, wins. Centred.
+ */
+export function justifiedBoxes(aspects: number[], area: { x: number; y: number; w: number; h: number }, gap: number): Box[] {
+  const n = aspects.length;
+  if (!n) return [];
+  let best: { score: number; boxes: Box[] } | null = null;
+  for (let mask = 0; mask < 1 << Math.max(0, n - 1); mask++) {
+    // bit i set = row break after panel i
+    const rows: number[][] = [[]];
+    for (let i = 0; i < n; i++) { rows[rows.length - 1].push(i); if (i < n - 1 && mask & (1 << i)) rows.push([]); }
+    const hs = rows.map((r) => (area.w - gap * (r.length - 1)) / r.reduce((a, i) => a + aspects[i], 0));
+    const total = hs.reduce((a, h) => a + h, 0) + gap * (rows.length - 1);
+    const k = Math.min(1, area.h / total);
+    const boxes: Box[] = [];
+    let y = area.y + (area.h - total * k) / 2;
+    rows.forEach((r, ri) => {
+      const h = hs[ri] * k;
+      const rowW = r.reduce((a, i) => a + aspects[i] * h, 0) + gap * k * (r.length - 1);
+      let x = area.x + (area.w - rowW) / 2;
+      for (const i of r) { boxes[i] = { x, y, w: aspects[i] * h, h }; x += aspects[i] * h + gap * k; }
+      y += h + gap * k;
+    });
+    const areas = boxes.map((b) => b.w * b.h);
+    const cover = areas.reduce((a, v) => a + v, 0) / (area.w * area.h);
+    const score = cover * Math.pow(Math.min(...areas) / Math.max(...areas), 0.2);
+    if (!best || score > best.score) best = { score, boxes };
+  }
+  return best!.boxes;
+}
+
 /** biggest enlargement of a scan in the current frame (screen px per page px), for the sharpening radius */
 let lastMag = 0;
 
@@ -304,15 +338,17 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
 
 /* -------------------------------------------- balloons popping in order */
 
-interface BalloonAnim { rects: Rect[]; local: number; dur: number }
+interface BalloonAnim { rects: Rect[]; local: number; dur: number; /** the camera reads them: each pops as the camera arrives */ follow?: boolean }
 
 /** before its turn a balloon is hidden under a soft patch of its surroundings, then it pops in */
 function drawBalloons(ctx: Ctx, asset: { img: CanvasImageSource; blur: HTMLCanvasElement; width: number; height: number }, b: BalloonAnim) {
   const n = b.rects.length;
   if (!n) return;
-  const span = Math.max(0.6, b.dur * 0.6);
+  // all balloons out by mid-shot at the latest: a hidden balloon must never linger
+  const span = Math.min(b.dur * 0.42, 0.3 * n + 0.2);
   b.rects.forEach((r, i) => {
-    const t0 = 0.12 + (i * span) / n;
+    // following camera: it reaches balloon i at i/(n-1) of the shot; pop a beat before
+    const t0 = b.follow && n > 1 ? Math.max(0.08, (i / (n - 1)) * b.dur - (b.dur / (n - 1)) * 0.3) : 0.12 + (i * span) / n;
     const a = clamp((b.local - t0) / 0.28, 0, 1);
     if (a >= 1) return; // fully shown: it's already in the art
     const pad = Math.max(r.w, r.h) * 0.06;
@@ -1581,7 +1617,7 @@ export function createRenderer(W: number, H: number): Renderer {
           const sc = m === 'zoom-in' ? 1 + 0.045 * e : m === 'zoom-out' ? 1.045 - 0.045 * e : 1.015;
           layers = { L, dx, dy, s: sc };
         }
-        const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration } : undefined;
+        const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration, follow: resolveMotion(shot, W / H, rtl).motion === 'read' } : undefined;
         drawPanelIn(ctx, project, shot.pageId!, full, view, override?.clip ?? shot.rect, { dimPage: project.background === 'page' ? 0.72 : 0, layers, balloons });
         break;
       }
@@ -1623,36 +1659,41 @@ export function createRenderer(W: number, H: number): Renderer {
         break;
       }
       case 'grid': {
-        ctx.drawImage(halftone(W, H, project.accent), 0, 0);
+        const onPaper = project.background === 'paper' || (project.diagramStyle ?? 'encre') === 'encre';
+        if (onPaper) paperBackground(ctx, W, H, project.accent, Math.min(W, H) * 0.035, 0);
+        else ctx.drawImage(halftone(W, H, project.accent), 0, 0);
         const items = [{ pageId: shot.pageId!, rect: shot.rect }, ...(shot.group ?? [])].slice(0, 4);
-        const n = items.length;
-        const m = Math.min(W, H) * 0.05, gap = Math.min(W, H) * 0.035;
-        const cols = vertical ? (n === 4 ? 2 : 1) : (n === 4 ? 2 : n);
-        const rows = Math.ceil(n / cols);
-        const cw = (W - m * 2 - gap * (cols - 1)) / cols, ch = (H - m * 2 - gap * (rows - 1)) / rows;
+        const m = Math.min(W, H) * 0.05, gap = Math.min(W, H) * 0.03;
+        // a little comic page: rows of panels justified to the full width, the best grouping wins
+        const boxes = justifiedBoxes(items.map((it) => it.rect.w / it.rect.h), { x: m, y: m, w: W - 2 * m, h: H - 2 * m }, gap);
         const z = 1 + 0.035 * easeInOutSine(clamp(p, 0, 1));
         ctx.save();
         ctx.translate(W / 2, H / 2);
         ctx.scale(z, z);
         ctx.translate(-W / 2, -H / 2);
         items.forEach((it, k) => {
-          const a = easeOutCubic(clamp((local - k * 0.18) / 0.4, 0, 1));
+          const a = clamp((local - k * 0.16) / 0.45, 0, 1);
           if (a <= 0) return;
-          const cx = m + (k % cols) * (cw + gap), cy = m + Math.floor(k / cols) * (ch + gap);
-          // fit the panel inside its cell, keep its own aspect
-          const ra = it.rect.w / it.rect.h, ca = cw / ch;
-          const bw = ra > ca ? cw : ch * ra, bh = ra > ca ? cw / ra : ch;
-          const box: Box = { x: cx + (cw - bw) / 2, y: cy + (ch - bh) / 2 + (1 - a) * ch * 0.12, w: bw, h: bh };
+          const e = spring(a * 0.45, 260, 18);
+          const b0 = boxes[k];
+          const box: Box = { x: b0.x, y: b0.y + (1 - e) * b0.h * 0.18, w: b0.w, h: b0.h };
           ctx.save();
-          ctx.globalAlpha = a;
-          ctx.shadowColor = 'rgba(0,0,0,0.6)';
-          ctx.shadowBlur = gap;
-          ctx.shadowOffsetY = gap * 0.3;
-          ctx.fillStyle = '#fff';
+          ctx.globalAlpha = Math.min(1, a * 2.5);
           const bd = Math.max(3, Math.min(W, H) * 0.006);
-          ctx.fillRect(box.x - bd, box.y - bd, box.w + bd * 2, box.h + bd * 2);
-          ctx.shadowColor = 'transparent';
+          if (onPaper) {
+            // printed: hard ink shadow and ink border
+            ctx.fillStyle = INK;
+            ctx.fillRect(box.x + bd * 2.2, box.y + bd * 2.2, box.w, box.h);
+          } else {
+            ctx.shadowColor = 'rgba(0,0,0,0.6)';
+            ctx.shadowBlur = gap;
+            ctx.shadowOffsetY = gap * 0.3;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(box.x - bd, box.y - bd, box.w + bd * 2, box.h + bd * 2);
+            ctx.shadowColor = 'transparent';
+          }
           drawPanelIn(ctx, project, it.pageId, box, { cx: it.rect.x + it.rect.w / 2, cy: it.rect.y + it.rect.h / 2, vw: it.rect.w }, it.rect, { bg: false });
+          if (onPaper) { ctx.strokeStyle = INK; ctx.lineWidth = bd * 1.2; ctx.strokeRect(box.x, box.y, box.w, box.h); }
           ctx.restore();
         });
         ctx.restore();

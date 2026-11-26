@@ -65,3 +65,24 @@ describe('garde-fous de cadrage', () => {
     expect(cutFromDetection(det, 1431, 2200)!.rects.length).toBe(2);
   });
 });
+
+describe('grille de cases justifiée', async () => {
+  const { justifiedBoxes } = await import('../src/engine/render');
+  const area = { x: 0, y: 0, w: 1000, h: 1800 };
+  it('empile deux cases larges en pleine largeur dans un cadre vertical', () => {
+    const b = justifiedBoxes([2.5, 2.5], area, 20);
+    expect(b[0].w).toBeCloseTo(1000, 0);
+    expect(b[1].y).toBeGreaterThan(b[0].y + b[0].h);
+  });
+  it('met deux cases hautes côte à côte', () => {
+    const b = justifiedBoxes([0.5, 0.5], area, 20);
+    expect(Math.abs(b[0].y - b[1].y)).toBeLessThan(1);
+  });
+  it('ne déborde jamais du cadre et couvre bien plus que l’ancienne grille', () => {
+    for (const asp of [[2.5, 2.5, 2.5], [0.6, 1.8, 0.7, 0.7], [3, 0.5]]) {
+      const b = justifiedBoxes(asp, area, 20);
+      for (const x of b) { expect(x.x).toBeGreaterThanOrEqual(-0.01); expect(x.y + x.h).toBeLessThanOrEqual(1800.01); expect(x.x + x.w).toBeLessThanOrEqual(1000.01); }
+      expect(b.reduce((a, x) => a + x.w * x.h, 0) / (1000 * 1800)).toBeGreaterThan(0.35);
+    }
+  });
+});

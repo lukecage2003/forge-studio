@@ -169,3 +169,23 @@ export async function renderSharpen(): Promise<Record<string, string>> {
   finally { G.forceGlPasses(false); }
   return out;
 }
+
+/** justified grid layout, vertical frame: two wide panels, then three mixed ones */
+export async function renderGrid(): Promise<Record<string, string>> {
+  const p = await buildScene({ handheld: 0 }, ['cut']);
+  p.format = '9:16';
+  const wide = { x: 30, y: 30, w: 740, h: 360 }, sq = { x: 30, y: 420, w: 360, h: 360 }, low = { x: 30, y: 810, w: 740, h: 360 };
+  const W = 360, H = 640;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const out: Record<string, string> = {};
+  const cases: [string, typeof wide, { pageId: string; rect: typeof wide }[]][] = [
+    ['grid-2wide', wide, [{ pageId: 'pg1', rect: low }]],
+    ['grid-3mixed', sq, [{ pageId: 'pg1', rect: wide }, { pageId: 'pg2', rect: sq }]],
+  ];
+  for (const [tag, rect, group] of cases) {
+    const proj = { ...p, shots: [{ ...p.shots[0], layout: 'grid' as const, rect, group, motion: 'static' as const, shake: 0, caption: { ...p.shots[0].caption, text: '' } }] };
+    createRenderer(W, H).draw(c.getContext('2d')!, proj, 1.5);
+    out[tag] = c.toDataURL('image/png');
+  }
+  return out;
+}

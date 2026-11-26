@@ -1,7 +1,7 @@
 import type { CaptionAnim, CaptionPreset, Layout, Motion, Project, Rect, Shot, Subtitle, Transition, Word } from '../types';
 import { FORMATS } from '../types';
 import { clamp, uid } from '../lib/util';
-import { cutPageSmart } from './panelAI';
+import { cachedDetection, cutPageSmart } from './panelAI';
 import { detectBeats } from './beats';
 import { ensureMedia, getAudio, getImage } from './media';
 import { newShot } from '../store';
@@ -311,7 +311,7 @@ export function buildSubtitles(words: Word[], maxWords: number): Subtitle[] {
 
 /* --------------------------------------------------------------- main */
 
-interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean; cover?: string }
+interface Panel { shot: Shot; w: number; area: number; pan: boolean; splash: boolean; cover?: string; /** balloons + captions inside (AI detector), -1 unknown */ bubbles: number }
 
 export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project: Project; report: AutoReport }> {
   const prof = o.profile ? PROFILE[o.profile] : null;
@@ -367,8 +367,14 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     const sources = new Set(proj.pages.filter((x) => !x.skip).map((x) => x.source)).size;
     const cover = isCover ? (sources > 1 ? prettySource(pg.source ?? pg.name) : '') : undefined;
     if (isCover) w *= 1.5;
-    return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones'), cover };
+    // balloons inside the panel (known from the import's AI reading): text to read = time and weight
+    const det = cachedDetection(pg.mediaId);
+    const bubbles = det ? det.bubbles.filter((b) => b.s >= 0.35 && b.x + b.w / 2 > s.rect.x && b.x + b.w / 2 < s.rect.x + s.rect.w && b.y + b.h / 2 > s.rect.y && b.y + b.h / 2 < s.rect.y + s.rect.h).length : -1;
+    if (bubbles > 0) w *= 1 + Math.min(4, bubbles) * 0.12;
+    return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones'), cover, bubbles };
   });
+  /** shortest time a panel can stay on screen and still be read */
+  const readFloor = (x: Panel) => (x.bubbles > 0 ? 1.15 + Math.min(4, x.bubbles) * 0.4 : x.bubbles === 0 ? 1.0 : Math.max(0.9, st.min)) * (x.shot.group ? 1 + x.shot.group.length * 0.4 : 1);
 
   const minRead = (s: Shot) => {
     const n = s.caption.text.trim().split(/\s+/).filter(Boolean).length;
@@ -661,17 +667,30 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (target && list.length && (target - hookDur - titleDur) / list.length < st.min * 0.85) {
       list = groupPanels(list, Math.ceil(list.length / 3));
     }
-    // still too many panels for the asked length: show a selection, never a slideshow of flashes
-    if (target && !followedVoice && list.length && (target - hookDur - titleDur) / list.length < Math.max(0.9, st.min)) {
-      const keepN = Math.max(1, Math.floor((target - hookDur - titleDur) / Math.max(1, st.min * 1.1)));
+    // still too many panels to READ in the asked length: keep the strongest ones
+    // (covers and splashes first, then by weight: art density, size, dialogue),
+    // spread over the whole story, in reading order — never a slideshow of flashes
+    const room0 = target ? target - hookDur - titleDur : 0;
+    const need = list.reduce((a, x) => a + readFloor(x), 0);
+    if (target && !followedVoice && list.length && need > room0) {
       const must = list.filter((x) => x.cover !== undefined || x.splash);
-      const rest = list.filter((x) => !must.includes(x));
-      const room = Math.max(0, keepN - must.length);
-      const pick = new Set(must);
-      for (let i = 0; i < room && rest.length; i++) pick.add(rest[Math.floor((i * rest.length) / room)]);
+      const pick = new Set<Panel>();
+      let used = 0;
+      for (const x of must) { if (used + readFloor(x) <= room0 || !pick.size) { pick.add(x); used += readFloor(x); } }
+      // best panel of each stretch of the story first, so no part is skipped entirely
+      const rest = list.filter((x) => !pick.has(x));
+      const chunks = Math.max(1, Math.round(room0 / 6));
+      const byChunk = Array.from({ length: chunks }, (_, c) => rest.slice(Math.floor((c * rest.length) / chunks), Math.floor(((c + 1) * rest.length) / chunks)).sort((a, b) => b.w - a.w));
+      for (let round = 0; byChunk.some((c) => c.length); round++) {
+        for (const c of byChunk) {
+          const x = c.shift();
+          if (x && used + readFloor(x) <= room0) { pick.add(x); used += readFloor(x); }
+        }
+        if (round > 40) break;
+      }
       const before = list.length;
       list = list.filter((x) => pick.has(x));
-      notes.push(`${list.length} cases choisies sur ${before} pour tenir en ${target} s.`);
+      notes.push(`${list.length} cases choisies sur ${before} (les plus fortes, réparties sur toute l’histoire) pour avoir le temps de les lire en ${target} s.`);
     }
     if (followedVoice) {
       const floor = list.length * st.min * 0.85 + hookDur + titleDur;
@@ -688,10 +707,10 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       const k = avail / durs.reduce((a, b) => a + b, 0);
       durs = durs.map((d) => d * k);
       const lo = Math.min(st.min, avail / list.length), hi = Math.max(st.max, (avail / list.length) * 1.6);
-      durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot)), Math.max(0.85, lo * 0.75), hi));
+      durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot), readFloor(list[i])), Math.max(0.85, lo * 0.75), Math.max(hi, readFloor(list[i]))));
       const s2 = durs.reduce((a, b) => a + b, 0);
-      // rescale to the target but never under 0.8 s: a panel must stay readable
-      durs = durs.map((d) => Math.max(0.8, d * (avail / s2)));
+      // rescale to the target but never under the reading time of the panel
+      durs = durs.map((d, i) => Math.max(followedVoice ? 0.8 : Math.min(readFloor(list[i]), 0.8 + readFloor(list[i]) * 0.5), d * (avail / s2)));
     } else {
       durs = durs.map((d, i) => clamp(Math.max(d, minRead(list[i].shot)), st.min, st.max * (list[i].shot.group ? 1.6 : 1)));
     }
