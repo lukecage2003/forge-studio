@@ -1383,6 +1383,9 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
   ctx.scale(scale, scale);
 
   if (P.box) {
+    // word by word: the box arrives with the first word, never empty on screen
+    const firstIn = cap.anim === 'words' ? clamp(spring(Math.max(0, local - (wordTimes?.[0] ?? 0)), 420, 22) * 1.6, 0, 1) : 1;
+    if (firstIn < 1) ctx.globalAlpha = alpha * firstIn;
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
     const padX = size * 0.5, padY = size * 0.32;
     const bw = widest + padX * 2, bh = blockH + padY * 2;
@@ -1400,6 +1403,7 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
       ctx.roundRect(-bw / 2, -bh / 2, bw, bh, size * 0.35);
       ctx.fill();
     }
+    ctx.globalAlpha = alpha;
   } else if (cap.preset === 'cinema') {
     ctx.shadowColor = 'rgba(0,0,0,0.85)';
     ctx.shadowBlur = size * 0.35;
