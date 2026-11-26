@@ -258,3 +258,18 @@ describe('IA dans le montage', () => {
     expect(r.notes.map((n) => n.type)).toEqual(expect.arrayContaining(['accroche']));
   });
 });
+
+describe('fonctions Google directes et coût', () => {
+  it('le mode Zéro coût bloque Gemini payant avant tout envoi', async () => {
+    const { testGoogle } = await import('../src/engine/google');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'OK' }] } }] })));
+    setConfig((c) => ({ ...c, mode: 'zero', providers: { ...c.providers, gemini: { ...c.providers.gemini, enabled: true, billing: 'paid' } } }));
+    await expect(testGoogle()).rejects.toThrow(/Zéro coût/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // free tier stays allowed in Zéro coût
+    setConfig((c) => ({ ...c, providers: { ...c.providers, gemini: { ...c.providers.gemini, billing: 'free-tier' } } }));
+    await expect(testGoogle()).resolves.toBe('OK');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+});

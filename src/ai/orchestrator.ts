@@ -42,7 +42,14 @@ export function refusal(p: ProviderId, task: AiTask, model: ModelInfo | null): s
   if (!model) return 'aucun modèle adapté à cette tâche';
   if (task.needs.includes('transcribe') && !model.caps.includes('transcribe')) return 'ce modèle ne transcrit pas';
   if (task.needs.includes('vision') && !model.caps.includes('vision')) return 'ce modèle ne lit pas les images';
-  // cost
+  return costRefusal(p, model);
+}
+
+/** the cost rules alone (mode Zéro coût, monthly budget): also used by the features that call a provider directly */
+export function costRefusal(p: ProviderId, model: ModelInfo): string | null {
+  const c = getConfig();
+  const s = c.providers[p];
+  if (!s) return null;
   const paidModel = s.billing === 'paid' || (s.billing === 'free-model' && !isZero(model)) || s.billing === 'trial';
   if (c.mode === 'zero' && paidModel) return s.billing === 'trial' ? 'crédits d’essai (pas gratuits durablement)' : 'payant ou prix inconnu (mode Zéro coût)';
   if (paidModel && s.billing !== 'trial' && monthCost() >= c.budget) return `budget du mois atteint (${c.budget} $)`;

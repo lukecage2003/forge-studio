@@ -41,7 +41,7 @@ export function TopBar() {
         <button className="icon-btn" title="Nouveau projet" onClick={fresh}><FilePlus2 size={17} /></button>
         <button className="icon-btn" title="Ouvrir un projet .forge" onClick={() => openRef.current?.click()}><FolderOpen size={17} /></button>
         <button className="icon-btn" title="Enregistrer le projet (.forge)" onClick={saveFile}><Save size={17} /></button>
-        <input ref={openRef} type="file" accept=".forge,application/json" hidden onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
+        <input ref={openRef} type="file" accept=".forge,application/json,application/zip" hidden onChange={(e) => { void openFile(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
       <input
         className="project-name"

@@ -9,7 +9,8 @@ import { SR } from './speech';
 import { keyOf, setKey } from '../ai/vault';
 import { getConfig, setConfig } from '../ai/config';
 import { coolDown, cooling, logAttempt, recordUse } from '../ai/ledger';
-import { getConsentAsker } from '../ai/orchestrator';
+import { costRefusal, getConsentAsker } from '../ai/orchestrator';
+import { pickModel } from '../ai/models';
 export interface GoogleSettings { apiKey: string; model: string; language: string }
 
 const KEY = 'forge.google';
@@ -48,6 +49,9 @@ async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal
   const c = getConfig();
   if (c.localOnly) throw new Error('Projet en « local uniquement » : rien n’est envoyé à Google.');
   if (!c.providers.gemini.enabled) throw new Error('Gemini est désactivé dans le centre de contrôle IA.');
+  // same cost rules as the orchestrator: mode Zéro coût and the monthly budget
+  const cost = costRefusal('gemini', pickModel('gemini', ['text']) ?? { id: g.model, provider: 'gemini', caps: [], price: null });
+  if (cost) throw new Error(`Google non utilisé : ${cost}. Change le mode ou la facturation dans le centre de contrôle IA.`);
   const cd = cooling('gemini');
   if (cd) throw new Error(cd.why === 'auth' ? 'Clé Google refusée : corrige-la dans le centre de contrôle IA.' : 'Google en pause (quota) : réessaie un peu plus tard.');
   const sent = [...new Set((parts as { inline_data?: { mime_type?: string } }[]).map((p) => (p.inline_data ? (p.inline_data.mime_type?.startsWith('audio') ? 'audio' : 'images') : 'texte')))];

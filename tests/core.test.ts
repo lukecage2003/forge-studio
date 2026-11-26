@@ -462,3 +462,24 @@ describe('alignement script ↔ transcription', () => {
     expect(wordSim('moutent', 'montrent')).toBeGreaterThan(0.6);
   });
 });
+
+describe('fichier projet .forge', () => {
+  it('liste tous les médias du projet, rush compris', async () => {
+    const { mediaRefs } = await import('../src/lib/projectFile');
+    const p = { pages: [{ mediaId: 'img1' }], audio: [{ mediaId: 'snd1' }], aroll: { mediaId: 'vid1' } } as never;
+    expect(mediaRefs(p)).toEqual([{ id: 'img1', kind: 'image' }, { id: 'snd1', kind: 'audio' }, { id: 'vid1', kind: 'video' }]);
+  });
+  it('relit le format zip (v2) avec ses médias, et l’ancien format JSON (v1)', async () => {
+    const { readProjectFile } = await import('../src/lib/projectFile');
+    const { zipSync, strToU8 } = await import('fflate');
+    const project = { id: 'p1', name: 'Test', pages: [], audio: [], aroll: { mediaId: 'vid1' } };
+    const z = zipSync({ 'project.json': strToU8(JSON.stringify({ magic: 'forge-project@2', project, types: { vid1: 'video/mp4' } })), 'media/vid1': new Uint8Array([1, 2, 3, 4]) });
+    const v2 = await readProjectFile(new Blob([z]));
+    expect(v2.project.name).toBe('Test');
+    expect(v2.media.get('vid1')?.size).toBe(4);
+    expect(v2.media.get('vid1')?.type).toBe('video/mp4');
+    const v1 = await readProjectFile(new Blob([JSON.stringify({ magic: 'forge-project@1', project, media: { img: 'data:image/png;base64,AAEC' } })]));
+    expect(v1.media.get('img')?.size).toBe(3);
+    await expect(readProjectFile(new Blob(['{"magic":"autre"}']))).rejects.toThrow(/pas un projet Forge/);
+  });
+});
