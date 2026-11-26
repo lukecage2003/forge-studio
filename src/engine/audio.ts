@@ -1,5 +1,11 @@
 import type { AudioClip, Project } from '../types';
-import { audioCtx, ensureClean, getAudio, voiceBuffer } from './media';
+import { audioCtx, ensureClean, getAudio, voiceBuffer, voiceReady, type VoiceProcessing } from './media';
+
+/** how the voice of this project is processed (radio by default; « voiceClean: false » of old projects = untouched) */
+export function voiceOf(p: Project): VoiceProcessing {
+  const preset = p.mix?.voice ?? (p.mix?.voiceClean === false ? 'off' : 'radio');
+  return { denoise: p.mix?.denoise ?? 'auto', preset };
+}
 import { segmentsOf } from './timeline';
 import { scheduleSfx } from './sfx';
 
@@ -76,11 +82,13 @@ function applyKfs(param: AudioParam, kfs: KF[], t0: number, T0: number) {
 export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0: number, T0: number, until = Infinity) {
   const nodes: AudioBufferSourceNode[] = [];
   const duck = p.ducking ? duckKfs(p) : null;
-  const clean = p.mix?.voiceClean !== false;
-  const voiceIn = clean ? voiceChain(ctx, dest) : dest;
-  const dn = p.mix?.denoise ?? 'auto';
+  // radio: the processed take is already finished; natural: the light live chain; off: as recorded
+  const radioReady = (id?: string) => !!id && voiceReady(id, voiceOf(p));
+  const vpre = voiceOf(p).preset;
+  const voiceIn = vpre === 'natural' || (vpre === 'radio' && !radioReady(p.aroll?.mediaId ?? p.audio.find((c) => c.kind === 'voice')?.mediaId)) ? voiceChain(ctx, dest) : dest;
+  const vp = voiceOf(p);
   for (const c of p.audio) {
-    const buf = c.kind === 'voice' ? voiceBuffer(c.mediaId, dn) : getAudio(c.mediaId);
+    const buf = c.kind === 'voice' ? voiceBuffer(c.mediaId, vp) : getAudio(c.mediaId);
     if (!buf) continue;
     const end = Math.min(c.start + c.duration, until);
     if (end <= t0) continue;
@@ -103,7 +111,7 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
   }
   // face-cam rush: each kept segment, with 6 ms micro-fades so jump cuts never click
   const ar = p.aroll;
-  const abuf = ar && voiceBuffer(ar.mediaId, dn);
+  const abuf = ar && voiceBuffer(ar.mediaId, vp);
   if (ar && abuf) {
     const bus = ctx.createGain();
     bus.gain.value = ar.volume;
@@ -163,9 +171,9 @@ export function stopPreviewAudio() {
 
 /** clean every voice of the project (rush and voice-overs) before mixing */
 export async function prepareVoices(p: Project) {
-  const dn = p.mix?.denoise ?? 'auto';
+  const v = voiceOf(p);
   const ids = [...(p.aroll ? [p.aroll.mediaId] : []), ...p.audio.filter((c) => c.kind === 'voice').map((c) => c.mediaId)];
-  return Promise.all(ids.map((id) => ensureClean(id, dn)));
+  return Promise.all(ids.map((id) => ensureClean(id, v)));
 }
 
 /** Mix the full soundtrack offline. */

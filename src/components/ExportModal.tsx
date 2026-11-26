@@ -11,7 +11,7 @@ import { createRenderer, loadFonts } from '../engine/render';
 import { videoDuration } from '../engine/timeline';
 import { pause } from '../engine/transport';
 import { fmtShort } from '../lib/util';
-import { exportSize, type SyncCheck } from '../engine/export';
+import { exportSize, videoBitrate, type SyncCheck } from '../engine/export';
 import type { MixInfo } from '../engine/audio';
 import { FileCheck2, Clapperboard } from 'lucide-react';
 
@@ -22,6 +22,7 @@ export function ExportModal() {
   const [scale, setScale] = useState<1 | 2>(1);
   const [burn, setBurn] = useState(true);
   const [sync, setSync] = useState<SyncCheck | null>(null);
+  const [enc, setEnc] = useState<{ codec: string; mbps: number; hardware: boolean; audio: string | null } | null>(null);
   const [mixInfo, setMixInfo] = useState<MixInfo | null>(null);
   const [side, setSide] = useState<string | null>(null);
   const mix = project.mix ?? { voiceClean: true, target: -14 };
@@ -50,7 +51,7 @@ export function ExportModal() {
     const t0 = performance.now();
     try {
       const blob = await exportMp4(getState().project, {
-        quality, fps, scale, burnSubtitles: burn, onCheck: setSync, signal: abort.current.signal, onMix: setMixInfo,
+        quality, fps, scale, burnSubtitles: burn, onCheck: setSync, onEncoder: setEnc, signal: abort.current.signal, onMix: setMixInfo,
         onProgress: (p, label) => setProg({ p, label }),
       });
       setResult({ url: URL.createObjectURL(blob), size: blob.size, blob });
@@ -92,8 +93,8 @@ export function ExportModal() {
             <div className="field">
               <label>Qualité</label>
               <div className="seg full">
-                <button className={quality === 'high' ? 'on' : ''} onClick={() => setQuality('high')} disabled={busy}>Haute · recommandé</button>
-                <button className={quality === 'max' ? 'on' : ''} onClick={() => setQuality('max')} disabled={busy}>Maximale</button>
+                <button className={quality === 'high' ? 'on' : ''} onClick={() => setQuality('high')} disabled={busy}>Haute · {videoBitrate(size.W, size.H, fps, 'high')} Mb/s</button>
+                <button className={quality === 'max' ? 'on' : ''} onClick={() => setQuality('max')} disabled={busy}>Maximale · {videoBitrate(size.W, size.H, fps, 'max')} Mb/s, sans perte visible</button>
               </div>
             </div>
             <div className="field">
@@ -119,10 +120,15 @@ export function ExportModal() {
                 ))}
               </div>
             </div>
-            <label className="toggle">
-              <input type="checkbox" checked={mix.voiceClean} onChange={(e) => setMix({ voiceClean: e.target.checked })} disabled={busy} />
-              <span className="switch" /><span>Voix prioritaire<small>Coupe les graves parasites, égalise la voix, baisse musique et bruitages quand tu parles</small></span>
-            </label>
+            <div className="field">
+              <label>Voix</label>
+              <div className="seg full">
+                {([['radio', 'Radio · pro'], ['natural', 'Naturelle'], ['off', 'Brute']] as const).map(([v, l]) => (
+                  <button key={v} className={(mix.voice ?? (mix.voiceClean === false ? 'off' : 'radio')) === v ? 'on' : ''} onClick={() => setMix({ voice: v, voiceClean: v !== 'off' })} disabled={busy}>{l}</button>
+                ))}
+              </div>
+              <p className="help">Radio : graves parasites coupés, voix plus présente, « s » adoucis, phrases fortes et faibles égalisées, compression. Musique et bruitages baissent quand tu parles, dans tous les cas.</p>
+            </div>
             {project.subtitles.length > 0 && (
               <label className="toggle">
                 <input type="checkbox" checked={burn} onChange={(e) => setBurn(e.target.checked)} disabled={busy} />
@@ -156,6 +162,7 @@ export function ExportModal() {
           <div className="result">
             <video src={result.url} controls playsInline className={`result-video r${project.format.replace(':', '-')}`} />
             <p className="muted">MP4 · {(result.size / 1048576).toFixed(1)} Mo — prêt pour TikTok, Shorts et YouTube.</p>
+            {enc && <p className="muted">Encodage : {enc.codec.toUpperCase()} {enc.mbps} Mb/s{enc.hardware ? ' · carte graphique' : ' · processeur'} · son {enc.audio === 'aac' ? 'AAC 256 kb/s' : enc.audio === 'opus' ? 'Opus 256 kb/s' : 'aucun'}</p>}
             {sync && (
               <p className={sync.ok ? 'muted' : 'error-box'}>
                 {sync.ok ? 'Son et image synchronisés' : 'Attention : son et image désynchronisés'} · image {sync.video.toFixed(2)} s{sync.audio != null ? ` · son ${sync.audio.toFixed(2)} s · décalage au départ ${(sync.startGap * 1000).toFixed(0)} ms` : ' · pas de son'}

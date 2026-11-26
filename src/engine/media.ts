@@ -171,33 +171,43 @@ export const registerTempImage = (id: string, blob: Blob) => decodeImage(id, blo
 /* ----------------------------------------------- cleaned voice (denoise) */
 
 import type { DenoiseMode, NoiseReport } from './denoise';
+import type { VoicePreset, VoiceReport } from './voicepro';
 import { heavy } from './jobs';
-const cleaned = new Map<string, { buf: AudioBuffer; report: NoiseReport }>();
+export interface VoiceProcessing { denoise: DenoiseMode; preset: VoicePreset }
+const vkey = (id: string, v: VoiceProcessing) => `${id}:${v.denoise}:${v.preset}`;
+const untouched = (v: VoiceProcessing) => v.denoise === 'off' && v.preset !== 'radio';
+const cleaned = new Map<string, { buf: AudioBuffer; report: NoiseReport | null; voice: VoiceReport | null }>();
 const cleaning = new Map<string, Promise<NoiseReport | null>>();
 
-/** the voice as it will be heard: cleaned when the clean-up is ready, else the original */
-export function voiceBuffer(id: string, mode: DenoiseMode): AudioBuffer | undefined {
-  if (mode !== 'off') { const c = cleaned.get(id + ':' + mode); if (c) return c.buf; }
+/** the voice as it will be heard: processed when ready, else the original */
+export function voiceBuffer(id: string, v: VoiceProcessing): AudioBuffer | undefined {
+  if (!untouched(v)) { const c = cleaned.get(vkey(id, v)); if (c) return c.buf; }
   return audios.get(id);
 }
-export const noiseReport = (id: string, mode: DenoiseMode) => cleaned.get(id + ':' + mode)?.report ?? null;
+/** true once the processed voice is ready (the preview then sounds like the export) */
+export const voiceReady = (id: string, v: VoiceProcessing) => untouched(v) || cleaned.has(vkey(id, v));
+export const noiseReport = (id: string, v: VoiceProcessing) => cleaned.get(vkey(id, v))?.report ?? null;
+export const voiceReport = (id: string, v: VoiceProcessing) => cleaned.get(vkey(id, v))?.voice ?? null;
 
-/** compute the cleaned voice once per take and mode (cached) */
-export function ensureClean(id: string, mode: DenoiseMode): Promise<NoiseReport | null> {
-  if (mode === 'off') return Promise.resolve(null);
-  const key = id + ':' + mode;
+/** clean (denoise) then polish (broadcast chain) a take, once per take and settings (cached) */
+export function ensureClean(id: string, v: VoiceProcessing): Promise<NoiseReport | null> {
+  if (untouched(v)) return Promise.resolve(null);
+  const key = vkey(id, v);
   if (cleaned.has(key)) return Promise.resolve(cleaned.get(key)!.report);
   if (cleaning.has(key)) return cleaning.get(key)!;
   const job = heavy('audio', async () => {
     const src = audios.get(id) ?? (await ensureMedia(id, 'audio').catch(() => null), audios.get(id));
     if (!src) return null;
     await new Promise((r) => setTimeout(r, 0));
-    const { cleanVoice } = await import('./denoise');
-    const ch = Array.from({ length: src.numberOfChannels }, (_, i) => src.getChannelData(i));
-    const { channels, report } = cleanVoice(ch, src.sampleRate, mode);
+    const [{ cleanVoice }, { polishVoice }] = await Promise.all([import('./denoise'), import('./voicepro')]);
+    let ch: Float32Array[] = Array.from({ length: src.numberOfChannels }, (_, i) => src.getChannelData(i) as Float32Array);
+    let report: NoiseReport | null = null;
+    if (v.denoise !== 'off') { const r = cleanVoice(ch, src.sampleRate, v.denoise); ch = r.channels; report = r.report; }
+    let voice: VoiceReport | null = null;
+    if (v.preset === 'radio') { const r = polishVoice(ch, src.sampleRate, 'radio'); ch = r.channels; voice = r.report; }
     const buf = new AudioBuffer({ length: src.length, numberOfChannels: src.numberOfChannels, sampleRate: src.sampleRate });
-    channels.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
-    cleaned.set(key, { buf, report });
+    ch.forEach((c, i) => buf.copyToChannel(c as Float32Array<ArrayBuffer>, i));
+    cleaned.set(key, { buf, report, voice });
     emit();
     return report;
   });

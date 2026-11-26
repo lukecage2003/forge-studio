@@ -1,7 +1,7 @@
 import { DIAGRAM_3D } from '../types';
 import {
   ALL_FORMATS, AudioBufferSource, BufferSource, type WrappedCanvas, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output,
-  QUALITY_HIGH, QUALITY_VERY_HIGH, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
+  Quality, getFirstEncodableAudioCodec, getFirstEncodableVideoCodec,
 } from 'mediabunny';
 import type { Project } from '../types';
 import { FORMATS } from '../types';
@@ -25,6 +25,8 @@ export interface ExportOpts {
   burnSubtitles?: boolean;
   /** sync check of the finished file: track lengths and the gap between picture and sound */
   onCheck?: (c: SyncCheck) => void;
+  /** what the encoder really uses (codec, bitrate, graphics card or not, audio codec) */
+  onEncoder?: (e: { codec: string; mbps: number; hardware: boolean; audio: string | null }) => void;
   /** loudness of the exported mix, once measured */
   onMix?: (info: MixInfo) => void;
 }
@@ -42,6 +44,18 @@ export async function checkSync(buf: ArrayBuffer, expected: number): Promise<Syn
   const ok = Math.abs(video - expected) < 0.1 && (audio == null || (Math.abs(audio - video) < 0.1 && startGap < 0.05));
   (input as unknown as { dispose?: () => void }).dispose?.();
   return { video, audio, expected, startGap, ok };
+}
+
+/** video bitrate (Mb/s): « high » 16 at 1080p30, « max » 30 (visually lossless); scaled by pixels and frame rate */
+export function videoBitrate(W: number, H: number, fps: number, q: 'high' | 'max'): number {
+  const base = q === 'max' ? 30 : 16;
+  const px = (W * H) / (1920 * 1080);
+  return Math.round(base * Math.pow(px, 0.85) * (fps > 30 ? 1.5 : fps < 30 ? 0.85 : 1));
+}
+
+const CODEC_STR: Record<string, string> = { avc: 'avc1.640033', hevc: 'hvc1.1.6.L150.B0', vp9: 'vp09.00.51.08', av1: 'av01.0.12M.08' };
+async function canEncode(codec: string, W: number, H: number, fps: number, mbps: number, hardwareAcceleration: 'prefer-hardware') {
+  try { return !!(await VideoEncoder.isConfigSupported({ codec: CODEC_STR[codec] ?? codec, width: W, height: H, framerate: fps, bitrate: mbps * 1e6, hardwareAcceleration })).supported; } catch { return false; }
 }
 
 /** pixel size of an export: the format at 1080p, or doubled for 4K */
@@ -85,11 +99,14 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
     const { ensure3D } = await import('./scene3d');
     await ensure3D();
   }
-  const quality = o.quality === 'max' ? QUALITY_VERY_HIGH : QUALITY_HIGH;
+  // explicit bitrates (TikTok / YouTube re-encode anyway: give them a clean master)
+  const mbps = videoBitrate(W, H, o.fps, o.quality);
+  const quality = new Quality({ bitrate: mbps * 1e6 });
+  const aquality = new Quality({ bitrate: 256_000 });
   const vcodec = await getFirstEncodableVideoCodec(['avc', 'hevc', 'vp9', 'av1'], { width: W, height: H, quality, frameRate: o.fps });
   if (!vcodec) throw new Error(o.scale === 2 ? 'Ton navigateur ne peut pas encoder en 4K sur cet ordinateur : exporte en 1080p.' : 'Aucun encodeur vidéo disponible dans ce navigateur.');
   const hasAudio = project.audio.length > 0 || !!project.aroll || sfxEvents(project).length > 0;
-  const acodec = hasAudio ? await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, quality }) : null;
+  const acodec = hasAudio ? await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, quality: aquality }) : null;
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -102,11 +119,14 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
   const subCtx = sub.getContext('2d', { alpha: false })!;
 
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
-  const video = new CanvasSource(canvas, { codec: vcodec, quality, keyFrameInterval: 1 });
+  // the graphics card's encoder when it has one (much faster), the software one otherwise
+  const hw = await canEncode(vcodec, W, H, o.fps, mbps, 'prefer-hardware');
+  const video = new CanvasSource(canvas, { codec: vcodec, quality, keyFrameInterval: 1, latencyMode: 'quality', ...(hw ? { hardwareAcceleration: 'prefer-hardware' as const } : {}) });
+  o.onEncoder?.({ codec: vcodec, mbps, hardware: hw, audio: acodec });
   output.addVideoTrack(video, { frameRate: o.fps });
   let audio: AudioBufferSource | null = null;
   if (acodec) {
-    audio = new AudioBufferSource({ codec: acodec, quality });
+    audio = new AudioBufferSource({ codec: acodec, quality: aquality });
     output.addAudioTrack(audio);
   }
   await output.start();

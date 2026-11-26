@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Scissors, MonitorPlay, Upload, Wand2, ImagePlus, Download, FileVideo, Loader2 } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
@@ -6,15 +6,18 @@ import { PageEditor } from './components/PageEditor';
 import { Preview } from './components/Preview';
 import { Inspector } from './components/Inspector';
 import { Timeline } from './components/Timeline';
-import { ExportModal } from './components/ExportModal';
-import { AutoModal } from './components/AutoModal';
-import { SettingsModal } from './components/SettingsModal';
+const ExportModal = lazy(() => import('./components/ExportModal').then((m) => ({ default: m.ExportModal })));
+const AutoModal = lazy(() => import('./components/AutoModal').then((m) => ({ default: m.AutoModal })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal })));
 import { CommandPalette } from './components/CommandPalette';
-import { ChannelModal } from './components/ChannelModal';
-import { ScriptModal } from './components/ScriptModal';
-import { AiCenter } from './components/AiCenter';
-import { AssistantModal } from './components/AssistantModal';
+const ChannelModal = lazy(() => import('./components/ChannelModal').then((m) => ({ default: m.ChannelModal })));
+const ScriptModal = lazy(() => import('./components/ScriptModal').then((m) => ({ default: m.ScriptModal })));
+const AiCenter = lazy(() => import('./components/AiCenter').then((m) => ({ default: m.AiCenter })));
+const AssistantModal = lazy(() => import('./components/AssistantModal').then((m) => ({ default: m.AssistantModal })));
 import { ConsentDialog } from './components/ConsentDialog';
+const LibraryModal = lazy(() => import('./components/LibraryModal').then((m) => ({ default: m.LibraryModal })));
+const LiveModal = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveModal })));
+const LiveLog = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveLog })));
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
@@ -39,6 +42,9 @@ export default function App() {
   const scriptOpen = useStore((s) => !!s.ui.scriptOpen);
   const aiOpen = useStore((s) => !!s.ui.aiOpen);
   const assistantOpen = useStore((s) => !!s.ui.assistantOpen);
+  const libraryOpen = useStore((s) => !!s.ui.libraryOpen);
+  const liveOpen = useStore((s) => !!s.ui.liveOpen);
+  const liveLog = useStore((s) => !!s.ui.liveLog);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
   const hasRush = useStore((s) => !!s.project.aroll);
@@ -72,7 +78,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -155,6 +161,7 @@ export default function App() {
         <ErrorBoundary area="inspecteur"><Inspector /></ErrorBoundary>
       </div>
       <ErrorBoundary area="timeline"><Timeline /></ErrorBoundary>
+      <Suspense fallback={null}>
       {exportOpen && <ErrorBoundary area="fenêtre"><ExportModal /></ErrorBoundary>}
       {autoOpen && <ErrorBoundary area="fenêtre"><AutoModal onClose={() => setUI({ autoOpen: false })} /></ErrorBoundary>}
       {settingsOpen && <ErrorBoundary area="fenêtre"><SettingsModal /></ErrorBoundary>}
@@ -163,6 +170,10 @@ export default function App() {
       {scriptOpen && <ErrorBoundary area="fenêtre"><ScriptModal /></ErrorBoundary>}
       {aiOpen && <ErrorBoundary area="fenêtre"><AiCenter /></ErrorBoundary>}
       {assistantOpen && <ErrorBoundary area="fenêtre"><AssistantModal /></ErrorBoundary>}
+      {libraryOpen && <ErrorBoundary area="fenêtre"><LibraryModal /></ErrorBoundary>}
+      {liveOpen && <ErrorBoundary area="fenêtre"><LiveModal /></ErrorBoundary>}
+      {liveLog && !liveOpen && <ErrorBoundary area="journal"><LiveLog /></ErrorBoundary>}
+      </Suspense>
       <ConsentDialog />
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (

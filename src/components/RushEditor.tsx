@@ -59,6 +59,8 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
   const [stopAt, setStopAt] = useState<number | null>(null);
   const [filter, setFilter] = useState<Cut['reason'] | 'all' | 'review'>('all');
   const [model, setModel] = useState<WhisperModel>('base');
+  // Whisper size that fits this computer (the user can still change it)
+  useEffect(() => { void import('../engine/hardware').then(async (m) => setModel(m.advise(await m.detectHardware()).whisper)); }, []);
   const [focusMode, setFocusMode] = useState(false);
   const asset = getVideo(ar.mediaId);
   const segs = useMemo(() => keepSegments(ar), [ar]);

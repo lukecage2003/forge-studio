@@ -33,12 +33,12 @@ export interface AiConfig {
 const P = (enabled: boolean, billing: Billing, extra: Partial<ProviderSettings> = {}): ProviderSettings => ({ enabled, billing, ...extra });
 
 export const DEFAULT_ROUTES: Record<TaskKind, ProviderId[]> = {
-  'script.analyse': ['gemini', 'agnes', 'openrouter', 'groq', 'ollama', 'lmstudio', 'local'],
-  'script.review': ['agnes', 'openrouter', 'gemini', 'groq', 'ollama', 'lmstudio', 'local'],
+  'script.analyse': ['gemini', 'agnes', 'openrouter', 'groq', 'webllm', 'ollama', 'lmstudio', 'local'],
+  'script.review': ['agnes', 'openrouter', 'gemini', 'groq', 'webllm', 'ollama', 'lmstudio', 'local'],
   'audio.transcribe': ['groq', 'gemini', 'local'],
-  'captions.punctuate': ['groq', 'openrouter', 'gemini', 'ollama', 'lmstudio', 'local'],
-  assistant: ['gemini', 'agnes', 'openrouter', 'groq', 'ollama', 'lmstudio', 'local'],
-  classify: ['cloudflare', 'groq', 'openrouter', 'ollama', 'lmstudio', 'local'],
+  'captions.punctuate': ['groq', 'openrouter', 'gemini', 'webllm', 'ollama', 'lmstudio', 'local'],
+  assistant: ['gemini', 'agnes', 'openrouter', 'groq', 'webllm', 'ollama', 'lmstudio', 'local'],
+  classify: ['cloudflare', 'groq', 'openrouter', 'webllm', 'ollama', 'lmstudio', 'local'],
   'connection.test': ['local'],
   'gemini.feature': ['gemini'],
 };
@@ -49,6 +49,8 @@ export function defaultConfig(): AiConfig {
     budget: 0,
     providers: {
       local: P(true, 'local'),
+      // off until the user chooses to download a model (hundreds of MB to a few GB)
+      webllm: P(false, 'local'),
       gemini: P(true, 'free-tier'),
       groq: P(true, 'free-tier'),
       openrouter: P(true, 'free-model'),

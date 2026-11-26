@@ -38,6 +38,7 @@ function commands(): Cmd[] {
     { id: 'd-scale', label: 'Ajouter une échelle de puissance (barres)', group: 'Ajouter', run: () => addDiagram('scale') },
     { id: 'd-orbit', label: 'Ajouter une scène 3D : orbite de cases', group: 'Ajouter', run: () => addDiagram('orbit') },
     { id: 'd-cosmos', label: 'Ajouter une scène 3D : cosmos', group: 'Ajouter', run: () => addDiagram('cosmos') },
+    { id: 'd-map', label: 'Ajouter une carte animée (lieux, trajet)', group: 'Ajouter', run: () => addDiagram('map') },
     { id: 'd-tiers', label: 'Ajouter une scène 3D : paliers de puissance', group: 'Ajouter', run: () => addDiagram('tiers') },
     { id: 'fx-tb', label: 'Effet : texte derrière moi', group: 'Effets', run: () => addFx('textBehind'), when: hasFace },
     { id: 'fx-pb', label: 'Effet : case derrière moi', group: 'Effets', run: () => addFx('panelBehind'), when: hasFace },

@@ -11,19 +11,24 @@ import { sfxEvents } from './sfx';
 import { voiceIntervals, type MixInfo } from './audio';
 import { TRANSITION } from './effects';
 import { PROFILE, type ProfileId } from './direction';
-import { noiseReport } from './media';
+import { noiseReport, voiceReport } from './media';
+import { voiceOf } from './audio';
 
 function noiseRows(p: Project): Row[] {
-  const dn = p.mix?.denoise ?? 'auto';
+  const vp = voiceOf(p);
+  const dn = vp.denoise;
   const id = p.aroll?.mediaId ?? p.audio.find((c) => c.kind === 'voice')?.mediaId;
   if (!id) return [];
-  if (dn === 'off') return [{ label: 'Réduction du bruit', value: 'désactivée', level: 'ok' }];
-  const r = noiseReport(id, dn);
-  if (!r) return [{ label: 'Réduction du bruit', value: 'non mesurée', level: 'warn' }];
   const f1 = (v: number) => v.toFixed(1).replace('.', ',');
-  return [
+  const vr = voiceReport(id, vp);
+  const radio: Row[] = vr ? [{ label: 'Voix radio', value: `écart phrases fortes / faibles ${f1(vr.levelSpreadBefore)} → ${f1(vr.levelSpreadAfter)} dB · « s » −${f1(vr.sibilanceCutDb)} dB · grondement −${f1(vr.rumbleCutDb)} dB`, level: 'ok' }] : [];
+  if (dn === 'off') return [{ label: 'Réduction du bruit', value: 'désactivée', level: 'ok' }, ...radio];
+  const r = noiseReport(id, vp);
+  if (!r) return [{ label: 'Réduction du bruit', value: 'non mesurée', level: 'warn' }];
+    return [
     { label: 'Bruit de fond de la prise', value: `${f1(r.noiseDb)} dBFS (voix à ${f1(r.snr)} dB au-dessus)`, level: r.snr < 15 ? 'warn' : 'ok', hint: 'Sous 15 dB d’écart, le bruit s’entend : rapproche le micro ou coupe la ventilation.' },
     { label: 'Réduction du bruit', value: r.applied ? `−${r.reductionDb} dB visés, bruit ramené à ${f1(r.noiseAfterDb)} dBFS` : 'inutile : prise propre', level: 'ok' },
+    ...radio,
   ];
 }
 

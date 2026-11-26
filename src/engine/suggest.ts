@@ -22,7 +22,7 @@ export function panelShowing(p: Project, name: string, passage?: string): { page
   return hit ? { pageId: hit.pageId!, rect: hit.rect } : {};
 }
 
-const DK: Record<string, DiagramKind> = { chronologie: 'timeline', reseau: 'network', versus: 'versus', echelle: 'scale', citation: 'quote', carte: 'network' };
+const DK: Record<string, DiagramKind> = { chronologie: 'timeline', reseau: 'network', versus: 'versus', echelle: 'scale', citation: 'quote', carte: 'map' };
 
 export function suggestionElement(p: Project, sg: Suggestion, passageText = ''): { shot?: Shot; fx?: Partial<FxItem> } {
   const overlay = !!p.aroll;

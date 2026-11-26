@@ -68,6 +68,40 @@ function state(p: ProviderId): { cls: string; text: string } {
   return { cls: 'ok', text: 'prêt' };
 }
 
+function Machine() {
+  const [lines, setLines] = useState<string[] | null>(null);
+  useEffect(() => { void import('../engine/hardware').then(async (m) => setLines(m.advise(await m.detectHardware()).text)); }, []);
+  if (!lines) return null;
+  return <div className="machine"><b>Cet ordinateur</b><ul className="learned">{lines.map((l) => <li key={l}>{l}</li>)}</ul></div>;
+}
+
+function WebllmTry() {
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true); setMsg('Préparation…');
+    const m = await import('../ai/providers/webllm');
+    const off = m.onWebllmProgress((t, p) => setMsg(`${Math.round(p * 100)} % · ${t.slice(0, 80)}`));
+    try {
+      const hw = await import('../engine/hardware');
+      const s = getConfig().providers.webllm;
+      const model = s.model ?? hw.advise(await hw.detectHardware()).llm ?? 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
+      if (!s.model) setConfig((x) => ({ ...x, providers: { ...x.providers, webllm: { ...x.providers.webllm, model } } }));
+      const t0 = performance.now();
+      const r = await m.webllm.chat!(null, model, { kind: 'connection.test', prompt: 'Réponds en une phrase : qui est Thor chez Marvel ?', needs: ['text'], data: [] });
+      setMsg(`Prêt (${((performance.now() - t0) / 1000).toFixed(1)} s) : « ${r.text.trim().slice(0, 160)} »`);
+      setConfig((x) => ({ ...x, providers: { ...x.providers, webllm: { ...x.providers.webllm, enabled: true } } }));
+    } catch (e) { setMsg((e as Error).message); }
+    off(); setBusy(false);
+  };
+  return (
+    <div className="row-btns gap">
+      <button className="btn sm primary" disabled={busy} onClick={() => void go()}>{busy ? <Loader2 size={13} className="spin" /> : null} Télécharger le modèle et l’essayer</button>
+      {msg && <span className="muted">{msg}</span>}
+    </div>
+  );
+}
+
 function Dashboard() {
   const u = usageNow();
   const c = getConfig();
@@ -96,6 +130,7 @@ function Dashboard() {
           })}
         </tbody>
       </table>
+      <Machine />
       <p className="help">Quotas : Forge compte ses propres appels et respecte les limites renvoyées par chaque service (attente imposée après un « trop de requêtes »). Les quotas gratuits changent : vérifie-les dans la console de chaque fournisseur.</p>
     </div>
   );
@@ -148,6 +183,7 @@ function Providers({ onChange }: { onChange: () => void }) {
               <input className="input sm" value={s.baseUrl ?? ''} onChange={(e) => setP(p.id, { baseUrl: e.target.value.trim() })} placeholder="http://localhost:11434" aria-label="Adresse du serveur local" />
             )}
             {!p.direct && <p className="help">Nécessite Forge Bridge (onglet Coûts et confidentialité).</p>}
+            {p.id === 'webllm' && <WebllmTry />}
             <div className="row-btns gap">
               <button className="btn sm" onClick={() => void runTest(p.id)} disabled={t?.busy}>{t?.busy ? <Loader2 size={13} className="spin" /> : null} Tester la connexion</button>
               {t && !t.busy && <span className={t.ok ? 'ok-text' : 'err-text'}>{t.ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />} {t.msg}</span>}

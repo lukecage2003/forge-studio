@@ -218,10 +218,10 @@ export const patchFx = (id: string, patch: Partial<FxItem>, key?: string) =>
 export function addDiagram(kind: DiagramKind = 'timeline') {
   const p0 = getState().project;
   const panels = p0.shots.filter((s) => s.pageId).slice(0, kind === 'versus' ? 2 : kind === 'orbit' ? 6 : 4);
-  const items = panels.map((s, i) => ({ id: uid('di_'), label: kind === 'timeline' ? `Étape ${i + 1}` : `Personnage ${i + 1}`, sub: kind === 'scale' || kind === 'tiers' ? String((i + 1) * 10) : '', pageId: s.pageId!, rect: s.rect }));
-  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top', scale: 'Échelle de puissance', orbit: 'Les personnages', cosmos: 'Au-delà', tiers: 'Du plus faible au plus fort', quote: 'Citation' };
+  const items = kind === 'map' ? [1, 2, 3].map((i) => ({ id: uid('di_'), label: `Lieu ${i}`, sub: '' })) : panels.map((s, i) => ({ id: uid('di_'), label: kind === 'timeline' ? `Étape ${i + 1}` : `Personnage ${i + 1}`, sub: kind === 'scale' || kind === 'tiers' ? String((i + 1) * 10) : '', pageId: s.pageId!, rect: s.rect }));
+  const titles: Record<DiagramKind, string> = { timeline: 'La chronologie', network: 'Qui est lié à qui', versus: 'Le duel', ranking: 'Le top', scale: 'Échelle de puissance', orbit: 'Les personnages', cosmos: 'Au-delà', tiers: 'Du plus faible au plus fort', quote: 'Citation', map: 'La carte' };
   const shot = newShot(p0, {
-    pageId: null, duration: kind === 'orbit' || kind === 'cosmos' || kind === 'tiers' ? 8 : 6, transition: 'fade', transitionDur: 0.4, layout: 'full',
+    pageId: null, duration: kind === 'map' ? 10 : kind === 'orbit' || kind === 'cosmos' || kind === 'tiers' ? 8 : 6, transition: 'fade', transitionDur: 0.4, layout: 'full',
     start: p0.aroll ? getState().ui.playhead : undefined,
     caption: { ...p0.defaultCaption, text: '' },
     diagram: { kind, title: titles[kind], items, links: [] },

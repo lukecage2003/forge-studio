@@ -4,6 +4,7 @@ import { FORMATS } from '../types';
 import { createRenderer, loadFonts } from '../engine/render';
 import { useMediaVersion } from '../lib/hooks';
 import { ensure3D, has3D } from '../engine/scene3d';
+import { advise, detectHardware } from '../engine/hardware';
 import { DIAGRAM_3D } from '../types';
 import { setUI, useStore } from '../store';
 import { pause, seek, toggle } from '../engine/transport';
@@ -16,7 +17,9 @@ import { notifyMedia } from '../engine/media';
 import { ensureLayers } from '../engine/layers';
 import { shotAt } from '../engine/timeline';
 
-const PREVIEW_SCALE = 0.5;
+/** preview resolution: set from this computer's profile, lowered on the fly while playing if frames come too slowly */
+let baseScale = 0.5;
+void detectHardware().then((h) => { baseScale = advise(h).previewScale; });
 
 export function Preview() {
   const mv = useMediaVersion();
@@ -27,7 +30,10 @@ export function Preview() {
   const loop = useStore((s) => s.ui.loop);
   const screenRef = useRef<HTMLDivElement>(null);
   const { w, h } = FORMATS[project.format];
-  const W = Math.round(w * PREVIEW_SCALE), H = Math.round(h * PREVIEW_SCALE);
+  const [liveScale, setLiveScale] = useState(baseScale);
+  const scale = playing ? liveScale : Math.max(liveScale, baseScale);
+  const W = Math.round(w * scale), H = Math.round(h * scale);
+  const drawMs = useRef<number[]>([]);
   const renderer = useMemo(() => createRenderer(W, H), [W, H]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -39,7 +45,8 @@ export function Preview() {
   // the cleaned voice is prepared in the background so the preview sounds like the export
   const denoise = project.mix?.denoise ?? 'auto';
   const voiceIds = [project.aroll?.mediaId, ...project.audio.filter((a) => a.kind === 'voice').map((a) => a.mediaId)].filter(Boolean).join(',');
-  useEffect(() => { if (voiceIds && denoise !== 'off') void import('../engine/audio').then((m) => m.prepareVoices(project)); }, [voiceIds, denoise]); // eslint-disable-line react-hooks/exhaustive-deps
+  const voiceMode = `${denoise}:${project.mix?.voice ?? ''}:${project.mix?.voiceClean}`;
+  useEffect(() => { if (voiceIds) void import('../engine/audio').then((m) => m.prepareVoices(project)); }, [voiceIds, voiceMode]); // eslint-disable-line react-hooks/exhaustive-deps
   // three.js is loaded only when the project has a 3D scene
   const needs3D = project.shots.some((s) => s.diagram && DIAGRAM_3D.includes(s.diagram.kind));
   const [ready3D, setReady3D] = useState(has3D());
@@ -68,8 +75,17 @@ export function Preview() {
       if (segs.length) arollPlayer.seek(ar.mediaId, toSource(segs, t).src);
     }
     const face = ar ? () => arollPlayer.frame(ar.mediaId) : undefined;
-    if (ctx) renderer.draw(ctx, project, t, face);
-  }, [renderer, project, t, mv, fontsReady, playing, ready3D]);
+    if (!ctx) return;
+    const t0 = performance.now();
+    renderer.draw(ctx, project, t, face);
+    if (playing) {
+      // keep playback fluid: average draw time over 12 frames, step the resolution down (never below 35 %)
+      const a = drawMs.current; a.push(performance.now() - t0); if (a.length > 12) a.shift();
+      const avg = a.reduce((x, y) => x + y, 0) / a.length;
+      if (a.length >= 12 && avg > 45 && liveScale > 0.36) { drawMs.current = []; setLiveScale(Math.max(0.35, +(liveScale * 0.8).toFixed(2))); }
+    }
+  }, [renderer, project, t, mv, fontsReady, playing, ready3D]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!playing) { drawMs.current = []; setLiveScale(baseScale); } }, [playing]);
 
   // 2.5D layers of the shot on screen (and the next one) are prepared on the fly
   useEffect(() => {

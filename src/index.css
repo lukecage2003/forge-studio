@@ -748,3 +748,27 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .consent { width: min(520px, 94vw); }
 .consent-back { z-index: 120; }
 @media (max-width: 640px) { .route li { grid-template-columns: 1fr auto; } .route li small { grid-column: 1 / -1; } }
+.library-modal { width: min(900px, 96vw); }
+.library-modal tr.on td { background: var(--ember-soft); }
+.map-editor { display: flex; flex-direction: column; gap: 6px; }
+.map-canvas { width: 100%; height: auto; border-radius: var(--r-sm); border: 1px solid var(--border-2); cursor: crosshair; }
+
+/* live view */
+.live-modal { width: min(940px, 96vw); }
+.steps-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.steps-row .step { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
+.steps-row .step.on { border-color: var(--ember); color: var(--text); background: var(--ember-soft); }
+.steps-row .step.done { color: var(--text-2); }
+.live-page { display: block; margin: 0 auto; max-width: 100%; height: auto; max-height: 52vh; border-radius: var(--r-sm); }
+.live-wave { width: 100%; height: auto; border-radius: var(--r-sm); }
+.live-list { margin: 0; padding-left: 0; list-style: none; max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.live-list li { display: grid; grid-template-columns: 56px 1fr; gap: 8px; padding: 4px 6px; border-radius: var(--r-sm); background: var(--bg-2); animation: liveIn .25s ease-out; }
+@keyframes liveIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .live-list li { animation: none; } }
+.live-log { position: fixed; left: 260px; bottom: 340px; width: min(460px, 40vw); max-height: 34vh; z-index: 60; background: rgba(14,14,17,0.94); border: 1px solid var(--border-2); border-radius: var(--r); display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.live-log-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.live-log ol { margin: 0; padding: 4px; list-style: none; overflow: auto; font-size: 11.5px; }
+.live-log li { padding: 4px 6px; border-radius: var(--r-sm); color: var(--text-2); cursor: pointer; }
+.live-log li.on { background: var(--ember-soft); color: var(--text); }
+@media (max-width: 900px) { .live-log { left: 8px; right: 8px; width: auto; bottom: 8px; } }
+.machine { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; background: var(--bg-2); font-size: 12.5px; }

@@ -23,6 +23,12 @@ export interface UIState {
   scriptOpen?: boolean;
   aiOpen?: boolean;
   assistantOpen?: boolean;
+  libraryOpen?: boolean;
+  liveOpen?: boolean;
+  /** the decision journal docked on the preview */
+  liveLog?: boolean;
+  /** notes of the last auto edit, for the live view */
+  lastNotes?: string[];
   loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';

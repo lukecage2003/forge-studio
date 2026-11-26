@@ -450,7 +450,21 @@ function card(ctx: Ctx, project: Project, it: { label: string; sub?: string; pag
   ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const ly = imgH > 0 ? -h / 2 + imgH + U * 1.05 : -U * 0.5;
+  if (imgH <= 0 && it.label) {
+    // no panel: a monogram in an accent ring instead of an empty frame
+    const rr = Math.min(w * 0.3, h * 0.24);
+    const cy0 = -h / 2 + h * 0.36;
+    const g = ctx.createRadialGradient(0, cy0, rr * 0.2, 0, cy0, rr);
+    g.addColorStop(0, hexA(accent, 0.35)); g.addColorStop(1, hexA(accent, 0.08));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, cy0, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = accent; ctx.lineWidth = U * 0.12; ctx.stroke();
+    const mono = it.label.replace(/[^\p{L}\d ]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '•';
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 ${rr * (mono.length > 1 ? 0.8 : 1)}px ${FONT_STACK.grotesk}`;
+    ctx.fillText(mono, 0, cy0 + rr * 0.04);
+  }
+  const ly = imgH > 0 ? -h / 2 + imgH + U * 1.05 : it.label ? -h / 2 + h * 0.36 + Math.min(w * 0.3, h * 0.24) + U * 1.1 : -U * 0.5;
   ctx.fillStyle = '#fff';
   ctx.font = `700 ${U * 0.95}px ${FONT_STACK.grotesk}`;
   ctx.fillText(it.label.toUpperCase(), 0, ly, w - U * 0.6);
@@ -460,6 +474,120 @@ function card(ctx: Ctx, project: Project, it: { label: string; sub?: string; pag
     ctx.fillText(it.sub, 0, ly + U * 1.0, w - U * 0.6);
   }
   ctx.restore();
+}
+
+/** where each place sits (0..1 of the map); places not yet positioned are spread on a diagonal */
+export function mapPoints(d: Diagram): { x: number; y: number; placed: boolean }[] {
+  const n = d.items.length;
+  return d.items.map((it, i) => (it.x != null && it.y != null ? { x: it.x, y: it.y, placed: true } : { x: 0.2 + (0.6 * (i + 0.5)) / Math.max(1, n), y: 0.3 + (0.4 * (i + 0.5)) / Math.max(1, n), placed: false }));
+}
+
+/**
+ * Animated map. The camera opens on the whole map, travels to each place in
+ * turn (the route draws as it goes), the pin drops with a pulse and its label,
+ * then pulls back to show the whole journey.
+ */
+function drawMap(ctx: Ctx, project: Project, W: number, H: number, d: Diagram, local: number, dur: number, U: number, accent: string) {
+  const n = d.items.length;
+  const box = { x: 0, y: 0, w: W, h: H };
+  const m = d.map;
+  const area: Rect = m ? m.rect : { x: 0, y: 0, w: W, h: H };
+  const pts = mapPoints(d).map((p) => ({ ...p, px: area.x + p.x * area.w, py: area.y + p.y * area.h }));
+  const aspect = W / H;
+  const whole: View = baseView(area, aspect, 'fit', 1.06);
+  const zoomW = Math.max(area.w / 2.6, area.h * aspect / 2.6);
+  const near = (i: number): View => ({ cx: pts[i].px, cy: pts[i].py, vw: zoomW });
+  const intro = dur * 0.12, outro = dur * 0.14;
+  const slot = n ? (dur - intro - outro) / n : 1;
+  const cur = n ? Math.min(n - 1, Math.max(-1, Math.floor((local - intro) / slot))) : -1;
+  const ease = EASE.cinematic;
+  let view = whole;
+  let travel = 0; // 0..1 of the trip to place `cur`
+  if (local >= dur - outro && n) {
+    const e = ease(clamp((local - (dur - outro)) / (outro * 0.8), 0, 1));
+    const a = near(n - 1);
+    view = { cx: lerp(a.cx, whole.cx, e), cy: lerp(a.cy, whole.cy, e), vw: lerp(a.vw, whole.vw, e) };
+  } else if (cur >= 0) {
+    travel = clamp((local - intro - cur * slot) / (slot * 0.42), 0, 1);
+    const e = ease(travel);
+    const a = cur === 0 ? whole : near(cur - 1), b = near(cur);
+    // a long trip pulls back a little in the middle, like a camera on a crane
+    const lift = Math.sin(Math.PI * e) * Math.hypot(b.cx - a.cx, b.cy - a.cy) * 0.35;
+    view = { cx: lerp(a.cx, b.cx, e), cy: lerp(a.cy, b.cy, e), vw: lerp(a.vw, b.vw, e) + (cur === 0 ? 0 : lift) };
+  }
+  if (m) drawPanelIn(ctx, project, m.pageId, box, view, area, { bg: true });
+  else { ctx.drawImage(halftone(W, H, accent), 0, 0); }
+  const s = W / view.vw;
+  const toScreen = (x: number, y: number) => [W / 2 + (x - view.cx) * s, H / 2 + (y - view.cy) * s] as const;
+  // routes drawn so far
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = U * 0.22;
+  ctx.setLineDash([U * 0.7, U * 0.45]);
+  ctx.strokeStyle = accent;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = U * 0.4;
+  for (let i = 1; i < n; i++) {
+    const done = local >= dur - outro ? 1 : i < cur ? 1 : i === cur ? travel : 0;
+    if (done <= 0) continue;
+    const [x0, y0] = toScreen(pts[i - 1].px, pts[i - 1].py), [x1, y1] = toScreen(pts[i].px, pts[i].py);
+    const mx = (x0 + x1) / 2 - (y1 - y0) * 0.15, my = (y0 + y1) / 2 + (x1 - x0) * 0.15;
+    ctx.beginPath();
+    const steps = 40;
+    for (let k = 0; k <= steps * done; k++) {
+      const t = k / steps, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+      const x = a * x0 + b * mx + c * x1, y = a * y0 + b * my + c * y1;
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  // pins and labels
+  for (let i = 0; i < n; i++) {
+    const shown = local >= dur - outro || i < cur || (i === cur && travel >= 0.85);
+    if (!shown) continue;
+    const t0 = intro + i * slot + slot * 0.36;
+    const pop = local >= dur - outro && i > cur ? 1 : clamp((local - t0) / 0.35, 0, 1);
+    const [x, y] = toScreen(pts[i].px, pts[i].py);
+    const r = U * 0.55 * lerp(0.2, 1, easeOutBack(pop));
+    if (i === cur && local < dur - outro) {
+      const ph = ((local - t0) % 1.2) / 1.2;
+      ctx.strokeStyle = hexA(accent, 0.8 * (1 - ph));
+      ctx.lineWidth = U * 0.12;
+      ctx.beginPath(); ctx.arc(x, y, r + U * 1.6 * ph, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = U * 0.5;
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = U * 0.14; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.restore();
+    // label: full card on the current place, compact on the others
+    const it = d.items[i];
+    const big = i === cur && local < dur - outro;
+    const la = big ? clamp((local - t0 - 0.15) / 0.3, 0, 1) : 1;
+    if (la <= 0 || !it.label) continue;
+    ctx.save();
+    ctx.globalAlpha = la;
+    const fs = U * (big ? 1.25 : 0.75);
+    ctx.font = `700 ${fs}px ${FONT_STACK.grotesk}`;
+    const tw = ctx.measureText(it.label.toUpperCase()).width;
+    ctx.font = `500 ${fs * 0.62}px ${FONT_STACK.inter}`;
+    const sw = big && it.sub ? ctx.measureText(it.sub).width : 0;
+    const bw = Math.max(tw, sw) + fs * 1.4, bh = fs * (big && it.sub ? 2.35 : 1.55);
+    let bx = x + r + U * 0.5, by = y - bh / 2;
+    if (bx + bw > W - U) bx = x - r - U * 0.5 - bw;
+    by = clamp(by, U, H - bh - U);
+    ctx.fillStyle = 'rgba(12,12,16,0.86)';
+    ctx.beginPath(); ctx.roundRect(bx, by + (1 - la) * U, bw, bh, fs * 0.3); ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.fillRect(bx, by + (1 - la) * U, fs * 0.18, bh);
+    ctx.fillStyle = '#fff';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fs}px ${FONT_STACK.grotesk}`;
+    ctx.fillText(it.label.toUpperCase(), bx + fs * 0.6, by + (1 - la) * U + (big && it.sub ? fs * 0.78 : bh / 2));
+    if (big && it.sub) { ctx.font = `500 ${fs * 0.62}px ${FONT_STACK.inter}`; ctx.fillStyle = 'rgba(255,255,255,0.78)'; ctx.fillText(it.sub, bx + fs * 0.6, by + (1 - la) * U + fs * 1.72); }
+    ctx.restore();
+  }
 }
 
 const FALLBACK_2D: Partial<Record<Diagram['kind'], Diagram['kind']>> = { orbit: 'ranking', cosmos: 'ranking', tiers: 'scale' };
@@ -479,10 +607,12 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   const U = Math.min(W, H) * 0.035;
   const in3D = DIAGRAM_3D.includes(d.kind) && draw3D(ctx, project, d, W, H, local, dur);
   if (!in3D) {
-    ctx.drawImage(halftone(W, H, accent), 0, 0);
+    if (d.kind !== 'map') ctx.drawImage(halftone(W, H, accent), 0, 0);
     const fb = FALLBACK_2D[d.kind];
     if (fb) d = { ...d, kind: fb };
   }
+  // the map fills the frame: drawn first, the title goes on top of it
+  if (d.kind === 'map' && !in3D) drawMap(ctx, project, W, H, d, local, dur, U, accent);
   const z = 1 + 0.03 * easeInOutSine(clamp(local / dur, 0, 1));
   ctx.save();
   ctx.translate(W / 2, H / 2);
@@ -509,7 +639,9 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   const appear = (i: number) => clamp((local - 0.35 - (i * span) / n) / 0.45, 0, 1);
   const top = vertical ? H * 0.17 : H * 0.22, bottom = H * 0.93;
 
-  if (d.kind === 'quote') {
+  if (d.kind === 'map') {
+    /* drawn before the title (see above) */
+  } else if (d.kind === 'quote') {
     // a quotation: the words appear as they are read, then the source signs it
     const it = d.items[0];
     const words = (it.label || '').split(/\s+/).filter(Boolean);
@@ -698,14 +830,18 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     const cx = W / 2, cy = (top + bottom) / 2;
     const hub = n >= 4;
     const ring = hub ? d.items.slice(1) : d.items;
-    const R = Math.min(W * 0.36, (bottom - top) * 0.36);
+    // cards never overlap: the ring is as tall as the space allows, the cards as big as the ring allows
+    const avail = (bottom - top) / 2;
+    let cs = Math.min(W, H) * (n > 5 ? 0.2 : 0.25);
+    if (hub) cs = Math.min(cs, (avail * 0.55) / 1.15); // leaves a visible gap (and the link) between centre and ring
+    const Ry = hub ? Math.max(cs * 1.15, avail - (cs * 1.15) / 2) : Math.min(W * 0.36, (bottom - top) * 0.36);
+    const Rx = vertical ? Math.min(W * 0.36, Ry * 0.95) : Math.min(W * 0.4, Math.max(Ry * 1.6, cs * 2.2));
     const pos = d.items.map((_, i) => {
       if (hub && i === 0) return [cx, cy];
       const k = hub ? i - 1 : i, m = ring.length;
       const ang = -Math.PI / 2 + (k / m) * Math.PI * 2;
-      return [cx + Math.cos(ang) * R * (vertical ? 0.95 : 1.25), cy + Math.sin(ang) * R];
+      return [cx + Math.cos(ang) * Rx, cy + Math.sin(ang) * Ry];
     });
-    const cs = Math.min(W, H) * (n > 5 ? 0.2 : 0.25);
     const linkT = clamp((local - 0.35 - span) / 0.5, 0, 1);
     const links: Diagram['links'] = d.links.length ? d.links : hub ? ring.map((_, k) => ({ a: 0, b: k + 1 })) : [];
     ctx.save();

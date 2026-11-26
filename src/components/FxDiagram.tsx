@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { mapPoints } from '../engine/render';
 import { CATEGORIES, LOOK_EFFECTS, type Category } from '../engine/effects';
 import { ArrowDown, ArrowUp, Plus, Trash2, Type, Image as ImageIcon, Zap, Droplets, Grid3x3, X } from 'lucide-react';
 import type { Diagram, DiagramKind, FxItem, FxKind, Grade, Look, Rect, Shot , Certainty, LinkKind } from '../types';
@@ -160,12 +161,13 @@ export function LookSection() {
 
 /* ------------------------------------------------------------- diagrams */
 
-const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement'], ['scale', 'Échelle'], ['quote', 'Citation']];
+const KINDS: [DiagramKind, string][] = [['timeline', 'Frise'], ['network', 'Réseau'], ['versus', 'Duel'], ['ranking', 'Classement'], ['scale', 'Échelle'], ['quote', 'Citation'], ['map', 'Carte']];
 const KINDS_3D: [DiagramKind, string][] = [['orbit', 'Orbite 3D'], ['cosmos', 'Cosmos 3D'], ['tiers', 'Paliers 3D']];
 const HELP_KIND: Partial<Record<DiagramKind, string>> = {
   scale: 'Barres qui montent et chiffres qui défilent. Mets une valeur dans « Détail » (ex. 100, 1 000 000) ; sinon l’ordre de la liste fait le classement.',
   orbit: 'Tes cases en cercle dans l’espace : la caméra tourne puis passe de l’une à l’autre.',
   cosmos: 'Tes cases flottent à différentes profondeurs, la caméra avance à travers les étoiles.',
+  map: 'Carte animée : choisis l’image de la carte (importe-la comme une planche), puis clique un lieu de la liste et clique sur la carte pour placer son épingle. La caméra ira de lieu en lieu, dans l’ordre de la liste.',
   quote: 'La première ligne est la citation, « Détail » sa source (numéro, page). Les mots apparaissent au rythme de la lecture. Ajoute la case du personnage qui parle.',
   tiers: 'Échelle de puissance : des piliers montent du plus faible au plus fort, la caméra grimpe. Mets une valeur dans « Détail ».',
 };
@@ -191,6 +193,7 @@ export function DiagramPanel({ shot }: { shot: Shot }) {
       <div className="seg full">{KINDS_3D.map(([k, l]) => <button key={k} className={d.kind === k ? 'on' : ''} onClick={() => set({ kind: k })}>{l}</button>)}</div>
       {HELP_KIND[d.kind] && <p className="help">{HELP_KIND[d.kind]}</p>}
       <input className="input" placeholder="Titre du schéma" value={d.title} onChange={(e) => set({ title: e.target.value }, shot.id + 'dt')} />
+      {d.kind === 'map' && <MapEditor shot={shot} />}
       <div className="dia-items">
         {d.items.map((it, i) => (
           <div key={it.id} className="dia-item">
@@ -237,5 +240,61 @@ export function DiagramPanel({ shot }: { shot: Shot }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** map diagrams: pick the map image, then place each place with a click */
+function MapEditor({ shot }: { shot: Shot }) {
+  useMediaVersion();
+  const d = shot.diagram!;
+  const pages = useStore((st) => st.project.pages);
+  const [pick, setPick] = useState(false);
+  const [sel, setSel] = useState(0);
+  const set = (patch: Partial<Diagram>) => patchShot(shot.id, { diagram: { ...d, ...patch } });
+  const page = d.map && pages.find((p) => p.id === d.map!.pageId);
+  const a = page && getImage(page.mediaId);
+  const r = d.map?.rect;
+  const W = 300, H = r ? Math.round((W * r.h) / r.w) : 200;
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c || !a || !r) return;
+    const x = c.getContext('2d')!;
+    x.clearRect(0, 0, W, H);
+    x.drawImage(a.img, r.x, r.y, r.w, r.h, 0, 0, W, H);
+    mapPoints(d).forEach((p, i) => {
+      x.fillStyle = i === sel ? '#FFE500' : p.placed ? '#FF5A1F' : 'rgba(255,255,255,0.5)';
+      x.beginPath(); x.arc(p.x * W, p.y * H, 7, 0, Math.PI * 2); x.fill();
+      x.fillStyle = '#000'; x.font = 'bold 10px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(i + 1), p.x * W, p.y * H);
+    });
+  });
+  return (
+    <div className="map-editor">
+      {pick ? (
+        <div className="picker">
+          <div className="picker-head"><span>Image de la carte : une page entière</span><button className="icon-btn sm ghost" onClick={() => setPick(false)} aria-label="Fermer"><X size={14} /></button></div>
+          <div className="picker-grid">
+            {pages.map((pg) => (
+              <button key={pg.id} onClick={() => { set({ map: { pageId: pg.id, rect: { x: 0, y: 0, w: pg.width, h: pg.height } } }); setPick(false); }} title={pg.name}>
+                <Crop pageId={pg.id} rect={{ x: 0, y: 0, w: pg.width, h: pg.height }} h={58} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : <button className="btn sm ghost block" onClick={() => setPick(true)}>{d.map ? 'Changer l’image de la carte' : 'Choisir l’image de la carte'}</button>}
+      {a && r && (
+        <>
+          <div className="seg full wrap">{d.items.map((it, i) => <button key={it.id} className={i === sel ? 'on' : ''} onClick={() => setSel(i)}>{i + 1}. {it.label || 'Lieu'}</button>)}</div>
+          <canvas ref={ref} width={W} height={H} className="map-canvas" title="Clique pour placer le lieu sélectionné"
+            onClick={(e) => {
+              const b = e.currentTarget.getBoundingClientRect();
+              const x = (e.clientX - b.left) / b.width, y = (e.clientY - b.top) / b.height;
+              set({ items: d.items.map((it, i) => (i === sel ? { ...it, x: +x.toFixed(4), y: +y.toFixed(4) } : it)) });
+              setSel(Math.min(d.items.length - 1, sel + 1));
+            }} />
+          <p className="help">Lieu sélectionné en jaune ; les lieux non placés sont en gris (posés en diagonale tant que tu ne les places pas).</p>
+        </>
+      )}
+    </div>
   );
 }

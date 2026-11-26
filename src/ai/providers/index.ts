@@ -8,6 +8,7 @@ import { getConfig } from '../config';
 import { openaiCompat } from './openaiCompat';
 import { gemini } from './gemini';
 import { anthropic } from './anthropic';
+import { webllm } from './webllm';
 
 export interface ProviderInfo {
   id: ProviderId;
@@ -33,6 +34,8 @@ const local = (id: 'ollama' | 'lmstudio') => () => (getConfig().providers[id].ba
 
 export const PROVIDERS: ProviderInfo[] = [
   { id: 'local', label: 'Forge local', role: 'Toujours disponible, hors ligne : Whisper dans le navigateur, analyse du script par règles', site: '', direct: true, needsKey: false, free: 'Gratuit, sur cet ordinateur', privacy: 'Rien ne sort de l’ordinateur' },
+  { id: 'webllm', label: 'IA locale (carte graphique)', role: 'Script, relecture, assistant, ponctuation : hors ligne et privé, sur ta carte graphique', site: 'https://webllm.mlc.ai', direct: true, needsKey: false, hint: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+    free: 'Gratuit. Le modèle se télécharge une fois (de 0,4 à 5 Go selon sa taille), puis tout marche sans Internet.', privacy: 'Rien ne sort de l’ordinateur.' },
   { id: 'gemini', label: 'Google Gemini', role: 'Longs scripts, images des cases, recherche', site: 'https://ai.google.dev', keyUrl: 'https://aistudio.google.com/apikey', direct: true, needsKey: true, hint: 'gemini-2.5-flash',
     free: 'Free tier de l’API Gemini (limites par modèle, voir AI Studio). L’abonnement Gemini Pro ne donne pas de crédit API.', privacy: 'Sur le free tier, Google peut utiliser les contenus envoyés pour améliorer ses produits.' },
   { id: 'groq', label: 'Groq', role: 'Transcription Whisper rapide, texte court', site: 'https://console.groq.com', keyUrl: 'https://console.groq.com/keys', direct: true, needsKey: true, hint: 'llama-3.3-70b-versatile', transcribeHint: 'whisper-large-v3-turbo',
@@ -58,6 +61,7 @@ export const INFO = Object.fromEntries(PROVIDERS.map((p) => [p.id, p])) as Recor
 
 export const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini,
+  webllm,
   anthropic,
   groq: openaiCompat({ id: 'groq', label: 'Groq', base: () => 'https://api.groq.com/openai/v1' }),
   openrouter: openaiCompat({ id: 'openrouter', label: 'OpenRouter', base: () => 'https://openrouter.ai/api/v1', headers: () => ({ 'X-Title': 'Forge' }), publicModels: true }),

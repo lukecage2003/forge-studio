@@ -98,7 +98,7 @@ export function Sidebar() {
       <section className="side-section">
         <div className="side-head"><h2>Audio</h2></div>
         <div className="audio-grid">
-          <button className="tile" onClick={() => pickAudio('music')}><Music2 size={18} /><span>Musique</span></button>
+          <button className="tile" onClick={() => setUI({ libraryOpen: true })} title="Bibliothèque musicale : tes morceaux, mixés au bon niveau"><Music2 size={18} /><span>Musique</span></button>
           <button className="tile" onClick={() => pickAudio('voice')}><AudioLines size={18} /><span>Voix off</span></button>
           <button className="tile" onClick={() => pickAudio('sfx')}><Volume2 size={18} /><span>Bruitage</span></button>
           <Recorder />

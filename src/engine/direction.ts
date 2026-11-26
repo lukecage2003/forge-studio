@@ -9,7 +9,7 @@
  */
 import type { CaptionAnim, CaptionPreset, Layout, Look, Project, Shot, Transition } from '../types';
 import { TRANSITION } from './effects';
-import { beatOf, beatWeight, type Beat } from './narrative';
+import { BEAT_FR, beatOf, beatWeight, type Beat } from './narrative';
 import { rng, hashSeed } from './rng';
 
 export type ProfileId = 'premium' | 'cosmic' | 'action' | 'character' | 'science' | 'timeline' | 'power' | 'editorial';
@@ -206,6 +206,7 @@ export function direct(shots: Shot[], prof: Profile): { shots: Shot[]; report: D
     const dur = tr === 'cut' ? 0 : Math.min(s.duration * 0.45, Math.max(prof.dur[realLevel] || prof.dur[1], TRANSITION[tr]?.minDur ?? 0));
     s.transition = tr;
     s.transitionDur = +dur.toFixed(3);
+    s.why = `${BEAT_FR[beat]}${splash ? ' (case pleine page)' : ''}${newPage ? ' · nouvelle page' : ''} → ${realLevel === 2 ? 'effet fort' : realLevel === 1 ? 'accent' : 'coupe sobre'} « ${TRANSITION[tr]?.label ?? tr} »`;
     s.tp = undefined;
     // camera: impacts only where the story hits
     const hit = beat === 'action' || splash;
@@ -243,6 +244,7 @@ export function direct(shots: Shot[], prof: Profile): { shots: Shot[]; report: D
       s.pageId = null;
       s.layout = 'full';
       s.shake = 0;
+      s.why = `${BEAT_FR[beats[k]]} → scène 3D « ${prof.scene!.kind} » avec les cases voisines`;
       last = t;
       report.scenes++;
     });

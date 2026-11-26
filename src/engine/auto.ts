@@ -44,6 +44,8 @@ export interface AutoOptions {
   hook: string;
   redetect: boolean;
   beatSync: boolean;
+  /** take a track from the music library when the project has none (chosen by profile) */
+  music?: boolean;
   captionStyle: boolean;
   subtitles: boolean;
   /** panelId → sentence index (from Gemini), optional */
@@ -332,6 +334,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   const imult = intensityMult();
   const rand = rng(p.shots.length * 7919 + p.pages.length * 31 + o.style.length);
 
+  o.onProgress?.('Lecture des planches et découpe des cases…', 0.05);
   /* 1. panels — keep the user's own cuts unless asked to redo them */
   const titleCards = proj.shots.filter((s) => s.pageId == null && !s.id.startsWith('hook_'));
   const kept = new Map<string, Shot[]>();
@@ -748,6 +751,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
 
   proj = { ...proj, shots };
 
+  o.onProgress?.('Direction créative : transitions selon le récit…', 0.8);
   /* creative direction: transitions from the narration, under the effects budget */
   if (prof) {
     const d = direct(proj.shots, prof);
@@ -792,15 +796,31 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (added) notes.push(`Modèle « ${MODELS[o.model].label} » : ${added} visuel(s) tiré(s) du script (frise, relations, échelle, citation…), à vérifier.`);
   }
 
+  o.onProgress?.('Musique et mixage…', 0.9);
+  /* music from the library when the project has none */
+  let libMusic = false;
+  if (o.music !== false && !proj.audio.some((c) => c.kind === 'music') && total > 3) {
+    try {
+      const lib = await import('./library');
+      const t = lib.pickTrack(await lib.listTracks(), o.profile, total);
+      if (t) {
+        await ensureMedia(t.mediaId, 'audio');
+        proj = lib.withMusic(proj, t, total);
+        libMusic = true;
+        notes.push(`Musique « ${t.name} » (${lib.MOOD_FR[t.mood].toLowerCase()}${t.bpm ? `, ${t.bpm} BPM` : ''}) choisie dans ta bibliothèque et mixée sous la voix.`);
+      }
+    } catch { /* no library */ }
+  }
+
   /* mix: music fitted to the edit, ducked under the voice */
   const music = proj.audio.find((c) => c.kind === 'music');
   proj = {
     ...proj,
     ducking: hasFace || proj.audio.some((c) => c.kind === 'voice') ? true : proj.ducking,
     audio: proj.audio.map((c) =>
-      c.kind === 'music' ? { ...c, start: 0, duration: Math.min(c.sourceDuration - c.offset, total), fadeIn: 0.3, fadeOut: Math.min(2, total * 0.1) } : c),
+      c.kind === 'music' && !libMusic ? { ...c, start: 0, duration: Math.min(c.sourceDuration - c.offset, total), fadeIn: 0.3, fadeOut: Math.min(2, total * 0.1) } : c),
   };
-  if (music && music.sourceDuration - music.offset < total - 0.5) notes.push('La musique est plus courte que la vidéo.');
+  if (music && !libMusic && music.sourceDuration - music.offset < total - 0.5) notes.push('La musique est plus courte que la vidéo : passe par la bibliothèque musicale pour la faire boucler sur les mesures.');
   if (st.rtl && p.readingOrder !== 'rtl') notes.push('Sens de lecture passé en manga (droite → gauche).');
   // channel identity: intro sting, a chapter card before each issue, YouTube end screen
   const br = brandOf(proj);
@@ -835,6 +855,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     again.report.notes.unshift('Aucune case ne correspond clairement à la narration : alternance visage / cases classique à la place. Ajoute les bonnes planches ou corrige dans « À vérifier ».');
     return again;
   }
+  o.onProgress?.('Contrôle final…', 0.97);
   noteMontage();
   const checked = validateProject(proj);
   proj = checked.project;

@@ -32,6 +32,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const setProfile = (v: ProfileId | null) => { setProfileState(v); try { localStorage.setItem('forge.profile', v ?? 'none'); } catch { /* storage off */ } };
   const [model, setModel] = useState<ProductionModel>('face-comics');
   const pickModel = (m: ProductionModel) => { setModel(m); setProfile(MODELS[m].profile); };
+  const [live, setLive] = useState(true);
   const [length, setLength] = useState<AutoLength>(hasVoice ? 'voice' : 'auto');
   const [hook, setHook] = useState('');
   const [hooks, setHooks] = useState<string[]>([]);
@@ -90,8 +91,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       if (report.subtitles) bits.push(`${report.subtitles} sous-titres`);
       if (report.followedVoice) bits.push('suit la voix off');
       if (matches) bits.push('cases placées par Google');
-      toast('Montage prêt : ' + bits.join(' · '));
-      report.notes.forEach((n) => toast(n));
+      if (live) { setUI({ liveOpen: true, lastNotes: [bits.join(' · '), ...report.notes] }); }
+      else { toast('Montage prêt : ' + bits.join(' · ')); report.notes.forEach((n) => toast(n)); }
       onClose();
     } catch (e) {
       toast((e as Error).message, 'error');
@@ -215,6 +216,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
             <Toggle on={aiCut} set={setAiCut} disabled={!google} label={`Recouper avec Google les ${unsure} page${unsure > 1 ? 's' : ''} incertaine${unsure > 1 ? 's' : ''}`}
               hint={google ? 'Sinon elles sont animées bande par bande' : 'Ajoute une clé Google dans les réglages'} />
           )}
+          <Toggle on={live} set={setLive} label="Voir le montage en direct" hint="Rejoue chaque décision : découpe des cases, coupes du rush, plans et leurs raisons, puis lecture avec le journal" />
           <Toggle on={captionStyle} set={setCaptionStyle} label="Appliquer le style de textes du preset" />
           <Toggle on={redetect} set={setRedetect} label="Re-détecter toutes les cases" hint="Sinon, tes découpes manuelles sont conservées" />
         </div>

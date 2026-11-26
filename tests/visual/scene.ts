@@ -110,6 +110,19 @@ export async function renderScenes(): Promise<Record<string, string>> {
       for (const f of [0.15, 0.5, 0.9]) { rd.draw(ctx, proj, 8 * f); out[`${tag}-${k}-${Math.round(f * 100)}`] = c.toDataURL('image/png'); }
     }
   };
+  // map, quote and a network without images (monograms)
+  {
+    const extra = [
+      ['map', { kind: 'map', title: 'Le Wakanda', links: [], map: { pageId: 'pg0', rect: { x: 0, y: 0, w: 800, h: 1200 } }, items: [{ id: 'm1', label: 'Birnin Zana', sub: 'Capitale', x: 0.3, y: 0.25 }, { id: 'm2', label: 'Mont Bashenga', x: 0.7, y: 0.55 }, { id: 'm3', label: 'Frontière', sub: 'Ouest', x: 0.4, y: 0.85 }] }],
+      ['quote', { kind: 'quote', title: '', links: [], items: [{ id: 'q', label: 'Je suis le dieu du tonnerre et je ne plierai pas', sub: 'Thor #80', pageId: 'pg1', rect: rects[1] }] }],
+      ['network-noimg', { kind: 'network', title: 'Relations', items: [{ id: 'a', label: 'Thor' }, { id: 'b', label: 'Odin' }, { id: 'c', label: 'Loki' }, { id: 'd', label: 'Jane Foster' }], links: [{ a: 0, b: 1, label: 'fils', kind: 'famille', status: 'source' }, { a: 0, b: 2, label: 'rival', kind: 'ennemi', status: 'interpretation' }, { a: 0, b: 3, kind: 'allie', status: 'hypothese' }] }],
+    ] as const;
+    for (const [name, dg] of extra) {
+      const proj = { ...p, shots: [{ ...p.shots[0], id: 'x', pageId: null, duration: 10, transition: 'cut' as const, transitionDur: 0, diagram: dg as never }] };
+      const rd = createRenderer(W, H);
+      for (const f of [0.1, 0.45, 0.95]) { rd.draw(ctx, proj, 10 * f); out[`d2-${name}-${Math.round(f * 100)}`] = c.toDataURL('image/png'); }
+    }
+  }
   if (!S3.has3D()) shoot('fallback2d');
   await S3.ensure3D();
   shoot('scene');

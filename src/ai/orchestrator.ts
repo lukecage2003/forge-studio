@@ -15,9 +15,10 @@ import { getConfig, routeFor, setConfig } from './config';
 import { ADAPTERS, INFO } from './providers';
 import { isZero, modelsOf, pickModel, refreshModels } from './models';
 import { hasKey, keyOf, scrub } from './vault';
+import { lastHardware } from '../engine/hardware';
 import { cacheGet, cachePut, clearCool, coolDown, cooling, hashOf, logAttempt, monthCost, recordUse, slot } from './ledger';
 
-const LOCALS: ProviderId[] = ['local', 'ollama', 'lmstudio'];
+const LOCALS: ProviderId[] = ['local', 'webllm', 'ollama', 'lmstudio'];
 
 export type ConsentAsker = (p: ProviderId, data: string[]) => Promise<boolean>;
 let asker: ConsentAsker = async () => false;
@@ -37,6 +38,7 @@ export function refusal(p: ProviderId, task: AiTask, model: ModelInfo | null): s
   const cd = cooling(p);
   if (cd) return cd.why === 'auth' ? 'clé refusée' : `en pause (${cd.why})`;
   if (p === 'local') return null;
+  if (p === 'webllm' && lastHardware && !lastHardware.webgpu) return 'pas de vraie carte graphique accessible (WebGPU)';
   if (!model) return 'aucun modèle adapté à cette tâche';
   if (task.needs.includes('transcribe') && !model.caps.includes('transcribe')) return 'ce modèle ne transcrit pas';
   if (task.needs.includes('vision') && !model.caps.includes('vision')) return 'ce modèle ne lit pas les images';

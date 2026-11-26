@@ -110,6 +110,8 @@ export interface Shot {
   balloons?: Rect[];
   /** point of interest inside the panel (0..1 of rect): zooms aim here instead of the centre */
   focus?: { x: number; y: number };
+  /** why the auto editor made this shot like this (shown in the live view) */
+  why?: string;
   /** set by the auto editor; used by Forge Brain to learn from corrections */
   auto?: { duration: number; layout: Layout; motion: Motion; style: string };
 }
@@ -118,14 +120,16 @@ export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking'
   // manim-style chart, and 3D scenes built from comic panels (three.js)
   | 'scale' | 'orbit' | 'cosmos' | 'tiers'
   // a quotation from the comics, with its source
-  | 'quote';
+  | 'quote'
+  // an animated map: the camera travels from place to place, pins drop, the route draws
+  | 'map';
 export const DIAGRAM_3D: DiagramKind[] = ['orbit', 'cosmos', 'tiers'];
-export interface DiagramItem { id: string; label: string; sub?: string; pageId?: string; rect?: Rect }
+export interface DiagramItem { id: string; label: string; sub?: string; pageId?: string; rect?: Rect; /** position on the map (0..1 of the map image), for map diagrams */ x?: number; y?: number }
 /** how sure a relation is: shown differently so viewers can tell facts from opinions */
 export type Certainty = 'source' | 'interpretation' | 'hypothese';
 export type LinkKind = 'allie' | 'ennemi' | 'famille' | 'autre';
 export interface DiagramLink { a: number; b: number; label?: string; status?: Certainty; kind?: LinkKind }
-export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: DiagramLink[] }
+export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: DiagramLink[]; /** the map image (a page or a part of one), for map diagrams */ map?: { pageId: string; rect: Rect } }
 
 /** Effects on the face cam (need the person cut-out for the "behind me" ones). */
 export type FxKind = 'textBehind' | 'panelBehind' | 'callout' | 'bgBlur' | 'bgHalftone';
@@ -239,7 +243,7 @@ export interface Project {
   /** automatic sound design: whooshes on transitions, impacts on splashes */
   autoSfx?: { on: boolean; volume: number; /** whooshes allowed per minute (creative profile) */ perMin?: number };
   /** sound engine: voice clean-up and loudness target of the export (LUFS, null = untouched) */
-  mix?: { voiceClean: boolean; target: number | null; /** adaptive noise reduction of the voice (engine/denoise) */ denoise?: 'off' | 'auto' | 'light' | 'strong' };
+  mix?: { voiceClean: boolean; target: number | null; /** adaptive noise reduction of the voice (engine/denoise) */ denoise?: 'off' | 'auto' | 'light' | 'strong'; /** radio = broadcast chain computed on the take; natural = light live chain */ voice?: 'radio' | 'natural' | 'off' };
   /** creative direction profile used by the last auto edit */
   direction?: { profile: string };
 }

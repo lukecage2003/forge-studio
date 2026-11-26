@@ -3,7 +3,7 @@
  * can really do; a task says what it needs; the router only pairs them when
  * the capabilities, the cost mode and the privacy rules allow it.
  */
-export type ProviderId = 'local' | 'gemini' | 'groq' | 'openrouter' | 'agnes' | 'cloudflare' | 'nvidia' | 'ollama' | 'lmstudio' | 'openai' | 'anthropic';
+export type ProviderId = 'local' | 'webllm' | 'gemini' | 'groq' | 'openrouter' | 'agnes' | 'cloudflare' | 'nvidia' | 'ollama' | 'lmstudio' | 'openai' | 'anthropic';
 
 /** what a model can take or produce */
 export type Capability = 'text' | 'json' | 'vision' | 'transcribe' | 'long' | 'stream';

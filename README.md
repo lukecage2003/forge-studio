@@ -545,3 +545,59 @@ Une légende apparaît dès que les degrés sont mélangés. Un nouveau schéma 
   - fausses clés refusées par Groq, OpenRouter, Agnes et Gemini.
 
 **Pas encore testé faute de clé :** une vraie réponse de Groq, Gemini, OpenRouter, Agnes, Cloudflare ou NVIDIA.
+
+## Production : voix radio, musique, export, cartes, montage en direct, IA locale
+
+**Voix « radio »** (`src/engine/voicepro.ts`, choix Radio / Naturelle / Brute dans l'export). Elle est calculée une fois sur la prise, et l'aperçu entend la même voix que l'export. La chaîne :
+1. coupe-bas 80 Hz (24 dB/octave) ;
+2. égaliseur : −3 dB à 250 Hz, +3 dB à 3,5 kHz, +2 dB au-dessus de 12 kHz ;
+3. dé-esseur dynamique : la bande 5–9 kHz baisse seulement quand un « s » domine le corps de la voix ;
+4. niveleur qui rapproche phrases fortes et faibles ;
+5. compresseur 3:1 et limiteur à −1 dBFS.
+
+Le rapport qualité affiche l'écart fort / faible, les « s » et le grondement avant et après.
+
+**Bibliothèque musicale** (bouton « Musique ») :
+- **Mémoire :** tes morceaux sont gardés d'un projet à l'autre.
+- **Mesures à l'ajout :** volume réel (LUFS), tempo, énergie, ambiance (modifiable).
+- **Mixage :**
+  - niveau calé sur la mesure (lit musical à −21 LUFS, puis −11 dB sous la voix) ;
+  - boucle sur des mesures entières avec fondus croisés si le morceau est trop court ;
+  - fondu final calé sur la fin.
+- **Montage auto :** il choisit le morceau selon le profil créatif.
+
+**Export 1080p** :
+- **Débits :** Haute 16 Mb/s (24 à 60 i/s) ; Maximale 30 Mb/s (45 à 60 i/s), sans perte visible.
+- **Son :** AAC 256 kb/s.
+- **Encodeur :** celui de la carte graphique quand il existe.
+- **Contrôle :** le codec réellement utilisé est affiché, et le fichier relu vérifie la synchronisation.
+
+**Cartes animées** (schéma « Carte ») :
+1. tu choisis l'image de la carte, puis tu places chaque lieu d'un clic ;
+2. la caméra va de lieu en lieu, le trajet se dessine, les épingles tombent avec leur étiquette ;
+3. elle finit sur une vue d'ensemble.
+
+Les schémas sans image affichent des monogrammes, et la carte des relations ne fait plus se chevaucher ses cartes.
+
+**Montage en direct** (option du montage auto) :
+1. **Rejeu :**
+   - les cases découpées et numérotées sur chaque page ;
+   - les coupes du rush sur la forme d'onde ;
+   - les plans qui se posent avec leur raison (« révélation → effet fort Trame BD », « illustre "…" »).
+2. **Lecture :** le **journal du montage** suit la vidéo.
+
+**IA locale sur la carte graphique** (WebLLM, Apache 2.0, centre de contrôle IA) :
+- Qwen 2.5 de 0,5 à 7 milliards de paramètres, hors ligne après le téléchargement ;
+- taille choisie selon la mémoire vidéo ;
+- versions 32 bits pour les cartes sans calcul 16 bits ;
+- jamais utilisée sur une carte graphique émulée.
+
+**Adaptation au PC** (`src/engine/hardware.ts`) :
+- profil processeurs, mémoire et carte graphique ;
+- Whisper tiny, base ou small selon la machine ;
+- aperçu de 50 à 100 % de la définition, baissé automatiquement pendant la lecture s'il saccade.
+
+**Code** :
+- les fenêtres se chargent à la demande ;
+- les bibliothèques sont dans des fichiers séparés (fichier principal : de 1 225 à 148 Ko) ;
+- `CLAUDE.md` et 6 skills dans `.claude/skills` pour travailler avec Claude Code.
