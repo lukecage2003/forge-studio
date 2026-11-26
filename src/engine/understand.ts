@@ -163,8 +163,12 @@ export function panelDocs(p: Project, panels: Shot[]): Doc[] {
   });
 }
 
+/** comic lettering read by OCR mixes up D and P (« PANVERS », « IPEA »): both sides are compared with D → P */
+const ocrCanon = (n: string) => n.replace(/d/g, 'p');
+
 function tokens(text: string) {
-  return text.split(/[\s,.;:!?()«»"“”…—–/-]+/).map((raw) => ({ raw, n: norm(raw) })).filter((t) => t.n.length >= 3 && !STOP.has(t.n));
+  return text.split(/[\s,.;:!?()«»"“”…—–/-]+/).map((raw) => ({ raw, o: norm(raw) })).filter((t) => t.o.length >= 3 && !STOP.has(t.o))
+    .map((t) => ({ ...t, n: ocrCanon(t.o) }));
 }
 
 export interface Assignment { sentence: number; shotId: string | null; conf: number; alts: string[] }
@@ -197,7 +201,7 @@ export function matchLocal(sentences: Sentence[], docs: Doc[], sim?: Float32Arra
       for (const t of st) {
         if (!dtoks[j].has(t.n)) {
           // translated word, else cognate stem: weaker evidence than the same word
-          const tr = translations(t.n).filter((x) => dtoks[j].has(x));
+          const tr = translations(t.o).map(ocrCanon).filter((x) => dtoks[j].has(x));
           if (tr.length) { sc += Math.max(...tr.map(idf)) * 0.8; continue; }
           const sm = stem(t.n);
           if (sm && dstems[j].has(sm)) sc += sidf(sm) * 0.7;
@@ -218,7 +222,10 @@ export function matchLocal(sentences: Sentence[], docs: Doc[], sim?: Float32Arra
   // Viterbi over panels (states), sentences (time)
   const prior = (i: number, j: number) => -1.2 * Math.abs(j / Math.max(1, M - 1) - i / Math.max(1, N - 1));
   // moving forward is free, staying on the same panel costs (the story must advance), going back costs more
-  const trans = (a: number, b: number) => (b > a ? -0.08 * (b - a - 1) : b === a ? -1.2 : -2.5 - 0.1 * (a - b));
+  // a narration summarises: jumping ahead by about M/N panels per sentence is expected and free,
+  // longer jumps cost a little (log), staying costs, going back costs more
+  const step = Math.max(1, M / N);
+  const trans = (a: number, b: number) => (b > a ? -0.35 * Math.log1p(Math.max(0, b - a - 1 - step) / step) : b === a ? -1.2 : -2.5 - 0.1 * (a - b));
   let score = Float32Array.from({ length: M }, (_, j) => emit[0][j] + prior(0, j));
   const back: Int32Array[] = [];
   for (let i = 1; i < N; i++) {

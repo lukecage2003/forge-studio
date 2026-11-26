@@ -163,9 +163,12 @@ function cameraFor(g: CameraGrammar, s: Shot, k: number, prev: Motion | null, as
   const ratio = s.rect.w / s.rect.h / aspect;
   const wide = ratio > 1.35, tall = ratio < 1 / 1.35;
   const along: Motion = wide ? (rtl ? 'pan-left' : 'pan-right') : tall ? 'pan-down' : 'zoom-in';
-  const talky = (s.balloons?.length ?? 0) >= 2;
+  const b = s.balloons ?? [];
+  // worth a balloon-by-balloon read: many balloons, or balloons far apart in the panel
+  const spread = b.length >= 2 ? Math.max(...b.map((q) => q.x + q.w / 2)) - Math.min(...b.map((q) => q.x + q.w / 2)) + Math.max(...b.map((q) => q.y + q.h / 2)) - Math.min(...b.map((q) => q.y + q.h / 2)) : 0;
+  const readWorthy = b.length >= 3 || spread > (s.rect.w + s.rect.h) * 0.45;
   switch (g) {
-    case 'reading': return talky ? 'read' : along;
+    case 'reading': return readWorthy && prev !== 'read' ? 'read' : readWorthy ? 'tour' : wide || tall ? along : prev === 'zoom-in' ? 'zoom-out' : 'zoom-in';
     case 'tracking': return wide || tall ? along : k % 2 ? 'zoom-out' : 'zoom-in';
     case 'hold': return 'static';
     case 'pullback': return wide && k > 0 ? along : 'zoom-out';
@@ -215,6 +218,12 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
     return tr;
   });
 
+  // without words to read (no script, no narration), sequences are guesses: the director keeps the
+  // per-shot transitions it was given and only applies its camera grammar and diversity rules
+  const worded = out.filter((s) => text(s).trim().length > 12).length / n;
+  const bySequence = worded >= 0.3;
+  if (!bySequence) report.notes.push('Pas de texte à analyser : séquences non utilisées pour les transitions (seules la diversité et la caméra sont gérées).');
+
   /* 3. camera grammar and entry transitions, sequence by sequence */
   let prevMotion: Motion | null = null;
   const window: Transition[] = []; // last visible transitions, newest last
@@ -235,7 +244,7 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
         s.auto = { ...s.auto!, motion: m };
       }
       let decided = '';
-      if (opt.transitions && opt.sequences && s.auto && i > 0 && s.transition !== 'glide') {
+      if (opt.transitions && opt.sequences && bySequence && s.auto && i > 0 && s.transition !== 'glide') {
         const was = s.transition;
         const level = visible(was) ? (TRANSITION[was]?.category === 'action' || TRANSITION[was]?.category === 'cosmic' ? 2 : 1) : 0;
         if (k === 0) {
@@ -295,8 +304,9 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
     for (let i = 2; i < n; i++) {
       const s = out[i];
       if (!ours(s) || !s.pageId || s.diagram) continue;
-      if (s.motion === out[i - 1].motion && s.motion === out[i - 2].motion && s.motion !== 'read' && s.motion !== 'tour') {
-        const alt: Motion = s.motion === 'zoom-in' ? 'zoom-out' : s.motion === 'zoom-out' ? 'zoom-in' : s.motion.startsWith('pan') ? 'static' : 'zoom-in';
+      if (s.motion === out[i - 1].motion && s.motion === out[i - 2].motion && s.motion !== 'tour') {
+        // reading balloons a third time in a row: explore the panel instead (it still visits the balloons)
+        const alt: Motion = s.motion === 'read' ? 'tour' : s.motion === 'zoom-in' ? 'zoom-out' : s.motion === 'zoom-out' ? 'zoom-in' : s.motion.startsWith('pan') ? 'static' : 'zoom-in';
         s.motion = alt; s.auto = { ...s.auto!, motion: alt }; report.changedMotions++;
         s.why = `${s.why ?? ''} · troisième mouvement identique évité`;
       }
