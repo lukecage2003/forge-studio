@@ -12,8 +12,9 @@ import WarpSpeed from './WarpSpeed.glsl?raw';
 import GravityLens from './GravityLens.glsl?raw';
 import GlitchDisplace from './GlitchDisplace.glsl?raw';
 import DirectionalWipe from './DirectionalWipe.glsl?raw';
+import Sharpen from './Sharpen.glsl?raw';
 
-const SOURCES: Record<string, string> = { CrossZoom, DirectionalWarp, DefocusBlur, Halftone, InkBleed, WarpSpeed, GravityLens, GlitchDisplace, DirectionalWipe };
+const SOURCES: Record<string, string> = { CrossZoom, DirectionalWarp, DefocusBlur, Halftone, InkBleed, WarpSpeed, GravityLens, GlitchDisplace, DirectionalWipe, Sharpen };
 
 import { parseUniforms, type Uniform } from './parse';
 
@@ -92,6 +93,19 @@ function program(name: string): Prog | null {
 }
 
 export const glSupported = () => !!context();
+
+/** sharpen a finished frame in place (contrast-adaptive); false without WebGL */
+export function sharpenFrame(ctx: CanvasRenderingContext2D, amount: number, radius = 1): boolean {
+  const src = ctx.canvas as unknown as HTMLCanvasElement;
+  if (amount <= 0 || !src.width) return false;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'copy';
+  const ok = drawGlTransition(ctx, 'Sharpen', src, src, 0, { amount, texW: src.width, texH: src.height, radius });
+  ctx.restore();
+  return ok;
+}
 
 /**
  * Draw transition `name` between frames A and B at `progress` into ctx.

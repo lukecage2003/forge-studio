@@ -10,7 +10,7 @@ import { hashSeed, rng } from './rng';
 import { TRANSITION, tp } from './effects';
 import { EASE, spring } from './motion';
 import { arrowHead, balloon, benDay, boil, bowPath, brush, caption, feltCircle, inkBox, INK, LETTER, PAPER_CARD, CAPTION, paperBackground, panelFrame, paperTexture, TITLE } from './ink';
-import { drawGlTransition } from './gl';
+import { drawGlTransition, sharpenFrame } from './gl';
 import { draw3D, itemValues } from './scene3d';
 import { keyToken, keywordsOf } from './scriptIntel';
 
@@ -240,6 +240,9 @@ function drawBackground(ctx: Ctx, project: Project, box: Box, pageId: string | n
     pageBlur(ctx, project, box, pageId, region);
   }}
 
+/** biggest enlargement of a scan in the current frame (screen px per page px), for the sharpening radius */
+let lastMag = 0;
+
 /** Draw a panel of a page inside `box`, seen through `view`, clipped to `clip`. */
 function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view: View, clip: Rect, opts: { bg?: boolean; dimPage?: number; border?: number; layers?: { L: Layers; dx: number; dy: number; s: number }; balloons?: BalloonAnim } = {}) {
   const page = project.pages.find((p) => p.id === pageId);
@@ -249,6 +252,7 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   if (opts.bg !== false) drawBackground(ctx, project, box, pageId, clip);
   if (!asset) { ctx.restore(); return; }
   const s = box.w / view.vw;
+  lastMag = Math.max(lastMag, s);
   ctx.translate(box.x + box.w / 2 - view.cx * s, box.y + box.h / 2 - view.cy * s);
   ctx.scale(s, s);
   if (opts.dimPage) {
@@ -1704,6 +1708,10 @@ export function createRenderer(W: number, H: number): Renderer {
   }
 
   function overlays(ctx: Ctx, project: Project, t: number, total: number, st: State) {
+    // comic art is often an upscaled scan: restore the ink lines before text goes on top
+    const sh = project.look?.sharpen ?? 0.45;
+    if (sh > 0 && st.kind === 'shot' && st.ts.shot.pageId && !st.ts.shot.diagram && lastMag > 1.05) sharpenFrame(ctx, sh, clamp(lastMag * 0.7, 1, 3.5));
+    lastMag = 0;
     if (project.look?.chroma !== false && st.kind === 'shot' && st.ts.shot.shake > 0) {
       const local = t - st.ts.start;
       const amt = Math.exp(-local * 9) * Math.min(1, st.ts.shot.shake);

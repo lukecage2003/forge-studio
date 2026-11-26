@@ -93,8 +93,9 @@ export function tp(shot: Shot, key: string): number {
 }
 
 /** look and camera effects (project-wide), mapped to their Look setting */
-export interface LookDef { key: keyof Look; label: string; category: Category; desc: string; kind: 'amount' | 'toggle' }
+export interface LookDef { key: keyof Look; label: string; category: Category; desc: string; kind: 'amount' | 'toggle'; /** value when the project has none */ def?: number }
 export const LOOK_EFFECTS: LookDef[] = [
+  { key: 'sharpen', label: 'Netteté des traits', category: 'comic', desc: 'Raffermit l’encre des scans agrandis, sans halo (carte graphique).', kind: 'amount', def: 0.45 },
   { key: 'paper', label: 'Papier imprimé', category: 'comic', desc: 'Fibres et trame d’un comics papier.', kind: 'amount' },
   { key: 'balloonPop', label: 'Bulles animées', category: 'comic', desc: 'Les bulles apparaissent l’une après l’autre.', kind: 'toggle' },
   { key: 'parallax', label: 'Relief 2.5D', category: 'comic', desc: 'Les personnages se détachent du décor.', kind: 'toggle' },

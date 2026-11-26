@@ -137,7 +137,7 @@ export function LookSection() {
           <div key={c} className="fx-cat">
             <span className="fx-cat-title">{CATEGORIES[c]}</span>
             {items.map((e) => e.kind === 'amount' ? (
-              <Slider key={e.key} label={e.label} value={Number(look[e.key] ?? 0)} min={0} max={1} step={0.05}
+              <Slider key={e.key} label={e.label} value={Number(look[e.key] ?? e.def ?? 0)} min={0} max={1} step={0.05}
                 fmt={(v) => (v ? Math.round(v * 100) + ' %' : 'off')} onChange={(v) => set({ [e.key]: v } as Partial<Look>, 'look-' + e.key)} />
             ) : (
               <label key={e.key} className="toggle">

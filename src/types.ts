@@ -151,7 +151,7 @@ export interface FxItem {
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
-export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number; parallax?: boolean; balloonPop?: boolean }
+export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number; parallax?: boolean; balloonPop?: boolean; /** contrast-adaptive sharpening of comic frames, 0..1 (default 0.45) */ sharpen?: number }
 
 export type AudioKind = 'music' | 'voice' | 'sfx';
 
