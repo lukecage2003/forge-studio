@@ -128,7 +128,7 @@ export interface Shot {
   /** speech balloons inside the panel (page px), for the pop-in animation */
   balloons?: Rect[];
   /** camera path in page pixels (engine/camerapath): when set, it drives the camera */
-  path?: { t: number; cx: number; cy: number; vw: number; hold?: number }[];
+  path?: { t: number; cx: number; cy: number; vw: number; hold?: number; ease?: 'smooth' | 'linear' | 'in' | 'out' }[];
   /** filmed inside the whole page (overlapping or irregular panels): no cut-out, the neighbours stay */
   shared?: boolean;
   /** real outline of the panel (slanted gutters), page px: a non-destructive mask */

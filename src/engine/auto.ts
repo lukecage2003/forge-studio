@@ -211,58 +211,94 @@ export function scriptOnVoice(script: string, segs: Seg[], pauses: { t: number; 
   const total = spans.reduce((a, [s, e]) => a + e - s, 0);
   if (!total) return [];
   // spoken time ↔ timeline time (removed silences are skipped)
-  const at = (f: number) => {
-    let left = f * total;
-    for (const [s, e] of spans) { if (left <= e - s) return s + left; left -= e - s; }
-    return spans.length ? spans[spans.length - 1][1] : 0;
-  };
   const spoken = (t: number) => {
     let acc = 0;
     for (const [s, e] of spans) { if (t <= s) return acc; if (t <= e) return acc + t - s; acc += e - s; }
     return acc;
   };
-  const sentences = (script.replace(/[«»"“”]/g, ' ').replace(/\s+/g, ' ').match(/[^.!?…]+[.!?…]*/g) ?? [])
-    .map((x) => x.trim().split(' ').filter((w) => /[\p{L}\d]/u.test(w))).filter((x) => x.length);
-  const weight = (ws: string[]) => ws.reduce((a, w) => a + w.length + 1, 0);
-  const W = sentences.reduce((a, ws) => a + weight(ws), 0);
-  // where the voice breathes, on the timeline: inner pauses, plus the joins of removed silences
-  const cand: { t: number; d: number }[] = [];
+  // the script, word by word, with the punctuation that follows each word
+  const toks = script.replace(/[«»"“”]/g, ' ').replace(/\s+/g, ' ').split(' ').filter((w) => /[\p{L}\d]/u.test(w));
+  if (!toks.length) return [];
+  const weight = toks.map((w) => w.replace(/[^\p{L}\d]/gu, '').length + 1);
+  const W = weight.reduce((a, b) => a + b, 0);
+  const cum: number[] = [];
+  weight.reduce((a, w, i) => (cum[i] = a + w), 0);
+  // where the voice breathes, in spoken time: inner pauses, plus the joins of removed silences
+  const cand: { s: number; d: number }[] = [];
+  // micro-breaths (< 0.35 s) happen inside phrases: they would only add noise
   for (const p of pauses) {
+    if (p.d < 0.35) continue;
     const g = segs.find((x) => p.t >= x.s && p.t <= x.e);
-    if (g) cand.push({ t: g.t + (p.t - g.s), d: p.d });
+    if (g) cand.push({ s: spoken(g.t + (p.t - g.s)), d: p.d });
   }
-  for (let i = 1; i < segs.length; i++) cand.push({ t: segs[i].t, d: Math.max(0.3, segs[i].s - segs[i - 1].e) });
-  cand.sort((x, y) => x.t - y.t);
-  // proportional guess for each sentence end, then snapped to the best nearby breath, in order
-  const bounds: number[] = [0];
-  let acc = 0, last = 0;
-  for (let k = 0; k < sentences.length - 1; k++) {
-    acc += weight(sentences[k]);
-    const guess = acc / W * total;
-    const win = Math.max(0.6, (weight(sentences[k]) / W) * total * 0.4);
-    let best = guess, score = Infinity;
-    for (const c of cand) {
-      const sp = spoken(c.t);
-      if (sp <= last + 0.3 || Math.abs(sp - guess) > win) continue;
-      // nearer is better, a longer breath is a more likely sentence end
-      const sc = Math.abs(sp - guess) / win - Math.min(1, c.d / 0.6) * 0.6;
-      if (sc < score) { score = sc; best = sp; }
+  for (let i = 1; i < segs.length; i++) cand.push({ s: spoken(segs[i].t) - 1e-3, d: Math.max(0.3, segs[i].s - segs[i - 1].e) });
+  cand.sort((x, y) => x.s - y.s);
+  // every punctuation mark expects a breath: a long one after . ! ? ; : a short one after a comma.
+  // A global, order-keeping alignment (dynamic programming) matches marks to real pauses:
+  // close to where the text's length puts them, the right kind of pause, never crossing.
+  const marks = toks.map((w, i) => ({ i, f: cum[i] / W, strong: /[.!?…;:]$/.test(w), weak: /[,—–-]$/.test(w) })).filter((m) => (m.strong || m.weak) && m.i < toks.length - 1);
+  const anchors: { f: number; s: number }[] = [{ f: 0, s: 0 }];
+  if (marks.length && cand.length) {
+    // nodes: a mark matched to a pause. A path of nodes is scored on
+    //  - the breath: long pause after . ! ? ; short after a comma,
+    //  - the speaking rate between two anchors: close to the average (people don't double their pace),
+    //  - the marks it leaves unmatched (a full stop without a breath is rare).
+    const K = marks.length, J = cand.length;
+    const breath = (k: number, j: number) => (marks[k].strong ? Math.min(1, cand[j].d / 0.45) * 1.4 - (cand[j].d < 0.2 ? 0.6 : 0) : Math.min(1, cand[j].d / 0.25) * 0.7 - (cand[j].d > 0.8 ? 0.4 : 0));
+    const skipCost = (k: number) => (marks[k].strong ? 0.8 : 0.12);
+    const pre = [0];
+    for (let k = 0; k < K; k++) pre.push(pre[k] + skipCost(k));
+    const skipped = (k0: number, k1: number) => pre[k1] - pre[k0 + 1]; // marks strictly between
+    const rate = (f0: number, s0: number, f1: number, s1: number) => {
+      if (s1 <= s0 || f1 <= f0) return -Infinity;
+      const r = Math.log((s1 - s0) / ((f1 - f0) * total));
+      return -2.2 * r * r * Math.min(1, (f1 - f0) * 12 + 0.3);
+    };
+    const dp = Array.from({ length: K }, () => new Float64Array(J).fill(-Infinity));
+    const from = Array.from({ length: K }, () => new Int32Array(J * 2).fill(-1));
+    for (let k = 0; k < K; k++) for (let j = 0; j < J; j++) {
+      const fk = marks[k].f, sj = cand[j].s;
+      // straight from the start
+      let best = rate(0, 0, fk, sj) - (pre[k] - pre[0]), bk = -1, bj = -1;
+      for (let k0 = 0; k0 < k; k0++) for (let j0 = 0; j0 < j; j0++) {
+        const prev = dp[k0][j0];
+        if (prev === -Infinity) continue;
+        const v = prev + rate(marks[k0].f, cand[j0].s, fk, sj) - skipped(k0, k);
+        if (v > best) { best = v; bk = k0; bj = j0; }
+      }
+      dp[k][j] = best + breath(k, j);
+      from[k][j * 2] = bk; from[k][j * 2 + 1] = bj;
     }
-    bounds.push(best);
-    last = best;
+    // close the path at the end of the voice
+    let endBest = rate(0, 0, 1, total) - pre[K], ek = -1, ej = -1;
+    for (let k = 0; k < K; k++) for (let j = 0; j < J; j++) {
+      if (dp[k][j] === -Infinity) continue;
+      const v = dp[k][j] + rate(marks[k].f, cand[j].s, 1, total) - (pre[K] - pre[k + 1]);
+      if (v > endBest) { endBest = v; ek = k; ej = j; }
+    }
+    const chain: { f: number; s: number }[] = [];
+    for (let k = ek, j = ej; k >= 0;) { chain.push({ f: marks[k].f, s: cand[j].s }); const nk = from[k][j * 2], nj = from[k][j * 2 + 1]; k = nk; j = nj; }
+    anchors.push(...chain.reverse());
   }
-  bounds.push(total);
-  const out: Word[] = [];
-  sentences.forEach((ws, k) => {
-    const s0 = bounds[k], s1 = bounds[k + 1], Wk = weight(ws);
-    let a2 = 0;
-    for (const w of ws) {
-      const s = at((s0 + (a2 / Wk) * (s1 - s0)) / total);
-      a2 += w.length + 1;
-      out.push({ w, s, e: Math.max(s + 0.05, at((s0 + (a2 / Wk) * (s1 - s0)) / total) - 0.02) });
-    }
+  anchors.push({ f: 1, s: total });
+  // words between anchors: spread by their length (piecewise linear)
+  const at = (f: number) => {
+    let i = 0;
+    while (i < anchors.length - 2 && anchors[i + 1].f <= f) i++;
+    const A = anchors[i], B = anchors[i + 1];
+    const s2 = A.s + ((f - A.f) / Math.max(1e-9, B.f - A.f)) * (B.s - A.s);
+    return toTL(s2);
+  };
+  const toTL = (sp: number) => {
+    let left = sp;
+    for (const [s0, e0] of spans) { if (left <= e0 - s0) return s0 + left; left -= e0 - s0; }
+    return spans.length ? spans[spans.length - 1][1] : 0;
+  };
+  return toks.map((w, i) => {
+    const f0 = (cum[i] - weight[i]) / W, f1 = cum[i] / W;
+    const s0 = i === 0 ? at(0) : at(f0 + 1e-9);
+    return { w, s: s0, e: Math.max(s0 + 0.05, at(f1) - 0.02) };
   });
-  return out;
 }
 
 /** Transcript words placed on the edited timeline (cut words removed). */
@@ -887,7 +923,11 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
         const balloons = det ? comicOrder(det.bubbles.filter((b) => b.s >= 0.35).map(({ x, y, w, h }) => ({ x, y, w, h })), readingOrder === 'rtl') : [];
         return [pg.id, { w: pg.width, h: pg.height, kind: pg.kind, panels, balloons, locked: pg.locked }];
       }));
-      const d = directSequences(timed.map((x) => x.s), aspect, dopt, readingOrder === 'rtl', pinfo);
+      // where the narration turns: sentence starts and breaths, on the edit's timeline
+      const nar = (await import('./narration')).narration(proj).sentences;
+      const breaths = proj.aroll?.pauses ? proj.aroll.pauses.map((q) => { const g = segmentsOf(proj.aroll!).find((x) => q.t >= x.s && q.t <= x.e); return g ? g.t + (q.t - g.s) : -1; }).filter((t) => t >= 0) : [];
+      const events = [...nar.map((se) => se.s), ...breaths].sort((a, b) => a - b);
+      const d = directSequences(timed.map((x) => x.s), aspect, dopt, readingOrder === 'rtl', pinfo, events);
       const byId = new Map(d.shots.map((s) => [s.id, s]));
       proj = { ...proj, shots: proj.shots.map((s) => byId.get(s.id) ?? s), direction: { ...(proj.direction ?? { profile: o.profile ?? 'premium' }), sequences: d.report.sequences } };
       const after = variety(timed.map((x) => byId.get(x.s.id)!));

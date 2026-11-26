@@ -84,3 +84,21 @@ describe('bandes horizontales en vidéo verticale', () => {
     expect(k[0].cx).toBeLessThan(k[1].cx);
   });
 });
+
+describe('caméra calée sur la narration', async () => {
+  const { syncPath } = await import('../src/engine/camerapath');
+  const stops = [{ t: 0, cx: 200, cy: 200, vw: 400, hold: 0.2 }, { t: 0.4, cx: 800, cy: 200, vw: 400, hold: 0.2 }, { t: 0.8, cx: 500, cy: 1200, vw: 400, hold: 0.1 }];
+  it('arrive sur chaque case quand la phrase qui en parle commence', () => {
+    const k = syncPath(stops, 9, [3.2, 6.5], 1800);
+    expect(k[1].t * 9).toBeCloseTo(3.2, 2);
+    expect(k[2].t * 9).toBeCloseTo(6.5, 2);
+    // the move happens before the arrival, during the gap
+    expect(evalPath(k, 3.0 / 9).cx).toBeGreaterThan(200);
+  });
+  it('plan trop court : moins de cases visitées, jamais une caméra qui court', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ t: i / 6, cx: 100 + i * 150, cy: 300 + (i % 2) * 800, vw: 350, hold: 0.05 + (i === 3 ? 0.2 : 0) }));
+    const k = syncPath(many, 4, [], 1800);
+    expect(k.length).toBeLessThan(6);
+    for (let i = 0; i < k.length - 1; i++) expect((k[i + 1].t - k[i].t) * 4).toBeGreaterThan(1.1);
+  });
+});

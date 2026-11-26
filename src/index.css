@@ -784,3 +784,8 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .art-panel details { margin-top: 6px; }
 .art-panel .field.row { display: grid; grid-template-columns: 1fr 1.3fr; align-items: center; gap: 6px; }
 .order-doubt { margin: 6px 10px 0; padding: 6px 10px; border-radius: 6px; background: rgba(255, 196, 0, 0.14); border: 1px solid rgba(255, 196, 0, 0.45); font-size: 12px; }
+.cam-editor { display: grid; gap: 8px; }
+.cam-key { border: 1px solid rgba(255,255,255,.1); border-radius: 6px; padding: 6px 8px; display: grid; gap: 4px; }
+.cam-key-head { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.cam-key-head .link { background: none; border: 0; color: inherit; opacity: .8; cursor: pointer; text-decoration: underline; font: inherit; }
+.cam-actions { display: flex; gap: 6px; flex-wrap: wrap; }

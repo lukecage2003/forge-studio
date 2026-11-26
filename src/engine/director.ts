@@ -5,6 +5,7 @@ import { TRANSITION } from './effects';
 import { hashSeed } from './rng';
 import { holdFor, important } from './hold';
 import { executeCamera, type PageInfo } from './comicCamera';
+import { syncPath } from './camerapath';
 
 /* ------------------------------------------------------------ motion matching */
 
@@ -182,7 +183,7 @@ function cameraFor(g: CameraGrammar, s: Shot, k: number, prev: Motion | null, as
  * Direct an edit. `shots` in timeline order (the auto editor's output).
  * Returns new shots (inputs untouched) and what was decided.
  */
-export function directSequences(shots: Shot[], aspect: number, opt: DirectorOptions = DIRECTOR_DEFAULT, rtl = false, pages?: Map<string, PageInfo>): { shots: Shot[]; report: DirectorReport } {
+export function directSequences(shots: Shot[], aspect: number, opt: DirectorOptions = DIRECTOR_DEFAULT, rtl = false, pages?: Map<string, PageInfo>, events: number[] = []): { shots: Shot[]; report: DirectorReport } {
   const out = shots.map((s) => ({ ...s }));
   // a locked page is the user's: nothing automatic touches its shots
   const lockedShot = (s: Shot) => !!(s.pageId && pages?.get(s.pageId)?.locked);
@@ -229,6 +230,7 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
   if (!bySequence) report.notes.push('Pas de texte à analyser : séquences non utilisées pour les transitions (seules la diversité et la caméra sont gérées).');
 
   /* 3. camera grammar and entry transitions, sequence by sequence */
+  const pageModes: Motion[] = [];
   let prevMotion: Motion | null = null;
   const window: Transition[] = []; // last visible transitions, newest last
   seqs.forEach((q, si) => {
@@ -248,10 +250,20 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
         s.auto = { ...s.auto!, motion: m };
         // the director said what; the comic camera engine decides how, from the page's geometry
         const pinfo = s.pageId ? pages?.get(s.pageId) : undefined;
-        const ex = pinfo && executeCamera(s, pinfo, tr.camera, aspect, prevMotion);
+        const ex = pinfo && executeCamera(s, pinfo, tr.camera, aspect, prevMotion, pageModes);
         if (ex) {
-          s.motion = ex.motion; s.path = ex.path; s.shared = ex.shared; s.auto = { ...s.auto!, motion: ex.motion };
-          s.why = `${s.why ? s.why + ' · ' : ''}${ex.why}`;
+          // the camera goes where the voice goes: arrivals on sentence starts and breaths of this shot
+          const local = events.map((e) => e - starts[i]).filter((e) => e > 0 && e < s.duration);
+          const path = ex.path && syncPath(ex.path, s.duration, local, Math.hypot(pinfo.w, pinfo.h));
+          s.motion = ex.motion; s.path = path; s.shared = ex.shared; s.auto = { ...s.auto!, motion: ex.motion };
+          if (ex.path) pageModes.push(ex.motion);
+          s.why = `${s.why ? s.why + ' · ' : ''}${ex.why}${path && local.length ? ' · calée sur la voix' : ''}${path && ex.path && path.length < ex.path.length ? ` (${ex.path.length - path.length} arrêt(s) retiré(s) pour ne pas courir)` : ''}`;
+        }
+        // an action that runs across neighbouring panels of the same page: the camera follows it
+        const pv = i > 0 ? out[i - 1] : null;
+        if (q.type === 'confrontation' && pv?.pageId && pv.pageId === s.pageId && s.layout === 'full' && pv.layout === 'full' && opt.transitions && visible(s.transition) === false && s.transition !== 'glide') {
+          s.transition = 'glide'; s.transitionDur = +Math.min(0.5, s.duration * 0.3).toFixed(3);
+          s.why = `${s.why ?? ''} · l’action continue sur la case voisine → la caméra glisse`;
         }
       }
       let decided = '';

@@ -13,6 +13,7 @@ import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engin
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { ArtPanel } from './ArtPanel';
 import { FavoritesPanel } from './FavoritesPanel';
+import { CameraPathEditor } from './CameraPathEditor';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, setCameraMode, swapPanel } from '../actions';
 import { PanelPicker } from './FxDiagram';
 import { transcribeClip } from '../rush';
@@ -199,6 +200,7 @@ function ShotPanel({ shot }: { shot: Shot }) {
         </Section>
       )}
 
+      {shot.pageId && <Section title="Trajectoire de caméra"><CameraPathEditor shot={shot} /></Section>}
       <Section title="Mes favoris"><FavoritesPanel kinds={['transition', 'animation', 'camera']} shotId={shot.id} /></Section>
 
       {(index > 0 || overlay) && (

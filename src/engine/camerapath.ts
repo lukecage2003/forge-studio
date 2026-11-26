@@ -12,7 +12,9 @@ import type { Rect } from '../types';
  * editable, savable as presets, and rendered by `cameraAt` like any move.
  */
 
-export interface CamKey { t: number; cx: number; cy: number; vw: number; /** seconds of stillness on this key (fraction of the shot, set by the builder) */ hold?: number }
+export type Ease = 'smooth' | 'linear' | 'in' | 'out';
+export interface CamKey { t: number; cx: number; cy: number; vw: number; /** stillness on this key (fraction of the shot) */ hold?: number; /** how the move that LEAVES this key accelerates */ ease?: Ease }
+const EASES: Record<Ease, (x: number) => number> = { smooth: (x) => x * x * (3 - 2 * x), linear: (x) => x, in: (x) => x * x, out: (x) => 1 - (1 - x) * (1 - x) };
 export interface View { cx: number; cy: number; vw: number }
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -36,7 +38,7 @@ export function evalPath(keys: CamKey[], p: number): View {
   const a = keys[i], b = keys[i + 1];
   const start = Math.min(b.t, a.t + (a.hold ?? 0));
   if (q <= start) return { cx: a.cx, cy: a.cy, vw: a.vw };
-  const u = smooth(clamp((q - start) / Math.max(1e-6, b.t - start), 0, 1));
+  const u = (EASES[a.ease ?? 'smooth'] ?? smooth)(clamp((q - start) / Math.max(1e-6, b.t - start), 0, 1));
   const k0 = keys[Math.max(0, i - 1)], k3 = keys[Math.min(keys.length - 1, i + 2)];
   // zoom interpolated in log space: a zoom of ×2 feels the same speed as ×0.5
   const lw = (k: CamKey) => Math.log(k.vw);
@@ -99,4 +101,47 @@ export function jerk(keys: CamKey[], duration: number, diag: number, fps = 30) {
     worst = Math.max(worst, Math.abs(v1 - v0) * fps * fps / diag);
   }
   return worst;
+}
+
+/**
+ * NARRATIVE SYNC — retime a path on the voice.
+ * `events` are moments (seconds from the shot start) where the narration
+ * turns: sentence starts and breaths. The camera arrives on each stop as one
+ * of them happens (the viewer looks where the voice goes), moves during the
+ * gap before it, and holds long enough to read. When the shot is too short
+ * for every stop at a readable pace, the least important stops are dropped:
+ * the camera never rushes.
+ */
+export function syncPath(keys: CamKey[], duration: number, events: number[], diag: number, o: { minHold?: number } = {}): CamKey[] {
+  if (keys.length < 2 || duration <= 0) return keys;
+  const minHold = o.minHold ?? 1.1;
+  const moveTime = (a: View, b: View) => Math.min(2.2, Math.max(0.45, 0.45 + (Math.hypot(a.cx - b.cx, a.cy - b.cy) / diag) * 2.4 + Math.abs(Math.log(b.vw / a.vw)) * 0.6));
+  let ks = keys.map((k) => ({ ...k }));
+  const need = () => ks.slice(1).reduce((a, k, i) => a + moveTime(ks[i], k), 0) + ks.length * minHold;
+  // too much to show for the time: drop the stop that matters least (shortest hold), never the ends
+  while (ks.length > 2 && need() > duration) {
+    let worst = 1;
+    for (let i = 2; i < ks.length - 1; i++) if ((ks[i].hold ?? 0) < (ks[worst].hold ?? 0)) worst = i;
+    ks.splice(worst, 1);
+  }
+  const n = ks.length;
+  const moves = ks.slice(1).map((k, i) => moveTime(ks[i], k));
+  const scale = Math.min(1, duration / Math.max(1e-6, need())); // only for 2 stops that still don't fit
+  const ev = [...new Set(events.filter((e) => e > 0.3 && e < duration - 0.3).map((e) => +e.toFixed(3)))].sort((a, b) => a - b);
+  // ideal arrival times: proportional to the original timing
+  const ideal = ks.map((k) => k.t * duration);
+  const arrive: number[] = [0];
+  for (let i = 1; i < n; i++) {
+    const earliest = arrive[i - 1] + minHold * scale + moves[i - 1] * scale;
+    const restNeed = moves.slice(i).reduce((a, m) => a + m, 0) * scale + (n - i) * minHold * scale;
+    const latest = Math.max(earliest, duration - restNeed);
+    // the narration turn closest to where this stop would have arrived
+    const cands = ev.filter((e) => e >= earliest && e <= latest);
+    const target = Math.min(latest, Math.max(earliest, ideal[i]));
+    arrive.push(cands.length ? cands.reduce((b, e) => (Math.abs(e - target) < Math.abs(b - target) ? e : b), cands[0]) : target);
+  }
+  return ks.map((k, i) => {
+    const nextStart = i < n - 1 ? arrive[i + 1] - moves[i] * scale : duration;
+    return { ...k, t: arrive[i] / duration, hold: Math.max(0, nextStart - arrive[i]) / duration };
+  });
 }
