@@ -34,6 +34,12 @@ export interface UIState {
   loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';
+  /** projects window (studio) */
+  projectsOpen?: boolean;
+  /** where projects are kept: a folder on disk, the browser, a folder waiting for access again, nothing yet */
+  where?: 'folder' | 'browser' | 'reconnect' | 'none';
+  /** name of the chosen folder */
+  whereName?: string;
 }
 
 export const defaultCaption = (): Omit<Caption, 'text'> => ({ preset: 'tiktok', anim: 'pop', y: 0.78, size: 1 });
@@ -124,14 +130,26 @@ let lastKey = '';
 let lastAt = 0;
 let saveTimer: number | undefined;
 
+const savedHooks = new Set<(p: Project, savedAt: string) => void>();
+/** the studio listens here: every journaled state is then written to the project workspace */
+export const onSaved = (fn: (p: Project, savedAt: string) => void) => (savedHooks.add(fn), () => savedHooks.delete(fn));
+
 function scheduleSave() {
   window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(async () => {
-    setUI({ saved: 'saving' });
-    await idb.put('projects', 'current', state.project);
-    setUI({ saved: 'saved' });
-  }, 600);
+  saveTimer = window.setTimeout(() => void journal(), 600);
 }
+/** crash-safe copy in IndexedDB (the journal), then the workspace hooks */
+async function journal() {
+  window.clearTimeout(saveTimer);
+  const p = state.project, savedAt = new Date().toISOString();
+  setUI({ saved: 'saving' });
+  await idb.put('projects', 'current', p);
+  await idb.put('projects', '__journal', { id: p.id, savedAt });
+  if (state.ui.saved === 'saving') setUI({ saved: 'saved' });
+  savedHooks.forEach((f) => f(p, savedAt));
+}
+/** write now (before switching project, before a version) */
+export const flushSave = () => journal();
 
 /** Mutate the project. `key` coalesces rapid edits (sliders, drags) into a single undo step. */
 export function update(fn: (p: Project) => Project, key?: string) {

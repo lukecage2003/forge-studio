@@ -70,6 +70,14 @@ export default function App() {
           if (p.aroll) void analysisOf(p.aroll).catch(() => {});
         }
       } catch { /* first run */ }
+      // project workspace (folder on disk or browser): crash recovery, then autosave and versions
+      try {
+        const { initStudio } = await import('./lib/studio');
+        const r = await initStudio();
+        // the toast area exists once the app is shown: tell it on the next frame
+        const msg = r.recovered ? 'Dernières modifications récupérées après une fermeture inattendue' : r.loadedFromDisk ? 'Version plus récente du projet ouverte depuis le dossier' : '';
+        if (msg) window.setTimeout(() => toast(msg), 300);
+      } catch (e) { console.warn('Espace de projets indisponible :', e); }
       setBooted(true);
     })();
   }, []);

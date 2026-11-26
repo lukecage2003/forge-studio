@@ -280,6 +280,15 @@ export interface Project {
   /** creative direction profile used by the last auto edit */
   /** display time ranges by kind of image (seconds), used by the review: simple, panel, page, reveal */
   holds?: { simple: readonly [number, number]; panel: readonly [number, number]; page: readonly [number, number]; reveal: readonly [number, number] };
+  /** production management (studio): where the video stands, its checklist, notes */
+  production?: {
+    status: 'idee' | 'script' | 'tournage' | 'montage' | 'finition' | 'publie';
+    tasks: { id: string; text: string; done: boolean; phase?: 'idee' | 'script' | 'tournage' | 'montage' | 'finition' | 'publie' }[];
+    notes?: string;
+    createdAt: string;
+    /** template the project was created from */
+    template?: string;
+  };
   direction?: { profile: string; /** editorial sequences chosen by the creative director (engine/director) */ sequences?: { type: string; treatment: string; label: string; from: number; to: number; start: number }[] };
 }
 

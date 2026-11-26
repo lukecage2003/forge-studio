@@ -87,6 +87,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       }
       setBusy('Montage en cours…');
       const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
+      // the state before the auto edit stays one click away in the project's versions
+      try { const { takeVersion } = await import('../lib/studio'); await takeVersion('Avant le montage automatique', true); } catch { /* no workspace: undo still works */ }
       update(() => project);
       { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
         if (doubt) toast(`${doubt} association(s) phrase → case à vérifier : ouvre la « Correction express » (inspecteur du projet), au clavier en quelques secondes.`); }
