@@ -25,6 +25,8 @@ export interface UIState {
   assistantOpen?: boolean;
   libraryOpen?: boolean;
   liveOpen?: boolean;
+  /** express review of doubtful sentence → panel placements */
+  reviewOpen?: boolean;
   /** the decision journal docked on the preview */
   liveLog?: boolean;
   /** notes of the last auto edit, for the live view */

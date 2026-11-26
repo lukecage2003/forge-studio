@@ -17,6 +17,7 @@ const AssistantModal = lazy(() => import('./components/AssistantModal').then((m)
 import { ConsentDialog } from './components/ConsentDialog';
 const LibraryModal = lazy(() => import('./components/LibraryModal').then((m) => ({ default: m.LibraryModal })));
 const LiveModal = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveModal })));
+const ReviewModal = lazy(() => import('./components/ReviewModal').then((m) => ({ default: m.ReviewModal })));
 const LiveLog = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveLog })));
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
@@ -44,6 +45,7 @@ export default function App() {
   const assistantOpen = useStore((s) => !!s.ui.assistantOpen);
   const libraryOpen = useStore((s) => !!s.ui.libraryOpen);
   const liveOpen = useStore((s) => !!s.ui.liveOpen);
+  const reviewOpen = useStore((s) => !!s.ui.reviewOpen);
   const liveLog = useStore((s) => !!s.ui.liveLog);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
@@ -78,7 +80,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen || ui.reviewOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -172,6 +174,7 @@ export default function App() {
       {assistantOpen && <ErrorBoundary area="fenêtre"><AssistantModal /></ErrorBoundary>}
       {libraryOpen && <ErrorBoundary area="fenêtre"><LibraryModal /></ErrorBoundary>}
       {liveOpen && <ErrorBoundary area="fenêtre"><LiveModal /></ErrorBoundary>}
+      {reviewOpen && <ErrorBoundary area="fenêtre"><ReviewModal /></ErrorBoundary>}
       {liveLog && !liveOpen && <ErrorBoundary area="journal"><LiveLog /></ErrorBoundary>}
       </Suspense>
       <ConsentDialog />

@@ -88,6 +88,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       setBusy('Montage en cours…');
       const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       update(() => project);
+      { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
+        if (doubt) toast(`${doubt} association(s) phrase → case à vérifier : ouvre la « Correction express » (inspecteur du projet), au clavier en quelques secondes.`); }
       setUI({ mode: 'preview', playhead: 0, selection: null });
       void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
       const bits = [`${report.shots} cases`, `${report.duration.toFixed(1)} s`];

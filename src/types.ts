@@ -124,7 +124,7 @@ export interface Shot {
   desc?: string;
   chars?: string[];
   /** placed by the story matcher: the sentence it illustrates, confidence, alternatives (shot ids) */
-  match?: { sentence: string; conf: number; alts: string[]; source: 'local' | 'google' };
+  match?: { sentence: string; conf: number; alts: string[]; source: 'local' | 'google'; /** other candidate panels, kept as page + frame (the panel shots themselves may not be in the edit) */ altPanels?: { pageId: string; rect: Rect; why: string }[] };
   /** speech balloons inside the panel (page px), for the pop-in animation */
   balloons?: Rect[];
   /** camera path in page pixels (engine/camerapath): when set, it drives the camera */

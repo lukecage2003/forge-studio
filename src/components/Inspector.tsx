@@ -462,7 +462,7 @@ function MatchSection({ shot }: { shot: Shot }) {
   const [pick, setPick] = useState(false);
   const all = useStore((s) => s.project.shots);
   const m = shot.match!;
-  const alts = m.alts.map((id) => all.find((x) => x.id === id)).filter((x): x is Shot => !!x && !!x.pageId);
+  const alts = (m.altPanels?.length ? m.altPanels.map((a, i) => ({ id: `alt${i}`, pageId: a.pageId, rect: a.rect } as Shot)) : m.alts.map((id) => all.find((x) => x.id === id))).filter((x): x is Shot => !!x && !!x.pageId);
   const level = m.conf >= 0.7 ? 'sûr' : m.conf >= 0.5 ? 'probable' : 'à vérifier';
   return (
     <Section title="Narration" aside={<span className={`conf c-${m.conf >= 0.7 ? 'hi' : m.conf >= 0.5 ? 'mid' : 'lo'}`}>{level} · {Math.round(m.conf * 100)} %</span>}>
@@ -502,6 +502,7 @@ function ReviewList() {
   if (!timed.length) return null;
   return (
     <Section title={`À vérifier · ${timed.length}`}>
+      <button className="btn sm block" onClick={() => setUI({ reviewOpen: true })} title="Une phrase à la fois, la case choisie et les autres candidates côte à côte, au clavier">Correction express ({timed.length})</button>
       <p className="help">Cases placées avec peu de certitude. Clique pour aller au plan, puis confirme ou choisis une autre case.</p>
       <div className="review-list">
         {timed.slice(0, 30).map((t) => (

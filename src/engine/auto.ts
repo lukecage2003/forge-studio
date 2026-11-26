@@ -591,7 +591,14 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
           ...shot, id: shot.id + (out.some((x) => x.id === shot.id) ? uid('_') : ''), start: +start.toFixed(3), duration: +per.toFixed(3),
           ...(keepOne && per > 3.6 && layout === 'full' ? { motion: 'tour' as const, why: `image importante (${hold.why}) gardée ${per.toFixed(1)} s et explorée en étapes` } : {}),
           transition: tr, transitionDur: Math.min(td, per * 0.45), nameTag,
-          match: { sentence: se.text, conf, alts: k === 0 ? a.alts : [], source: plan.engine },
+          match: {
+            sentence: se.text, conf, alts: k === 0 ? a.alts : [], source: plan.engine,
+            // what the user may want instead: the matcher's runners-up, then the panels just before / after in the story
+            altPanels: [
+              ...(k === 0 ? a.alts : []).map((aid) => byId.get(aid)).filter((x): x is Panel => !!x && !!x.shot.pageId).map((x) => ({ pageId: x.shot.pageId!, rect: x.shot.rect, why: 'autre candidate' })),
+              ...[-1, 1].map((d) => byId.get(order[order.indexOf(id) + d])).filter((x): x is Panel => !!x && !!x.shot.pageId).map((x) => ({ pageId: x.shot.pageId!, rect: x.shot.rect, why: 'case voisine dans l’histoire' })),
+            ].filter((x, i, arr) => arr.findIndex((y) => y.pageId === x.pageId && y.rect.x === x.rect.x && y.rect.y === x.rect.y) === i).slice(0, 5),
+          },
           auto: { duration: per, layout, motion: keepOne && per > 3.6 && layout === 'full' ? 'tour' : shot.motion, style: o.style },
         });
         prevPage = pn.shot.pageId;
