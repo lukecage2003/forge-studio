@@ -132,7 +132,7 @@ let saveTimer: number | undefined;
 
 const savedHooks = new Set<(p: Project, savedAt: string) => void>();
 /** the studio listens here: every journaled state is then written to the project workspace */
-export const onSaved = (fn: (p: Project, savedAt: string) => void) => (savedHooks.add(fn), () => savedHooks.delete(fn));
+export const onSaved = (fn: (p: Project, savedAt: string) => void) => { savedHooks.add(fn); return () => { savedHooks.delete(fn); }; };
 
 function scheduleSave() {
   window.clearTimeout(saveTimer);

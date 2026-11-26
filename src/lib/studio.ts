@@ -25,7 +25,7 @@ let dirtySinceSnap = false;
 const SNAP_EVERY = 10 * 60 * 1000;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((f) => f());
-export const onStudio = (f: () => void) => (listeners.add(f), () => listeners.delete(f));
+export const onStudio = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
 export const workspace = () => ws;
 
 function writeSoon(p: Project) {
