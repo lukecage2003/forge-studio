@@ -23,12 +23,13 @@ Comic video editor (TikTok, Shorts, YouTube) in the browser: React 19 + TypeScri
 - **Non-destructive.** Every change goes through `update()` in `src/store.ts`, which makes it undoable. Automatic proposals wait for the user's validation.
 - **Zero cost by default.** No paid AI call unless the user enabled it and set a budget (`src/ai/orchestrator.ts`, `refusal()`).
 - **Keys stay secret.** API keys live only in `src/ai/vault.ts` (encrypted) or Forge Bridge. Never log them, never put them in history or `.forge` files. Pass error text through `scrub()`.
+- **Design: no app-UI look in the video.** Diagrams default to the "Encre" style (`src/engine/ink.ts`): paper, ink with a hand wobble, hard offset shadows, yellow captions, Ben-Day dots. No blurred glows, rounded SaaS cards or gradients there.
 - **Existing features stay.** Never remove one. Extend by modules.
 
 ## Map
 | Folder | Contents |
 |---|---|
-| `src/engine/` | Pure engines: `render` (frame), `auto` (auto edit), `direction` (8 creative profiles + effect budget), `narrative` / `scriptIntel` (script understanding), `speech` (rough cut), `faces` (`cameraPath` = vertical reframing), `audio` / `loudness` / `denoise` / `voicepro` (sound), `library` (music), `export` (MP4 via mediabunny/WebCodecs), `otio` (DaVinci), `report` / `qc` (quality), `scene3d` (three.js), `gl/` (GPU transitions), `hardware` (PC profile) |
+| `src/engine/` | Pure engines: `render` (frame), `auto` (auto edit), `direction` (8 creative profiles + effect budget), `narrative` / `scriptIntel` (script understanding), `speech` (rough cut), `faces` (`cameraPath` = vertical reframing), `audio` / `loudness` / `denoise` / `voicepro` (sound), `library` (music), `export` (MP4 via mediabunny/WebCodecs), `otio` (DaVinci), `report` / `qc` (quality), `scene3d` (three.js), `gl/` (GPU transitions), `hardware` (PC profile), `panelAI` (local YOLO panel + balloon detector, model in `public/models`), `classify` (page kinds), `ink` ("Encre" comic-print look of diagrams and maps) |
 | `src/ai/` | Multi-AI orchestrator: `types`, `config`, `vault`, `ledger` (quotas, cost, cache, history), `providers/*`, `models`, `orchestrator`, `prompts`, `tasks` |
 | `src/components/` | UI, one modal per feature, lazy-loaded from `App.tsx` |
 | `bridge/` | Optional local Node helper (OS keychain, Cloudflare, NVIDIA, whisper.cpp) |

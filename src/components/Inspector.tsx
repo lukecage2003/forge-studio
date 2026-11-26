@@ -335,6 +335,13 @@ function ProjectPanel() {
           <input type="color" value={p.accent} onChange={(e) => set({ accent: e.target.value }, 'accent')} />
           <span>Couleur d’accent · {p.accent}</span>
         </label>
+        <label className="field">
+          <span>Style des schémas et cartes</span>
+          <select value={p.diagramStyle ?? 'encre'} onChange={(e) => set({ diagramStyle: e.target.value as 'encre' | 'neon' }, 'diagramStyle')}>
+            <option value="encre">Encre — BD imprimée (papier, trame, encarts)</option>
+            <option value="neon">Néon — cartes sombres (ancien style)</option>
+          </select>
+        </label>
         <label className="toggle">
           <input type="checkbox" checked={p.progressBar} onChange={(e) => set({ progressBar: e.target.checked })} />
           <span className="switch" />

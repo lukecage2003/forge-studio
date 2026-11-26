@@ -237,6 +237,8 @@ export interface Project {
   watermark: string;
   progressBar: boolean;
   accent: string;
+  /** look of diagrams and maps: 'encre' = printed comic (ink, halftone, captions), 'neon' = the earlier dark cards */
+  diagramStyle?: 'encre' | 'neon';
   fx: FxItem[];
   look: Look;
   /** background research on the comics (Google search grounding) */

@@ -4,6 +4,7 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/space-grotesk';
 import '@fontsource/anton';
 import '@fontsource/bangers';
+import '@fontsource/comic-neue/700.css';
 import './index.css';
 import App from './App';
 import { agreement, cutPage, detectBlobs, detectPanels, setFlatMin } from './engine/detect';

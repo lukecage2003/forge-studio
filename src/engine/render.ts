@@ -9,6 +9,7 @@ import { getImage } from './media';
 import { hashSeed, rng } from './rng';
 import { TRANSITION, tp } from './effects';
 import { EASE } from './motion';
+import { arrowHead, balloon, benDay, boil, bowPath, brush, caption, feltCircle, inkBox, INK, LETTER, PAPER_CARD, CAPTION, paperBackground, panelFrame, paperTexture, TITLE } from './ink';
 import { drawGlTransition } from './gl';
 import { draw3D, itemValues } from './scene3d';
 import { keyToken, keywordsOf } from './scriptIntel';
@@ -40,6 +41,7 @@ export async function loadFonts() {
     document.fonts.load(`80px ${FONT_STACK.bangers}`),
     document.fonts.load(`700 80px ${FONT_STACK.inter}`),
     document.fonts.load(`700 80px ${FONT_STACK.grotesk}`),
+    document.fonts.load(`700 80px "Comic Neue"`),
   ]).catch(() => {});
 }
 
@@ -424,8 +426,55 @@ function drawFaceWithFx(ctx: Ctx, project: Project, W: number, H: number, face: 
 
 /* ------------------------------------------------------------ diagrams */
 
+/** "Encre" style is on while a diagram is drawn (set by drawDiagram) */
+let encre = false;
+let inkT = 0;
+
+/** a comic panel on paper: hard spot-colour shadow, wobbly ink, the name on a caption over its bottom edge */
+function cardInk(ctx: Ctx, project: Project, it: { label: string; sub?: string; pageId?: string; rect?: Rect }, cx: number, cy: number, w: number, h: number, a: number, accent: string, U: number) {
+  if (a <= 0) return;
+  const key = hashSeed(it.label || 'x');
+  const seed = key + boil(inkT) * 131;
+  const e = easeOutCubic(clamp(a, 0, 1));
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, a * 2);
+  ctx.translate(cx, cy + (1 - e) * U * 1.6);
+  const tilt = ((key % 7) - 3) * 0.007;
+  ctx.rotate(tilt * (1 + (1 - e) * 4));
+  const s = lerp(1.14, 1, e);
+  ctx.scale(s, s);
+  const capFs = Math.min(U * 1.05, w * 0.16);
+  const capH = capFs * 1.25 + (it.sub ? capFs * 0.7 : 0);
+  inkBox(ctx, -w / 2, -h / 2, w, h, { fill: PAPER_CARD, lw: U * 0.16, shadow: accent, shadowOff: U * 0.42, seed });
+  const m = U * 0.32;
+  const inner = { x: -w / 2 + m, y: -h / 2 + m, w: w - 2 * m, h: h - 2 * m - capH * 0.45 };
+  if (it.pageId && it.rect) {
+    drawPanelIn(ctx, project, it.pageId, inner, baseView(it.rect, inner.w / inner.h, 'fill'), it.rect, { bg: false });
+    ctx.strokeStyle = INK; ctx.lineWidth = U * 0.07; ctx.strokeRect(inner.x, inner.y, inner.w, inner.h);
+  } else if (it.label) {
+    // no panel: initials over a disc of spot-colour dots, printed not glowing
+    const rr = Math.min(inner.w, inner.h) * 0.38, cy0 = inner.y + inner.h * 0.48;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, cy0, rr, 0, Math.PI * 2); ctx.clip();
+    benDay(ctx, -rr, cy0 - rr, rr * 2, rr * 2, accent, rr * 0.22, 'left');
+    ctx.restore();
+    ctx.strokeStyle = INK; ctx.lineWidth = U * 0.1;
+    ctx.beginPath(); ctx.arc(0, cy0, rr, 0, Math.PI * 2); ctx.stroke();
+    const mono = it.label.replace(/[^\p{L}\d ]/gu, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '•';
+    ctx.font = `400 ${rr * (mono.length > 1 ? 0.95 : 1.2)}px ${TITLE}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = rr * 0.12; ctx.strokeStyle = INK; ctx.lineJoin = 'round';
+    ctx.strokeText(mono, 0, cy0 + rr * 0.06);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(mono, 0, cy0 + rr * 0.06);
+  }
+  if (it.label) caption(ctx, it.label, it.sub, 0, h / 2 - capH * 0.75, capFs, { align: 'center', tilt: -tilt * 2, seed: seed + 11, maxW: w * 1.08 });
+  ctx.restore();
+}
+
 function card(ctx: Ctx, project: Project, it: { label: string; sub?: string; pageId?: string; rect?: Rect }, cx: number, cy: number, w: number, h: number, a: number, accent: string, U: number) {
   if (a <= 0) return;
+  if (encre) return cardInk(ctx, project, it, cx, cy, w, h, a, accent, U);
   ctx.save();
   ctx.globalAlpha = Math.min(1, a * 1.5);
   ctx.translate(cx, cy + (1 - a) * U * 3);
@@ -516,9 +565,11 @@ function drawMap(ctx: Ctx, project: Project, W: number, H: number, d: Diagram, l
     view = { cx: lerp(a.cx, b.cx, e), cy: lerp(a.cy, b.cy, e), vw: lerp(a.vw, b.vw, e) + (cur === 0 ? 0 : lift) };
   }
   if (m) drawPanelIn(ctx, project, m.pageId, box, view, area, { bg: true });
+  else if (encre) paperBackground(ctx, W, H, accent, U, local);
   else { ctx.drawImage(halftone(W, H, accent), 0, 0); }
   const s = W / view.vw;
   const toScreen = (x: number, y: number) => [W / 2 + (x - view.cx) * s, H / 2 + (y - view.cy) * s] as const;
+  if (encre) { if (m) paperTexture(ctx, W, H, 0.4); drawMapInk(ctx, W, H, d, local, dur, U, accent, pts.map((p) => toScreen(p.px, p.py)), cur, travel, intro, slot, outro); return; }
   // routes drawn so far
   ctx.save();
   ctx.lineCap = 'round';
@@ -590,6 +641,74 @@ function drawMap(ctx: Ctx, project: Project, W: number, H: number, d: Diagram, l
   }
 }
 
+
+/** the map annotated like a comic: brush route with an arrow, felt-pen circles, numbered stamps, yellow captions */
+function drawMapInk(ctx: Ctx, W: number, H: number, d: Diagram, local: number, dur: number, U: number, accent: string, scr: (readonly [number, number])[], cur: number, travel: number, intro: number, slot: number, outro: number) {
+  const n = d.items.length, end = local >= dur - outro, b = boil(local) * 97;
+  const placed: { x: number; y: number; w: number; h: number }[] = [];
+  for (let i = 1; i < n; i++) {
+    const done = end ? 1 : i < cur ? 1 : i === cur ? travel : 0;
+    if (done <= 0) continue;
+    const [x0, y0] = scr[i - 1], [x1, y1] = scr[i];
+    const full = bowPath(x0, y0, x1, y1, i % 2 ? 0.16 : -0.16, 60);
+    // stop short of both places so the line never runs through the felt circles
+    const gap = U * 1.7;
+    const path = full.filter(([px, py]) => Math.hypot(px - x0, py - y0) > gap && Math.hypot(px - x1, py - y1) > gap);
+    if (path.length < 2) continue;
+    // paper halo first so the ink reads on dark and light map areas alike
+    brush(ctx, path, U * 0.62, 'rgba(251,246,234,0.9)', 5 + i, done, U * 0.95);
+    brush(ctx, path, U * 0.3, INK, 9 + i + b, done, U * 0.95);
+    arrowHead(ctx, path, done, U * 1.1, INK);
+  }
+  for (let i = 0; i < n; i++) {
+    const shown = end || i < cur || (i === cur && travel >= 0.85);
+    if (!shown) continue;
+    const t0 = intro + i * slot + slot * 0.36;
+    const pop = end && i > cur ? 1 : clamp((local - t0) / 0.5, 0, 1);
+    const [x, y] = scr[i];
+    const big = i === cur && !end;
+    // the exact spot: an ink dot
+    ctx.fillStyle = INK;
+    ctx.beginPath(); ctx.arc(x, y, U * 0.26, 0, Math.PI * 2); ctx.fill();
+    feltCircle(ctx, x, y, U * (big ? 1.5 : 1.05), accent, U * (big ? 0.34 : 0.26), pop, 31 * (i + 1) + b);
+    // numbered stamp
+    const sp = easeOutBack(clamp((local - t0 - 0.1) / 0.3, 0, 1));
+    if (end && i > cur) { /* final recap: all stamps */ }
+    const st = end ? 1 : sp;
+    if (st > 0) {
+      const r = U * 0.62 * st, bx = x - U * 1.35, by = y - U * 1.35;
+      ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(bx + U * 0.12, by + U * 0.12, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = CAPTION; ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineWidth = U * 0.1; ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = `400 ${r * 1.25}px ${TITLE}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), bx, by + r * 0.06);
+    }
+    const it = d.items[i];
+    const la = big ? clamp((local - t0 - 0.2) / 0.35, 0, 1) : 1;
+    if (la <= 0 || !it.label) continue;
+    // a place out of shot keeps its label out of shot too
+    if (x < -U || x > W + U || y < -U || y > H + U) continue;
+    const fs = U * (big ? 1.35 : 0.85);
+    ctx.font = `400 ${fs}px ${TITLE}`;
+    const tw = Math.min(W * 0.62, ctx.measureText(it.label.toUpperCase()).width + fs * 1.2);
+    const th = fs * 1.25 + (big && it.sub ? fs * 0.7 : 0);
+    const minY = (H > W ? H * 0.075 : H * 0.06) + U * 4.2, maxY = H - U * 4;
+    // try right, left, above, below the place; then slide down until no label is hit
+    const hits = (bx: number, by: number) => placed.some((q) => bx < q.x + q.w + U * 0.3 && q.x < bx + tw + U * 0.3 && by < q.y + q.h + U * 0.3 && q.y < by + th + U * 0.3)
+      || scr.some(([px, py]) => px > bx - U && px < bx + tw + U && py > by - U && py < by + th + U);
+    const cands: [number, number][] = [[x + U * 1.9, y - th / 2], [x - U * 1.9 - tw, y - th / 2], [x - tw / 2, y - U * 2 - th], [x - tw / 2, y + U * 2]];
+    let lx = cands[0][0], ly = cands[0][1];
+    search: for (let dy = 0; dy < H * 0.4; dy += th * 0.6) {
+      for (const [cx0, cy0] of cands) {
+        const bx = clamp(cx0, U * 1.2, W - tw - U * 1.2), by = clamp(cy0 + dy, minY, maxY);
+        if (!hits(bx, by)) { lx = bx; ly = by; break search; }
+      }
+    }
+    placed.push({ x: lx, y: ly, w: tw, h: th });
+    caption(ctx, it.label, big ? it.sub : undefined, lx, ly, fs, { tilt: i % 2 ? 0.025 : -0.025, seed: 51 * (i + 1) + b, a: big ? la : 1, maxW: W * 0.62 });
+  }
+}
+
 const FALLBACK_2D: Partial<Record<Diagram['kind'], Diagram['kind']>> = { orbit: 'ranking', cosmos: 'ranking', tiers: 'scale' };
 
 /** a figure that counts up while its bar grows (manim's DecimalNumber) */
@@ -606,8 +725,10 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   const vertical = H > W;
   const U = Math.min(W, H) * 0.035;
   const in3D = DIAGRAM_3D.includes(d.kind) && draw3D(ctx, project, d, W, H, local, dur);
+  encre = !in3D && (project.diagramStyle ?? 'encre') === 'encre';
+  inkT = local;
   if (!in3D) {
-    if (d.kind !== 'map') ctx.drawImage(halftone(W, H, accent), 0, 0);
+    if (d.kind !== 'map') { if (encre) paperBackground(ctx, W, H, accent, U, local); else ctx.drawImage(halftone(W, H, accent), 0, 0); }
     const fb = FALLBACK_2D[d.kind];
     if (fb) d = { ...d, kind: fb };
   }
@@ -619,7 +740,11 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
   ctx.scale(z, z);
   ctx.translate(-W / 2, -H / 2);
   // title
-  if (d.title) {
+  if (d.title && encre) {
+    const a = clamp(local / 0.35, 0, 1);
+    const ty = (vertical ? H * 0.075 : H * 0.06) + (d.kind === 'map' ? U * 0.6 : 0);
+    caption(ctx, d.title, undefined, W / 2, ty, U * (vertical ? 2.3 : 2.0), { align: 'center', tilt: -0.03, seed: 3 + boil(local) * 17, a: easeOutBack(a), maxW: W * 0.86 });
+  } else if (d.title) {
     const a = easeOutCubic(clamp(local / 0.4, 0, 1));
     ctx.save();
     ctx.globalAlpha = a;
@@ -634,7 +759,7 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     ctx.restore();
   }
   const n = d.items.length;
-  if (!n || in3D) { ctx.restore(); return; }
+  if (!n || in3D) { ctx.restore(); if (encre) panelFrame(ctx, W, H, U, 1 + boil(local)); encre = false; return; }
   const span = Math.max(0.5, dur * 0.7);
   const appear = (i: number) => clamp((local - 0.35 - (i * span) / n) / 0.45, 0, 1);
   const top = vertical ? H * 0.17 : H * 0.22, bottom = H * 0.93;
@@ -653,39 +778,61 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
       const ix = vertical ? (W - iw) / 2 : W * 0.07, iy = vertical ? bottom - ih - U : top + (bottom - top - ih) / 2;
       ctx.save(); ctx.globalAlpha = a;
       const pb: Box = { x: ix, y: iy + (1 - a) * U * 2, w: iw, h: ih };
+      if (encre) inkBox(ctx, pb.x, pb.y, pb.w, pb.h, { fill: PAPER_CARD, lw: U * 0.16, shadow: accent, shadowOff: U * 0.45, seed: 77 + boil(local) });
       drawPanelIn(ctx, project, it.pageId!, pb, baseView(it.rect!, pb.w / pb.h, 'fill'), it.rect!, { bg: false });
-      ctx.strokeStyle = accent; ctx.lineWidth = U * 0.18; ctx.strokeRect(pb.x, pb.y, pb.w, pb.h);
+      if (encre) { ctx.strokeStyle = INK; ctx.lineWidth = U * 0.16; ctx.strokeRect(pb.x, pb.y, pb.w, pb.h); }
+      else { ctx.strokeStyle = accent; ctx.lineWidth = U * 0.18; ctx.strokeRect(pb.x, pb.y, pb.w, pb.h); }
       ctx.restore();
     }
+    const qFont = (f: number) => (encre ? `700 ${f}px ${LETTER}` : `600 ${f}px ${FONT_STACK.grotesk}`);
+    if (encre) { box.x += U * 1.2; box.w -= U * 2.4; }
     let fs = U * (words.length > 18 ? 1.5 : words.length > 10 ? 1.9 : 2.4);
-    ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`;
+    ctx.font = qFont(fs);
     const lines: string[] = [];
     const wrap = () => { lines.length = 0; let cur = ''; for (const w of words) { const t2 = cur ? cur + ' ' + w : w; if (ctx.measureText(t2).width > box.w && cur) { lines.push(cur); cur = w; } else cur = t2; } if (cur) lines.push(cur); };
     wrap();
-    while (lines.length * fs * 1.25 > box.h * 0.8 && fs > U) { fs *= 0.9; ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`; wrap(); }
+    while (lines.length * fs * 1.25 > box.h * 0.8 && fs > U) { fs *= 0.9; ctx.font = qFont(fs); wrap(); }
     const per = Math.max(0.05, Math.min(0.22, (dur * 0.55) / Math.max(1, words.length)));
     const shown = Math.floor(clamp((local - 0.3) / per, 0, words.length));
-    ctx.fillStyle = accent;
-    ctx.font = `700 ${fs * 2.6}px ${FONT_STACK.grotesk}`;
+    const y0 = box.y + fs * 1.4;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.globalAlpha = clamp(local / 0.3, 0, 1);
-    ctx.fillText('«', box.x - fs * 0.4, box.y - fs * 0.9);
-    ctx.globalAlpha = 1;
-    ctx.font = `600 ${fs}px ${FONT_STACK.grotesk}`;
+    if (encre) {
+      // the quotation is said: a real speech balloon, its tail toward the speaker's panel
+      const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      const bw = widest + fs * 2.6, bh = lines.length * fs * 1.25 + fs * 2.2;
+      const bx = box.x + (box.w - widest) / 2 - fs * 1.3, by = y0 - fs * 1.1;
+      const pop = easeOutBack(clamp(local / 0.35, 0, 1));
+      const tx = hasImg ? (vertical ? W / 2 + W * 0.12 : W * 0.3) : bx + bw * 0.22;
+      const ty = hasImg ? (vertical ? by + bh + U * 3 : (top + bottom) / 2) : by + bh + fs * 2.2;
+      ctx.save();
+      ctx.translate(bx + bw / 2, by + bh / 2); ctx.scale(pop, pop); ctx.translate(-(bx + bw / 2), -(by + bh / 2));
+      balloon(ctx, bx, by, bw, bh, tx, ty, U * 0.18, 5 + boil(local));
+      ctx.restore();
+      box.x = bx + (bw - widest) / 2;
+    } else {
+      ctx.fillStyle = accent;
+      ctx.font = `700 ${fs * 2.6}px ${FONT_STACK.grotesk}`;
+      ctx.globalAlpha = clamp(local / 0.3, 0, 1);
+      ctx.fillText('«', box.x - fs * 0.4, box.y - fs * 0.9);
+      ctx.globalAlpha = 1;
+    }
+    ctx.font = qFont(fs);
     let k = 0;
-    const y0 = box.y + fs * 1.4;
     lines.forEach((ln, li) => {
       let x = box.x;
       for (const w of ln.split(' ')) {
         const a = clamp((local - 0.3 - k * per) / 0.25, 0, 1);
-        if (a > 0) { ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.fillText(w, x, y0 + li * fs * 1.25 + (1 - a) * fs * 0.3); }
+        if (a > 0) { ctx.globalAlpha = a; ctx.fillStyle = encre ? INK : '#fff'; ctx.fillText(w, x, y0 + li * fs * 1.25 + (1 - a) * fs * 0.3); }
         x += ctx.measureText(w + ' ').width;
         k++;
       }
     });
     ctx.globalAlpha = 1;
-    if (it.sub && shown >= words.length) {
+    if (it.sub && shown >= words.length && encre) {
+      const a = clamp((local - 0.3 - words.length * per - 0.2) / 0.4, 0, 1);
+      caption(ctx, '— ' + it.sub, undefined, box.x + box.w * 0.15, y0 + lines.length * fs * 1.25 + fs * 1.6, fs * 0.75, { tilt: 0.02, seed: 9 + boil(local), a: easeOutBack(a), maxW: W * 0.8 });
+    } else if (it.sub && shown >= words.length) {
       const a = easeOutCubic(clamp((local - 0.3 - words.length * per - 0.2) / 0.4, 0, 1));
       ctx.globalAlpha = a;
       ctx.fillStyle = accent;
@@ -701,9 +848,17 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     const useLog = vmax / Math.max(1e-9, vmin) > 40;
     const norm = (v: number) => (useLog ? Math.log1p(v) / Math.log1p(vmax) : v / vmax);
     const ax = EASE.standard(clamp((local - 0.15) / 0.6, 0, 1));
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = U * 0.12;
+    ctx.strokeStyle = encre ? INK : 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = U * (encre ? 0.2 : 0.12);
     ctx.lineCap = 'round';
+    const valueFont = (f: number) => (encre ? `400 ${f * 1.25}px ${TITLE}` : `700 ${f}px ${FONT_STACK.grotesk}`);
+    /** a printed bar: flat spot colour, a band of dots on its shaded side, ink outline */
+    const inkBar = (x: number, y: number, w: number, h: number, i: number) => {
+      if (w <= 0 || h <= 0) return;
+      inkBox(ctx, x, y, w, h, { fill: accent, lw: U * 0.14, shadow: INK, shadowOff: U * 0.22, seed: 300 + i + boil(local) * 13, amp: U * 0.03 });
+      if (vertical) benDay(ctx, x, y + h * 0.62, w, h * 0.38, INK, U * 0.45, 'flat', 0.35);
+      else benDay(ctx, x + w * 0.62, y, w * 0.38, h, INK, U * 0.45, 'right', 0.35);
+    };
     if (!vertical) {
       const x0 = W * 0.07, x1 = W * 0.95, yb = bottom - U * 1.4, yt = top + U * 0.8;
       ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x0 + (x1 - x0) * ax, yb); ctx.stroke();
@@ -716,13 +871,17 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
         const g = EASE.enter(appear(i));
         const cx = x0 + step * (i + 0.5);
         const bh = (yb - yt - ch - U) * norm(vals[i]) * g;
-        const grad = ctx.createLinearGradient(0, yb - bh, 0, yb);
-        grad.addColorStop(0, accent); grad.addColorStop(1, hexA(accent, 0.25));
-        ctx.fillStyle = grad;
-        ctx.fillRect(cx - step * 0.22, yb - bh, step * 0.44, bh);
+        if (encre) inkBar(cx - step * 0.22, yb - bh, step * 0.44, bh, i);
+        else {
+          const grad = ctx.createLinearGradient(0, yb - bh, 0, yb);
+          grad.addColorStop(0, accent); grad.addColorStop(1, hexA(accent, 0.25));
+          ctx.fillStyle = grad;
+          ctx.fillRect(cx - step * 0.22, yb - bh, step * 0.44, bh);
+        }
         card(ctx, project, { ...it, sub: numeric ? undefined : it.sub }, cx, yb - bh - ch / 2 - U * 0.3, cw, ch, appear(i), accent, U);
         if (numeric && g > 0) {
-          ctx.fillStyle = '#fff'; ctx.font = `700 ${U * 1.1}px ${FONT_STACK.grotesk}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = encre ? '#fff' : '#fff'; ctx.font = valueFont(U * 1.1); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          if (encre) { ctx.lineWidth = U * 0.25; ctx.strokeStyle = INK; ctx.lineJoin = 'round'; ctx.strokeText(fmtValue(vals[i] * g), cx, yb - bh / 2, step * 0.9); }
           ctx.fillText(fmtValue(vals[i] * g), cx, yb - bh / 2, step * 0.9);
         }
       });
@@ -735,12 +894,15 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
         const cy = y0 + step * (i + 0.5);
         card(ctx, project, { ...it, sub: numeric ? undefined : it.sub }, x0 + U * 0.6 + cw / 2, cy, cw, ch, appear(i), accent, U);
         const bx = x0 + cw + U * 1.2, bw = (x1 - bx) * norm(vals[i]) * g;
-        const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-        grad.addColorStop(0, hexA(accent, 0.3)); grad.addColorStop(1, accent);
-        ctx.fillStyle = grad;
-        ctx.fillRect(bx, cy - ch * 0.18, bw, ch * 0.36);
+        if (encre) inkBar(bx, cy - ch * 0.18, bw, ch * 0.36, i);
+        else {
+          const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+          grad.addColorStop(0, hexA(accent, 0.3)); grad.addColorStop(1, accent);
+          ctx.fillStyle = grad;
+          ctx.fillRect(bx, cy - ch * 0.18, bw, ch * 0.36);
+        }
         if (numeric && g > 0) {
-          ctx.fillStyle = '#fff'; ctx.font = `700 ${U * 1.1}px ${FONT_STACK.grotesk}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = encre ? INK : '#fff'; ctx.font = valueFont(U * 1.1); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
           ctx.fillText(fmtValue(vals[i] * g), bx + U * 0.4, cy - ch * 0.32);
         }
       });
@@ -750,30 +912,38 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
       const x = W / 2, y0 = top + U, y1 = bottom - U;
       const step = (y1 - y0) / Math.max(1, n);
       const prog = clamp((local - 0.3) / span, 0, 1);
+      if (encre) brush(ctx, [[x, y0], [x, y0 + (y1 - y0) * 0.5], [x, y1]], U * 0.4, INK, 41 + boil(local), prog);
+      else {
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.fillRect(x - U * 0.1, y0, U * 0.2, y1 - y0);
       ctx.fillStyle = accent;
       ctx.fillRect(x - U * 0.1, y0, U * 0.2, (y1 - y0) * prog);
+      }
       const cw = W * 0.4, ch = Math.min(step * 0.92, cw * 0.95);
       d.items.forEach((it, i) => {
         const cy = y0 + step * (i + 0.5), a = appear(i);
-        ctx.fillStyle = a > 0 ? accent : 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = a > 0 ? accent : encre ? 'rgba(21,18,15,0.25)' : 'rgba(255,255,255,0.3)';
         ctx.beginPath(); ctx.arc(x, cy, U * 0.45, 0, Math.PI * 2); ctx.fill();
+        if (encre) { ctx.strokeStyle = INK; ctx.lineWidth = U * 0.14; ctx.stroke(); }
         card(ctx, project, it, i % 2 ? x + U + cw / 2 : x - U - cw / 2, cy, cw, ch, a, accent, U);
       });
     } else {
       const y = (top + bottom) / 2, x0 = W * 0.06, x1 = W * 0.94;
       const step = (x1 - x0) / Math.max(1, n);
       const prog = clamp((local - 0.3) / span, 0, 1);
+      if (encre) brush(ctx, [[x0, y], [(x0 + x1) / 2, y], [x1, y]], U * 0.4, INK, 41 + boil(local), prog);
+      else {
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.fillRect(x0, y - U * 0.1, x1 - x0, U * 0.2);
       ctx.fillStyle = accent;
       ctx.fillRect(x0, y - U * 0.1, (x1 - x0) * prog, U * 0.2);
+      }
       const cw = Math.min(step * 0.92, W * 0.24), ch = (bottom - top) / 2 - U * 1.2;
       d.items.forEach((it, i) => {
         const cx = x0 + step * (i + 0.5), a = appear(i);
-        ctx.fillStyle = a > 0 ? accent : 'rgba(255,255,255,0.3)';
+        ctx.fillStyle = a > 0 ? accent : encre ? 'rgba(21,18,15,0.25)' : 'rgba(255,255,255,0.3)';
         ctx.beginPath(); ctx.arc(cx, y, U * 0.45, 0, Math.PI * 2); ctx.fill();
+        if (encre) { ctx.strokeStyle = INK; ctx.lineWidth = U * 0.14; ctx.stroke(); }
         card(ctx, project, it, cx, i % 2 ? y + U + ch / 2 : y - U - ch / 2, cw, ch, a, accent, U);
       });
     }
@@ -797,7 +967,9 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
         ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
       }
       ctx.closePath();
+      if (encre) { ctx.save(); ctx.translate(U * 0.3, U * 0.3); ctx.fillStyle = INK; ctx.fill(); ctx.restore(); ctx.fillStyle = CAPTION; }
       ctx.fill();
+      if (encre) { ctx.lineWidth = U * 0.18; ctx.strokeStyle = INK; ctx.stroke(); }
       ctx.font = `${U * 2.6}px ${FONT_STACK.bangers}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -820,6 +992,11 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
       ctx.font = `${rh * 0.6}px ${FONT_STACK.bangers}`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
+      if (encre) {
+        ctx.lineJoin = 'round';
+        ctx.fillStyle = INK; ctx.fillText(`#${i + 1}`, W / 2 - cw / 2 - U * 0.6 + U * 0.25, cy + U * 0.25);
+        ctx.lineWidth = U * 0.18; ctx.strokeStyle = INK; ctx.strokeText(`#${i + 1}`, W / 2 - cw / 2 - U * 0.6, cy);
+      }
       ctx.fillStyle = accent;
       ctx.fillText(`#${i + 1}`, W / 2 - cw / 2 - U * 0.6, cy);
       ctx.restore();
@@ -858,11 +1035,25 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
       ctx.strokeStyle = KIND_COL[l.kind ?? ''] ?? accent;
       ctx.setLineDash(l.status ? DASH[l.status] : [U * 0.6, U * 0.4]);
       ctx.globalAlpha = l.status === 'hypothese' ? 0.8 : 1;
-      ctx.beginPath();
-      ctx.moveTo(pa[0], pa[1]);
-      ctx.lineTo(lerp(pa[0], pb[0], e), lerp(pa[1], pb[1], e));
-      ctx.stroke();
-      if (l.label && e >= 1) {
+      if (encre) {
+        const col = l.kind && l.kind !== 'autre' ? (KIND_COL[l.kind] ?? INK) : INK;
+        const path = bowPath(pa[0], pa[1], pb[0], pb[1], 0.06, 30);
+        const dash = l.status === 'hypothese' ? U * 0.35 : l.status === 'interpretation' ? U * 0.9 : undefined;
+        brush(ctx, path, U * 0.5, col, 60 + li + boil(local) * 7, e, dash);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(pa[0], pa[1]);
+        ctx.lineTo(lerp(pa[0], pb[0], e), lerp(pa[1], pb[1], e));
+        ctx.stroke();
+      }
+      if (l.label && e >= 1 && encre) {
+        const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
+        ctx.save(); ctx.setLineDash([]);
+        ctx.font = `400 ${U * 0.75}px ${TITLE}`;
+        const tw = ctx.measureText(l.label.toUpperCase()).width + U * 0.75;
+        caption(ctx, l.label + (l.status === 'hypothese' ? ' ?' : ''), undefined, mx - tw / 2, my - U * 0.55, U * 0.75, { tilt: (li % 2 ? 1 : -1) * 0.04, seed: 90 + li, fill: '#fff' });
+        ctx.restore();
+      } else if (l.label && e >= 1) {
         const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
         ctx.save();
         ctx.setLineDash([]);
@@ -892,11 +1083,12 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
       let lx = W * 0.05;
       const ly = H - U * 1.6;
       for (const k of ['source', 'interpretation', 'hypothese'].filter((x) => used.includes(x))) {
-        ctx.strokeStyle = '#fff';
+        ctx.strokeStyle = encre ? INK : '#fff';
         ctx.setLineDash(DASH[k]);
         ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + U * 2, ly); ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = encre ? INK : 'rgba(255,255,255,0.85)';
+        if (encre) ctx.font = `700 ${U * 0.7}px ${LETTER}`;
         ctx.fillText(LBL[k], lx + U * 2.4, ly);
         lx += U * 2.8 + ctx.measureText(LBL[k]).width + U * 1.2;
       }
@@ -906,6 +1098,8 @@ function drawDiagram(ctx: Ctx, project: Project, W: number, H: number, d: Diagra
     d.items.forEach((it, i) => card(ctx, project, it, pos[i][0], pos[i][1], cs, cs * 1.15, appear(i), accent, U));
   }
   ctx.restore();
+  if (encre) panelFrame(ctx, W, H, U, 1 + boil(local));
+  encre = false;
 }
 
 /* ---------------------------------------------------- print & lens */
