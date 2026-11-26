@@ -121,7 +121,7 @@ export function checkProject(p: Project): Issue[] {
   // how long each image stays, against what is in it (hold engine: balloons, reading time, kind, sequence)
   const voiced = !!p.aroll || p.audio.some((c) => c.kind === 'voice');
   const seqAt = (t: number) => p.direction?.sequences?.filter((q) => q.start <= t + 1e-3).pop()?.type as SeqType | undefined;
-  const holds = timed.filter((t) => t.shot.pageId && !t.shot.diagram).map((t) => ({ t, h: holdFor(t.shot, { seq: seqAt(t.start), ranges: p.holds, pace: voiced ? 0.6 : 0.75 }) }));
+  const holds = timed.filter((t) => t.shot.pageId && !t.shot.diagram).map((t) => ({ t, h: holdFor(t.shot, { seq: seqAt(t.start), ranges: p.holds, pace: voiced ? 0.6 : 0.75, narrated: voiced }) }));
   const brief = holds.filter(({ t, h }) => t.shot.duration < h.min * 0.6 && (h.kind !== 'simple' || t.shot.duration < 1));
   if (brief.length) {
     const ex = brief[0];

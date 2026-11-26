@@ -42,6 +42,8 @@ export interface HoldContext {
   ranges?: Partial<HoldRanges>;
   /** pace of the edit (1 = the ranges as given; a TikTok explainer runs ≈ 0.5) */
   pace?: number;
+  /** a voice tells the story: the viewer listens and looks, reading the balloons matters much less */
+  narrated?: boolean;
 }
 
 const CPS = 15; // characters read per second on a phone, comfortably
@@ -51,7 +53,7 @@ export function holdFor(s: Shot, ctx: HoldContext = {}): Hold {
   const pace = ctx.pace ?? 1;
   const balloons = s.balloons?.length ?? 0;
   const text = (s.text ?? '').replace(/\s+/g, ' ').trim();
-  const reading = text ? text.length / CPS : balloons * 1.1;
+  const reading = (text ? text.length / CPS : balloons * 1.1) * (ctx.narrated ? 0.35 : 1);
   const busy = (ctx.density ?? 0.5) > 0.75 ? 1 : 0;
   const details = balloons + busy + (s.chars?.length ?? 0);
   const kind: HoldKind = s.layout === 'page' || s.zone === 'zones' ? 'page'

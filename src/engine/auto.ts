@@ -520,7 +520,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
       // explored in stages; an ordinary one hands over to the next panels of the story
       const main = byId.get(ids[0])!;
       const hold = holdFor({ ...main.shot, balloons: Array.from({ length: Math.max(0, main.bubbles) }, () => ({ x: 0, y: 0, w: 1, h: 1 })) },
-        { seq: seqTypeOf(se.text, i, sents.length), density: clamp((main.w - 0.65) / 0.9, 0, 1.5), ranges: proj.holds, pace: 0.6 });
+        { seq: seqTypeOf(se.text, i, sents.length), density: clamp((main.w - 0.65) / 0.9, 0, 1.5), ranges: proj.holds, pace: 0.6, narrated: true });
       const keepOne = important(hold) && len <= hold.max * 1.3;
       const want = keepOne ? 1 : Math.max(1, Math.min(3, Math.round(len / (st.base * pace * 1.1))));
       for (let k = order.indexOf(ids[ids.length - 1]) + 1; ids.length < want && k < order.length; k++) if (!used.has(order[k])) ids.push(order[k]);

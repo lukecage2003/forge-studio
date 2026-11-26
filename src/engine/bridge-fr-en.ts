@@ -43,6 +43,17 @@ const RAW: Record<string, string> = {
   rentrer: 'home go back', ramener: 'take back home', partir: 'leave go', revenir: 'come back return', reparer: 'fix repair', construire: 'build',
   detruire: 'destroy', changer: 'change', devenir: 'become', perdre: 'lose lost', gagner: 'win', aider: 'help', attendre: 'wait', mourir: 'die',
   enferme: 'trapped locked', piege: 'trapped trap', bruit: 'noise sound', silence: 'quiet silence',
+  // action and cosmic vocabulary of superhero comics
+  obeir: 'obey', obeissez: 'obey', obeis: 'obey', geant: 'giant', geante: 'giant', geants: 'giants', eclairs: 'lightning bolts', eclair: 'lightning bolt flash',
+  foncer: 'charge rush', foncent: 'charge rush', fonce: 'charge rush', dresse: 'stands rises', devoreur: 'devourer', devorer: 'devour eat', planete: 'planet', planetes: 'planets',
+  vaisseau: 'ship', vaisseaux: 'ships', robot: 'robot robots', robots: 'robots drones', drone: 'drone drones', armure: 'armor armour', bouclier: 'shield',
+  menace: 'threat menace', invasion: 'invasion', sauveur: 'savior', destruction: 'destruction destroy', detruit: 'destroyed', explose: 'explodes explosion',
+  tenter: 'try attempt', tente: 'try attempt', reussir: 'succeed', echouer: 'fail', impossible: 'impossible', ultime: 'ultimate', ultimes: 'ultimate ultimates',
+  // newsroom and team vocabulary
+  equipe: 'team', equipes: 'teams', nouvelle: 'new', nouveau: 'new', premiere: 'first', premier: 'first', mission: 'mission', missions: 'missions',
+  regler: 'solve fix', resoudre: 'solve', probleme: 'problem', problemes: 'problems', chef: 'leader boss', dirige: 'leads leader', diriger: 'lead',
+  quartier: 'headquarters', general: 'headquarters general', base: 'base headquarters', conseil: 'council', gouvernement: 'government', president: 'president',
+  annonce: 'announce announcement', revele: 'reveals', secret: 'secret', secrets: 'secrets',
 };
 
 const norm = (w: string) => w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');

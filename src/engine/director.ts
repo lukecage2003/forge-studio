@@ -312,6 +312,16 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
       }
     }
   }
+  /* 6. shakes are for real impacts: at most ~6 a minute, the strongest moments keep theirs */
+  {
+    const total = out.reduce((a, s) => a + s.duration, 0);
+    const budget = Math.max(1, Math.round((total / 60) * 6));
+    const shaky = out.map((s, i) => ({ s, i, w: s.shake * (types[i] === 'confrontation' || s.zone === 'splash' ? 2 : 1) })).filter((x) => x.s.shake > 0.2 && x.s.auto);
+    if (shaky.length > budget) {
+      for (const x of shaky.sort((a, b) => b.w - a.w).slice(budget)) { x.s.shake = 0; x.s.why = `${x.s.why ?? ''} · secousse retirée (réservée aux vrais impacts)`; }
+      report.notes.push(`${shaky.length - budget} secousse(s) retirée(s) : ${budget} gardée(s) pour les vrais impacts.`);
+    }
+  }
   const kinds = [...new Set(report.sequences.map((q) => SEQ_FR[q.type]))];
   report.notes.push(`Directeur créatif : ${report.sequences.length} séquences (${kinds.slice(0, 5).join(', ')}${kinds.length > 5 ? '…' : ''}), ${report.changedTransitions} transition(s) et ${report.changedMotions} mouvement(s) ajustés.`);
   return { shots: out, report };
