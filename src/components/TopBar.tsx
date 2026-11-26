@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Download, Wand2, FolderOpen, FilePlus2, Redo2, Save, Undo2, Settings2, Crown } from 'lucide-react';
+import { Download, Wand2, FolderOpen, FilePlus2, Redo2, Save, Undo2, Settings2, Crown, Bot, MessageSquareText } from 'lucide-react';
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
@@ -76,6 +76,8 @@ export function TopBar() {
         <button className="cmd-btn" onClick={() => setUI({ paletteOpen: true })} title="Toutes les commandes">
           <span>Commandes</span><kbd>Ctrl K</kbd>
         </button>
+        <button className="icon-btn" onClick={() => setUI({ assistantOpen: true })} title="Assistant de montage : demande, il propose, tu valides"><MessageSquareText size={17} /></button>
+        <button className="icon-btn" onClick={() => setUI({ aiOpen: true })} title="Centre de contrôle IA : fournisseurs, clés, coûts, confidentialité"><Bot size={17} /></button>
         <button className="icon-btn" onClick={() => setUI({ channelOpen: true })} title="Ma chaîne : identité, intro, fin, miniatures"><Crown size={17} /></button>
         <button className="icon-btn" onClick={() => setUI({ settingsOpen: true })} title="Réglages : Google AI, apprentissage"><Settings2 size={17} /></button>
         <button className="btn accent-outline" onClick={() => setUI({ autoOpen: true })} title="Montage automatique (A)">

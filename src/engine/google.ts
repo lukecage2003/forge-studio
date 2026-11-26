@@ -2,9 +2,14 @@ import type { PageKind, Word } from '../types';
 import { SR } from './speech';
 
 /**
- * Google AI (Gemini API) — optional. The key stays in this browser
- * (localStorage) and calls go straight from the browser to Google.
+ * Google AI (Gemini API) — optional. The key lives in Forge's encrypted vault
+ * (src/ai/vault) and calls go straight from the browser to Google, through
+ * the orchestrator's rules: local-only projects, consent, quotas, history.
  */
+import { keyOf, setKey } from '../ai/vault';
+import { getConfig, setConfig } from '../ai/config';
+import { coolDown, cooling, logAttempt, recordUse } from '../ai/ledger';
+import { getConsentAsker } from '../ai/orchestrator';
 export interface GoogleSettings { apiKey: string; model: string; language: string }
 
 const KEY = 'forge.google';
@@ -13,13 +18,26 @@ export const DEFAULT_MODEL = 'gemini-2.5-flash';
 export function getGoogle(): GoogleSettings {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || '{}');
-    return { apiKey: v.apiKey || '', model: v.model || DEFAULT_MODEL, language: v.language || 'fr' };
+    return { apiKey: keyOf('gemini') || v.apiKey || '', model: v.model || DEFAULT_MODEL, language: v.language || 'fr' };
   } catch {
-    return { apiKey: '', model: DEFAULT_MODEL, language: 'fr' };
+    return { apiKey: keyOf('gemini') || '', model: DEFAULT_MODEL, language: 'fr' };
   }
 }
 export function setGoogle(s: GoogleSettings) {
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage blocked */ }
+  // the key goes to the encrypted vault; only the model and language stay in plain settings
+  void setKey('gemini', s.apiKey);
+  try { localStorage.setItem(KEY, JSON.stringify({ model: s.model, language: s.language })); } catch { /* storage blocked */ }
+  if (s.model && s.model !== getConfig().providers.gemini.model) setConfig((c) => ({ ...c, providers: { ...c.providers, gemini: { ...c.providers.gemini, model: s.model } } }));
+}
+/** older versions kept the key in clear: move it into the vault once */
+export async function migrateGoogleKey() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || '{}');
+    if (v.apiKey) {
+      if (!keyOf('gemini')) await setKey('gemini', v.apiKey);
+      localStorage.setItem(KEY, JSON.stringify({ model: v.model, language: v.language }));
+    }
+  } catch { /* nothing to migrate */ }
 }
 export const hasGoogle = () => !!getGoogle().apiKey;
 let lastSources: string[] = [];
@@ -27,7 +45,24 @@ let lastSources: string[] = [];
 async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal, tools?: unknown[]) {
   const g = getGoogle();
   if (!g.apiKey) throw new Error('Ajoute ta clé API Google (Gemini) dans les réglages.');
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`, {
+  const c = getConfig();
+  if (c.localOnly) throw new Error('Projet en « local uniquement » : rien n’est envoyé à Google.');
+  if (!c.providers.gemini.enabled) throw new Error('Gemini est désactivé dans le centre de contrôle IA.');
+  const cd = cooling('gemini');
+  if (cd) throw new Error(cd.why === 'auth' ? 'Clé Google refusée : corrige-la dans le centre de contrôle IA.' : 'Google en pause (quota) : réessaie un peu plus tard.');
+  const sent = [...new Set((parts as { inline_data?: { mime_type?: string } }[]).map((p) => (p.inline_data ? (p.inline_data.mime_type?.startsWith('audio') ? 'audio' : 'images') : 'texte')))];
+  const have = new Set(c.consent.gemini ?? []);
+  const missing = sent.filter((d) => !have.has(d));
+  if (missing.length) {
+    if (!(await getConsentAsker()('gemini', missing))) throw new Error('Envoi à Google refusé.');
+    setConfig((x) => ({ ...x, consent: { ...x.consent, gemini: [...new Set([...(x.consent.gemini ?? []), ...missing])] } }));
+  }
+  const t0 = performance.now();
+  const logFail = (kind: 'auth' | 'quota' | 'server' | 'network' | 'bad-request', message: string) =>
+    logAttempt({ t: new Date().toISOString(), task: 'gemini.feature', provider: 'gemini', model: g.model, ok: false, error: kind, message, ms: Math.round(performance.now() - t0), sent });
+  let res0: Response;
+  try {
+    res0 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(g.model)}:generateContent`, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': g.apiKey },
@@ -37,13 +72,22 @@ async function generate(parts: unknown[], schema?: unknown, signal?: AbortSignal
       generationConfig: { temperature: 0, ...(schema ? { responseMimeType: 'application/json', responseSchema: schema } : {}) },
     }),
   });
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') { coolDown('gemini', 'network', 30, 'réseau'); logFail('network', 'Google injoignable'); }
+    throw e;
+  }
+  const res = res0;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = data?.error?.message || res.statusText;
-    if (res.status === 400 && /API key/i.test(msg)) throw new Error('Clé API Google refusée : vérifie-la dans les réglages.');
-    if (res.status === 429) throw new Error('Quota Google atteint : réessaie dans une minute ou vérifie ta facturation.');
+    if (res.status === 400 && /API key/i.test(msg) || res.status === 401 || res.status === 403) { coolDown('gemini', 'auth', 24 * 3600, 'clé'); logFail('auth', 'Clé refusée'); throw new Error('Clé API Google refusée : vérifie-la dans le centre de contrôle IA.'); }
+    if (res.status === 429) { coolDown('gemini', 'quota', Number(res.headers.get('retry-after')) || 60, 'quota'); logFail('quota', 'Quota atteint'); throw new Error('Quota Google atteint : réessaie dans une minute ou vérifie ta facturation.'); }
+    logFail(res.status >= 500 ? 'server' : 'bad-request', String(msg).slice(0, 120));
     throw new Error('Google : ' + msg);
   }
+  const tokens = (data?.usageMetadata?.promptTokenCount ?? 0) + (data?.usageMetadata?.candidatesTokenCount ?? 0);
+  recordUse('gemini', tokens, 0);
+  logAttempt({ t: new Date().toISOString(), task: 'gemini.feature', provider: 'gemini', model: g.model, ok: true, ms: Math.round(performance.now() - t0), sent, tokens });
   const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '';
   lastSources = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []).map((c: { web?: { uri?: string; title?: string } }) => c.web?.title || c.web?.uri).filter(Boolean);
   return text;

@@ -3,22 +3,24 @@ import { Brain, KeyRound, Loader2, Settings2, X, CheckCircle2, Eye, EyeOff } fro
 import { DEFAULT_MODEL, getGoogle, setGoogle, testGoogle } from '../engine/google';
 import { brain, brainSummary, onBrain, resetBrain } from '../engine/brain';
 import { setUI } from '../store';
+import { hasKey, keyOf, masked, removeKey } from '../ai/vault';
 import { clearJournal, journal } from '../lib/errors';
 import { toast } from './Toast';
 import { Gauge } from 'lucide-react';
 import { lastBench, type BenchResult } from '../engine/bench';
 
 export function SettingsModal() {
-  const [g, setG] = useState(getGoogle());
+  const [g, setG] = useState({ ...getGoogle(), apiKey: '' });
   const [show, setShow] = useState(false);
   const [test, setTest] = useState<'idle' | 'busy' | 'ok' | string>('idle');
   const [, bump] = useState(0);
   const [confirmReset, setConfirmReset] = useState(false);
   useEffect(() => onBrain(() => bump((x) => x + 1)), []);
   const close = () => setUI({ settingsOpen: false });
-  const save = () => { setGoogle(g); toast('Réglages Google enregistrés dans ce navigateur'); };
+  const clean = () => ({ ...g, apiKey: g.apiKey.startsWith('new:') ? g.apiKey.slice(4) : keyOf('gemini') ?? '' });
+  const save = () => { setGoogle(clean()); setG({ ...clean(), apiKey: '' }); toast('Réglages Google enregistrés (clé chiffrée)'); };
   const runTest = async () => {
-    setGoogle(g);
+    setGoogle(clean());
     setTest('busy');
     try {
       await testGoogle();
@@ -49,12 +51,22 @@ export function SettingsModal() {
             <b> aistudio.google.com</b> → « Get API key ». La clé reste dans ce navigateur et les appels partent directement vers Google.
           </p>
           <div className="field">
-            <label htmlFor="gkey">Clé API</label>
+            <label htmlFor="gkey">Clé API (chiffrée, jamais réaffichée)</label>
             <div className="key-row">
-              <input id="gkey" className="input" type={show ? 'text' : 'password'} autoComplete="off" spellCheck={false}
-                placeholder="AIza…" value={g.apiKey} onChange={(e) => { setG({ ...g, apiKey: e.target.value.trim() }); setTest('idle'); }} />
-              <button className="icon-btn" onClick={() => setShow(!show)} aria-label={show ? 'Masquer' : 'Afficher'}>{show ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+              {hasKey('gemini') && !g.apiKey.startsWith('new:') ? (
+                <>
+                  <span className="key-masked">{masked('gemini')}</span>
+                  <button className="btn sm ghost" onClick={() => { void removeKey('gemini').then(() => { setG({ ...g, apiKey: '' }); setTest('idle'); }); }}>Supprimer la clé</button>
+                </>
+              ) : (
+                <>
+                  <input id="gkey" className="input" type={show ? 'text' : 'password'} autoComplete="off" spellCheck={false}
+                    placeholder="AIza…" value={g.apiKey.replace(/^new:/, '')} onChange={(e) => { setG({ ...g, apiKey: 'new:' + e.target.value.trim() }); setTest('idle'); }} />
+                  <button className="icon-btn" onClick={() => setShow(!show)} aria-label={show ? 'Masquer' : 'Afficher'}>{show ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                </>
+              )}
             </div>
+            <button className="link-btn" onClick={() => setUI({ settingsOpen: false, aiOpen: true })}>Toutes les IA (Groq, OpenRouter, Agnes, local…) : centre de contrôle IA</button>
           </div>
           <div className="two-col">
             <div className="field">
@@ -70,7 +82,7 @@ export function SettingsModal() {
             </div>
           </div>
           <div className="row-btns gap">
-            <button className="btn sm" onClick={runTest} disabled={!g.apiKey || test === 'busy'}>
+            <button className="btn sm" onClick={runTest} disabled={(!g.apiKey && !hasKey('gemini')) || test === 'busy'}>
               {test === 'busy' ? <Loader2 size={14} className="spin" /> : null} Tester la connexion
             </button>
             <button className="btn sm primary" onClick={save}>Enregistrer</button>

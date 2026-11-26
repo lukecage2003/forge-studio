@@ -21,6 +21,8 @@ export interface UIState {
   paletteOpen: boolean;
   channelOpen: boolean;
   scriptOpen?: boolean;
+  aiOpen?: boolean;
+  assistantOpen?: boolean;
   loop: boolean;
   busy: string | null;
   saved: 'saved' | 'saving' | 'dirty';

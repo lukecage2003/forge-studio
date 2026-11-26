@@ -79,14 +79,21 @@ export async function roughCut(silent = false) {
   }
 }
 
-export async function transcribe(engine: 'whisper' | 'gemini', model: WhisperModel = 'base') {
+export async function transcribe(engine: 'whisper' | 'gemini' | 'ai', model: WhisperModel = 'base') {
   const ar = getState().project.aroll;
   if (!ar) return;
   try {
     const { pcm } = await analysisOf(ar);
     let words: Word[];
     const lang = getGoogle().language === 'en' ? 'en' : 'fr';
-    if (engine === 'gemini') {
+    if (engine === 'ai') {
+      // orchestrator: fast remote Whisper (Groq, Gemini…) when allowed, else Whisper in this browser
+      setUI({ busy: 'Transcription IA…' });
+      const { aiTranscribe } = await import('./ai/tasks');
+      const r = await aiTranscribe(pcm, lang, () => whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label })));
+      words = r.words;
+      toast(`Transcrit par ${r.via.provider === 'local' ? 'Whisper (sur ton ordinateur)' : r.via.provider + ' · ' + r.via.model}`);
+    } else if (engine === 'gemini') {
       setUI({ busy: 'Transcription Google… 0 %' });
       words = await geminiTranscribe(pcm, (p) => setUI({ busy: `Transcription Google… ${Math.round(p * 100)} %` }));
     } else {

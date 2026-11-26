@@ -15,8 +15,14 @@ import { getState } from './store';
 import { layersFor } from './engine/layers';
 (window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+import { loadVault } from './ai/vault';
+import { migrateGoogleKey } from './engine/google';
+
+// API keys are decrypted into memory before the app starts (and an old clear-text Gemini key is moved into the vault)
+void loadVault().then(migrateGoogleKey).finally(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

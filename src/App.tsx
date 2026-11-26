@@ -12,6 +12,9 @@ import { SettingsModal } from './components/SettingsModal';
 import { CommandPalette } from './components/CommandPalette';
 import { ChannelModal } from './components/ChannelModal';
 import { ScriptModal } from './components/ScriptModal';
+import { AiCenter } from './components/AiCenter';
+import { AssistantModal } from './components/AssistantModal';
+import { ConsentDialog } from './components/ConsentDialog';
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
@@ -34,6 +37,8 @@ export default function App() {
   const paletteOpen = useStore((s) => s.ui.paletteOpen);
   const channelOpen = useStore((s) => s.ui.channelOpen);
   const scriptOpen = useStore((s) => !!s.ui.scriptOpen);
+  const aiOpen = useStore((s) => !!s.ui.aiOpen);
+  const assistantOpen = useStore((s) => !!s.ui.assistantOpen);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
   const hasRush = useStore((s) => !!s.project.aroll);
@@ -67,7 +72,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -156,6 +161,9 @@ export default function App() {
       {paletteOpen && <CommandPalette onClose={() => setUI({ paletteOpen: false })} />}
       {channelOpen && <ErrorBoundary area="fenêtre"><ChannelModal /></ErrorBoundary>}
       {scriptOpen && <ErrorBoundary area="fenêtre"><ScriptModal /></ErrorBoundary>}
+      {aiOpen && <ErrorBoundary area="fenêtre"><AiCenter /></ErrorBoundary>}
+      {assistantOpen && <ErrorBoundary area="fenêtre"><AssistantModal /></ErrorBoundary>}
+      <ConsentDialog />
       {busy && <div className="busy-pill" role="status"><Loader2 size={15} className="spin" /> {busy}</div>}
       {dragging && (
         <div className="drop-overlay">

@@ -180,7 +180,7 @@ export interface ARoll {
   /** proposed cuts on the source (toggle `on` to apply) */
   cuts: Cut[];
   words: Word[];
-  transcriptSource?: 'whisper' | 'gemini' | 'manual';
+  transcriptSource?: 'whisper' | 'gemini' | 'manual' | 'ai';
   /** result of the reliability check (engine/transcriptCheck): an unreliable transcript is never used to cut */
   transcriptCheck?: { ok: boolean; reason?: string };
   /** jump-cut punch-in zooms */

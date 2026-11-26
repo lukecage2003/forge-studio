@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AudioWaveform, Crosshair, FileVideo, Headphones, Languages, Play, RotateCcw, ScanLine, Sparkles, Wand2, ZoomIn, ZoomOut } from 'lucide-react';
+import { AudioWaveform, Crosshair, FileVideo, Headphones, Languages, Play, RotateCcw, ScanLine, Sparkles, Wand2, ZoomIn, ZoomOut, Bot } from 'lucide-react';
 import type { ARoll, Cut, Word } from '../types';
 import { setUI, useStore } from '../store';
 import { getVideo } from '../engine/media';
@@ -105,6 +105,10 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
             {Object.entries(WHISPER_MODELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </div>
+        <button className="btn sm" disabled={!!busy} onClick={() => void transcribe('ai', model)}
+          title="Transcription par l’orchestrateur IA : Groq ou Gemini si tu les as branchés (plus rapide), sinon Whisper sur ton ordinateur">
+          <Bot size={15} /> IA auto
+        </button>
         <button className="btn sm google" disabled={!!busy} onClick={() => (hasGoogle() ? void transcribe('gemini') : setUI({ settingsOpen: true }))}
           title="Transcription verbatim avec Google Gemini : garde les « euh » pour mieux les couper">
           <Sparkles size={15} /> Google

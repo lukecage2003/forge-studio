@@ -498,3 +498,50 @@ Une légende apparaît dès que les degrés sont mélangés. Un nouveau schéma 
 - après le rendu, le MP4 est relu pour vérifier la synchronisation (durées des pistes et décalage au départ).
 
 **Ressources** (`src/engine/jobs.ts`) : un seul traitement lourd à la fois (Whisper, relief, détourage, nettoyage de la voix). Le modèle précédent est déchargé avant le suivant.
+
+## Forge AI Orchestrator (multi-IA, zéro coût par défaut)
+
+**Centre de contrôle IA** (icône robot en haut) :
+- **Tableau de bord :** fournisseurs prêts, appels du jour et du mois, coût estimé.
+- **Fournisseurs :** clés (chiffrées, jamais réaffichées, supprimables), test de connexion, choix des modèles, type de compte.
+- **Routage :** ordre par tâche, avec la raison de chaque fournisseur sauté.
+- **Coûts et confidentialité :**
+  - modes **Zéro coût** (défaut), **Équilibré**, **Qualité** ;
+  - plafond mensuel ;
+  - **Local uniquement** ;
+  - envois autorisés ;
+  - Forge Bridge.
+- **Historique :** sans clé ni contenu.
+
+**Fournisseurs** (`src/ai/providers`) :
+- **Appel direct depuis le navigateur :** Gemini, Groq, OpenRouter, Agnes AI.
+- **Via Forge Bridge :** Cloudflare Workers AI, NVIDIA NIM.
+- **Local :** Ollama, LM Studio, le moteur local de Forge.
+- **Payants, éteints par défaut :** OpenAI, Anthropic. Les abonnements ChatGPT, Gemini et Claude ne donnent pas d'accès API et ne sont jamais utilisés.
+
+**Règles de l'orchestrateur** (`src/ai/orchestrator.ts`) :
+- **Capacités :** une tâche ne va qu'à un modèle capable de la faire (texte, JSON, images, transcription, long contexte).
+- **Mode Zéro coût :** IA locale, offres gratuites et modèles au **prix 0 lu dans le catalogue** uniquement (OpenRouter : 14 sur 474 au 25/11/2026).
+- **Erreurs :** une clé refusée met le fournisseur de côté. Un quota dépassé impose l'attente indiquée par le service. Une panne ou une réponse illisible fait passer au suivant. L'IA locale reste le dernier recours.
+- **Confidentialité :** demande avant le premier envoi de chaque type de données (texte, audio, images) à chaque service.
+- **Économie d'appels :** cache des réponses, 2 appels simultanés au plus par fournisseur.
+
+**Dans le montage** :
+- **Transcription « IA auto » :** Groq ou Gemini, sinon Whisper local, puis contrôle anti-hallucination.
+- **Fenêtre du script :** « Analyse approfondie » et « Deuxième lecture éditoriale ».
+- **Sous-titres :** « Corriger la ponctuation », qui refuse toute ligne dont les mots changent.
+- **Assistant de montage :** il propose, tu valides chaque changement, Ctrl+Z annule. Les propositions sont vérifiées contre le projet réel : aucun plan ou temps inventé.
+
+**Forge Bridge** (`bridge/`, facultatif, Node 20+) :
+- clés dans le coffre de Windows ou de Linux, ou dans un fichier chiffré ;
+- relais pour Cloudflare, NVIDIA et whisper.cpp ;
+- répond seulement à Forge, avec un code d'appairage.
+
+**Tests** :
+- 27 tests de l'orchestrateur (mode Zéro coût, budget, clé invalide, quota, réseau coupé, secours, capacités, consentement, cache, débit, tâches) ;
+- 5 tests du Bridge ;
+- 5 tests sur les vrais services, lancés avec `FORGE_LIVE=1 npx vitest run tests/live.test.ts` :
+  - catalogue OpenRouter réel ;
+  - fausses clés refusées par Groq, OpenRouter, Agnes et Gemini.
+
+**Pas encore testé faute de clé :** une vraie réponse de Groq, Gemini, OpenRouter, Agnes, Cloudflare ou NVIDIA.

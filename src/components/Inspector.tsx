@@ -7,6 +7,7 @@ import { getState, patchCaption, patchShot, setUI, update, useStore } from '../s
 import { LAYOUT_FR } from '../engine/brain';
 import { patchAroll, rebuildSubtitles, removeRush } from '../rush';
 import { Slider } from './Slider';
+import { toast } from './Toast';
 import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engine/effects';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, swapPanel } from '../actions';
@@ -507,9 +508,24 @@ function SubtitleEditor() {
       return { ...sb, text, words };
     }),
   }), 'subfix' + i);
+  const [busy, setBusy] = useState(false);
+  const punctuate = async () => {
+    setBusy(true);
+    try {
+      const { aiPunctuate } = await import('../ai/tasks');
+      const r = await aiPunctuate(subs.map((x) => x.text));
+      if (!r.changed) toast(r.via.provider === 'local' ? 'Aucune IA disponible pour la ponctuation (centre de contrôle IA).' : 'Ponctuation déjà correcte.');
+      else {
+        update((p) => ({ ...p, subtitles: p.subtitles.map((sb, i) => (r.lines[i] === sb.text ? sb : { ...sb, text: r.lines[i], words: sb.words.map((w, k) => ({ ...w, w: r.lines[i].split(/\s+/)[k] ?? w.w })) })) }), 'punct');
+        toast(`${r.changed} ligne(s) corrigée(s)${r.refused ? `, ${r.refused} refusée(s) (mots modifiés)` : ''} · Ctrl+Z pour annuler`);
+      }
+    } catch (e) { toast((e as Error).message, 'error'); }
+    setBusy(false);
+  };
   if (!open) return <button className="btn sm ghost block" onClick={() => setOpen(true)}>Corriger les sous-titres ({subs.length} lignes)</button>;
   return (
     <div className="sub-editor">
+      <button className="btn sm" disabled={busy} onClick={() => void punctuate()} title="Ponctuation et majuscules par l’IA ; une ligne dont les mots changeraient est refusée">{busy ? 'Correction…' : 'Corriger la ponctuation (IA)'}</button>
       {subs.map((sb, i) => (
         <div key={i} className="sub-row">
           <button className="link-btn" onClick={() => seek(sb.s)} title="Aller à cette ligne">{sb.s.toFixed(1)} s</button>
