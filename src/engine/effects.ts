@@ -77,6 +77,12 @@ export const TRANSITIONS: TransitionDef[] = [
     params: [{ key: 'smoothness', label: 'Douceur du bord', min: 0, max: 1, step: 0.05, def: 0.5, fmt: pct }] },
 ];
 
+TRANSITIONS.push(
+  { id: 'smear', label: 'Étirement cartoon', category: 'action', desc: 'L’image part en s’étirant comme dans un dessin animé, la suivante arrive étirée et se pose avec un rebond.', moves: true, sfx: 0.8, ease: 'linear', params: [amount('Étirement')], minDur: 0.3 },
+  { id: 'impact', label: 'Image d’impact', category: 'action', desc: 'Deux images en noir et blanc inversé avec lignes de vitesse (manga), puis l’image arrive en tremblant.', moves: false, sfx: 1, ease: 'linear', params: [amount('Secousse')], minDur: 0.3 },
+  { id: 'inkframe', label: 'Tracé de case', category: 'comic', desc: 'Une case se trace à l’encre sur le papier, l’image la remplit, puis la case s’ouvre en plein écran.', moves: false, sfx: 0.4, ease: 'linear', params: [], minDur: 0.6 },
+);
+
 export const TRANSITION: Record<Transition, TransitionDef> = Object.fromEntries(TRANSITIONS.map((t) => [t.id, t])) as Record<Transition, TransitionDef>;
 
 /** a transition setting of a shot, falling back to the catalogue default */

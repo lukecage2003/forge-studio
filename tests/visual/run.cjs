@@ -37,6 +37,7 @@ function png(dataUrl) { return Buffer.from(dataUrl.split(',')[1], 'base64'); }
       for (const k in looks) res['look-' + k] = looks[k];
       if (S.renderGl) Object.assign(res, await S.renderGl());
       if (S.renderScenes) Object.assign(res, await S.renderScenes());
+      if (S.renderMotion) Object.assign(res, await S.renderMotion());
       return res;
     });
     await browser.close();

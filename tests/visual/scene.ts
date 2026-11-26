@@ -136,3 +136,22 @@ export async function renderScenes(): Promise<Record<string, string>> {
   }
   return out;
 }
+
+/** motion-design transitions (smear, impact frames, ink frame), sampled across their length */
+export async function renderMotion(): Promise<Record<string, string>> {
+  const ids: Transition[] = ['cut', 'smear', 'impact', 'inkframe'];
+  const p = await buildScene({}, ids);
+  p.shots = p.shots.map((s) => ({ ...s, transitionDur: 0.7, motion: 'static', shake: 0 }));
+  const W = 640, H = 360;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d')!;
+  const rd = createRenderer(W, H);
+  const out: Record<string, string> = {};
+  for (const ts of layoutShots(p).slice(1)) {
+    for (const f of [0.2, 0.4, 0.65, 0.9]) {
+      rd.draw(ctx, p, ts.start + ts.shot.transitionDur * f);
+      out[`mo-${ts.shot.transition}-${Math.round(f * 100)}`] = c.toDataURL('image/png');
+    }
+  }
+  return out;
+}

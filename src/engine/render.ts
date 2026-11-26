@@ -8,7 +8,7 @@ import { clamp, easeInOutCubic, easeInOutSine, easeOutBack, easeOutCubic, lerp }
 import { getImage } from './media';
 import { hashSeed, rng } from './rng';
 import { TRANSITION, tp } from './effects';
-import { EASE } from './motion';
+import { EASE, spring } from './motion';
 import { arrowHead, balloon, benDay, boil, bowPath, brush, caption, feltCircle, inkBox, INK, LETTER, PAPER_CARD, CAPTION, paperBackground, panelFrame, paperTexture, TITLE } from './ink';
 import { drawGlTransition } from './gl';
 import { draw3D, itemValues } from './scene3d';
@@ -80,7 +80,10 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
   const v = baseView(r, aspect, framing);
   const vh = v.vw / aspect;
   const k = shot.intensity;
-  const e = easeInOutSine(clamp(p, 0, 1));
+  // cut on motion: the camera never fully stops at a cut (part linear, part eased),
+  // so consecutive shots flow instead of start-stop-start
+  const pc = clamp(p, 0, 1);
+  const e = 0.4 * pc + 0.6 * easeInOutSine(pc);
   switch (motion) {
     case 'zoom-in':
     case 'zoom-out': {
@@ -1374,14 +1377,20 @@ export function drawCaption(ctx: Ctx, W: number, H: number, cap: Caption, local:
       if (charCount + w.length > chars) w = w.slice(0, chars - charCount);
       charCount += words[wi].length + 1;
       const isHi = wordIdx === hiWord && cap.anim === 'words';
-      let ws = 1;
+      let ws = 1, enter = 1;
+      if (cap.anim === 'words') {
+        // every word lands on a spring (rises, overshoots a hair, settles) as it is spoken
+        const tw = wordTimes?.[wordIdx] ?? wordIdx * ((dur * 0.85) / allWords);
+        enter = spring(Math.max(0, local - tw), 420, 22);
+      }
       if (isHi) {
         const t0 = wordTimes?.[hiWord] ?? hiWord * ((dur * 0.85) / allWords);
-        ws = lerp(1.18, 1, easeOutCubic(clamp((local - t0) / 0.16, 0, 1)));
+        ws = lerp(1.2, 1, spring(Math.max(0, local - t0), 300, 15));
       }
       ctx.save();
-      ctx.translate(x + ww / 2, y);
-      ctx.scale(ws, ws);
+      ctx.translate(x + ww / 2, y + (1 - enter) * size * 0.32);
+      ctx.scale(ws * lerp(0.6, 1, enter), ws * lerp(0.6, 1, enter));
+      if (enter < 1) ctx.globalAlpha = alpha * clamp(enter * 1.6, 0, 1);
       ctx.textAlign = 'center';
       if (P.glow) {
         ctx.shadowColor = isHi ? hiColor : 'rgba(0,0,0,0.9)';
@@ -1930,6 +1939,84 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.fillStyle = '#fff';
           ctx.fillRect(0, 0, W, H);
           break;
+        case 'smear': {
+          // cartoon smear: the old image accelerates away stretched with streaks,
+          // the new one arrives stretched and lands with a springy overshoot
+          const dir = rtl ? -1 : 1, st = 1.8 * amt;
+          const draw = (img: HTMLCanvasElement, sx: number, dx: number, al: number) => {
+            for (let g = 3; g >= 0; g--) {
+              ctx.globalAlpha = al * (g ? 0.22 / g : 1);
+              const gx = dx - dir * g * W * 0.07 * (sx - 1) / Math.max(0.01, st);
+              ctx.drawImage(img, W / 2 - (W * sx) / 2 + gx, 0, W * sx, H);
+            }
+          };
+          if (a < 0.5) {
+            const u = Math.pow(a / 0.5, 2.2);
+            draw(A, 1 + st * u, -dir * u * W * 0.95, 1);
+          } else {
+            const s = spring(((a - 0.5) / 0.5) * 0.6, 260, 16);
+            draw(B, 1 + st * Math.max(0, 1 - s) * 1.2, dir * (1 - s) * W * 0.95, 1);
+          }
+          break;
+        }
+        case 'impact': {
+          // manga impact frames: the next image flashes in hard, inverted black
+          // and white with speed lines, then lands with a decaying shake
+          if (a < 0.1) { ctx.drawImage(A, 0, 0); ctx.globalAlpha = a / 0.1; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); }
+          else if (a < 0.42) {
+            const inv = Math.floor((a - 0.1) / 0.08) % 2 === 0;
+            ctx.filter = `grayscale(1) contrast(7)${inv ? ' invert(1)' : ''}`;
+            ctx.drawImage(B, 0, 0);
+            ctx.filter = 'none';
+            const r = rng(hashSeed('impact') + Math.floor(a * 30));
+            ctx.fillStyle = inv ? '#fff' : '#000';
+            const R0 = Math.min(W, H) * 0.32, R1 = Math.hypot(W, H);
+            for (let i = 0; i < 70; i++) {
+              const ang = r() * Math.PI * 2, r0 = R0 * (0.8 + r() * 0.6), wd = 0.004 + r() * 0.012;
+              ctx.beginPath();
+              ctx.moveTo(W / 2 + Math.cos(ang) * r0, H / 2 + Math.sin(ang) * r0);
+              ctx.lineTo(W / 2 + Math.cos(ang - wd) * R1, H / 2 + Math.sin(ang - wd) * R1);
+              ctx.lineTo(W / 2 + Math.cos(ang + wd) * R1, H / 2 + Math.sin(ang + wd) * R1);
+              ctx.fill();
+            }
+          } else {
+            const k = 1 - (a - 0.42) / 0.58, f = Math.min(W, H) * 0.03 * amt * k * k;
+            const sc = 1 + 0.06 * k * k;
+            ctx.drawImage(B, W / 2 - (W * sc) / 2 + Math.sin(a * 97) * f, H / 2 - (H * sc) / 2 + Math.cos(a * 71) * f, W * sc, H * sc);
+          }
+          break;
+        }
+        case 'inkframe': {
+          // the next panel is inked in on paper, filled, then opens to the full frame
+          ctx.drawImage(A, 0, 0);
+          const U = Math.min(W, H) * 0.035;
+          ctx.save();
+          ctx.globalAlpha = clamp(a / 0.2, 0, 1);
+          paperBackground(ctx, W, H, project.accent, U, t);
+          ctx.restore();
+          const open = EASE.cinematic(clamp((a - 0.6) / 0.4, 0, 1));
+          const m = lerp(U * 2.2, 0, open), mt = lerp(H * 0.16, 0, open);
+          const fr = { x: m, y: mt, w: W - 2 * m, h: H - 2 * mt };
+          const fill = clamp((a - 0.3) / 0.25, 0, 1);
+          if (fill > 0) {
+            ctx.save();
+            ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();
+            ctx.globalAlpha = fill;
+            const sc = lerp(1.06, 1, EASE.enter(fill));
+            ctx.drawImage(B, W / 2 - (W * sc) / 2, H / 2 - (H * sc) / 2, W * sc, H * sc);
+            ctx.restore();
+          }
+          // the border draws itself clockwise from the top-left corner
+          const per = 2 * (fr.w + fr.h), d = clamp(a / 0.4, 0, 1);
+          ctx.save();
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = U * 0.3 * (1 - open * 0.7);
+          ctx.lineJoin = 'round';
+          ctx.setLineDash([per * d, per]);
+          ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.stroke();
+          ctx.restore();
+          break;
+        }
         default:
           ctx.drawImage(B, 0, 0);
       }

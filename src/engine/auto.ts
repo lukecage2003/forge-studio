@@ -97,7 +97,7 @@ export const STYLES: Record<AutoStyle, StyleDef> = {
     face: false, base: 1.7, min: 0.9, max: 3.4, intensity: 0.8, glide: 0.38, pageTr: 'whip', pageTrDur: 0.32,
     splashTr: 'flash', splashShake: 0.7, preset: 'tiktok', anim: 'words', beatEvery: 2,
     soloLayouts: [['full', 6], ['grid', 1]], faceLayouts: [['full', 1]],
-    hook: 2, faceDur: [2, 3], block: [5, 8], enterTr: 'whip', punchIn: 0.8, drift: 0.4, maxWords: 3, pagePool: ['whip', 'slash', 'zoom', 'glitch'],
+    hook: 2, faceDur: [2, 3], block: [5, 8], enterTr: 'whip', punchIn: 0.8, drift: 0.4, maxWords: 3, pagePool: ['whip', 'slash', 'zoom', 'glitch', 'smear'],
   },
   cinematic: {
     label: 'Cinématique', desc: 'YouTube sans visage : mouvements lents, fondus, place à la lecture et à la narration.',

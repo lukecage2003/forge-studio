@@ -59,7 +59,9 @@ export type Framing = 'fit' | 'fill';
 
 export type Transition = 'cut' | 'glide' | 'fade' | 'slide' | 'zoom' | 'whip' | 'flash' | 'slash' | 'iris' | 'glitch' | 'dip' | 'blur' | 'burn'
   // GPU transitions (gl-transitions)
-  | 'crosszoom' | 'warp' | 'defocus' | 'halftone' | 'inkbleed' | 'warpspeed' | 'gravitylens' | 'glitchdisplace' | 'wipe';
+  | 'crosszoom' | 'warp' | 'defocus' | 'halftone' | 'inkbleed' | 'warpspeed' | 'gravitylens' | 'glitchdisplace' | 'wipe'
+  // motion-design transitions
+  | 'smear' | 'impact' | 'inkframe';
 
 /**
  * How a comic shot is composed on screen.
