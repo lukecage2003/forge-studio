@@ -373,8 +373,10 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (bubbles > 0) w *= 1 + Math.min(4, bubbles) * 0.12;
     return { shot: s, w, area, pan, splash: s.zone === 'splash' || (area > 0.42 && s.zone !== 'zones'), cover, bubbles };
   });
+  /** long videos breathe: shots get longer as the video does (1 min = ×1, 5 min ≈ ×1.6) */
+  let breathe = 1;
   /** shortest time a panel can stay on screen and still be read */
-  const readFloor = (x: Panel) => (x.bubbles > 0 ? 1.15 + Math.min(4, x.bubbles) * 0.4 : x.bubbles === 0 ? 1.0 : Math.max(0.9, st.min)) * (x.shot.group ? 1 + x.shot.group.length * 0.4 : 1);
+  const readFloor = (x: Panel) => breathe * (x.bubbles > 0 ? 1.15 + Math.min(4, x.bubbles) * 0.4 : x.bubbles === 0 ? 1.0 : Math.max(0.9, st.min)) * (x.shot.group ? 1 + x.shot.group.length * 0.4 : 1);
 
   const minRead = (s: Shot) => {
     const n = s.caption.text.trim().split(/\s+/).filter(Boolean).length;
@@ -667,6 +669,7 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     if (target && list.length && (target - hookDur - titleDur) / list.length < st.min * 0.85) {
       list = groupPanels(list, Math.ceil(list.length / 3));
     }
+    if (target && !followedVoice) breathe = clamp(1 + (target - 75) / 225 * 0.6, 1, 1.6);
     // still too many panels to READ in the asked length: keep the strongest ones
     // (covers and splashes first, then by weight: art density, size, dialogue),
     // spread over the whole story, in reading order — never a slideshow of flashes
