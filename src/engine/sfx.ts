@@ -81,6 +81,10 @@ export function sfxEvents(p: Project): SfxEvent[] {
   const timed = layoutShots(p);
   for (const ts of timed) {
     const s = ts.shot;
+    // a sound chosen in the storyboard (or by hand) wins over the automatic one
+    if (s.sfx === 'none') continue;
+    if (s.sfx === 'impact') { ev.push({ t: ts.start, kind: 'impact', gain: 0.8 }); continue; }
+    if (s.sfx === 'whoosh') { ev.push({ t: ts.start - 0.18, kind: 'whoosh', gain: 0.7 }); continue; }
     const whoosh = TRANSITION[s.transition]?.sfx ?? 0;
     if (whoosh > 0) ev.push({ t: ts.start - 0.18, kind: 'whoosh', gain: whoosh });
     else if (s.transition === 'glide') ev.push({ t: ts.start - 0.05, kind: 'swish', gain: 0.25 });

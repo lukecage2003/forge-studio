@@ -7,6 +7,7 @@ import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
 import { aiRecut, analyzeComics, prepareMotion, researchComics } from '../actions';
 import { narration } from '../engine/narration';
+import { sentenceKey } from '../engine/storyboard';
 import { toast } from './Toast';
 import { FORMATS } from '../types';
 
@@ -52,6 +53,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const [script, setScript] = useState(script0);
   const hasVoiceWords = useStore((s) => !!s.project.aroll?.words.length || s.project.audio.some((a) => a.kind === 'voice' && !!a.words?.length));
   const [story, setStory] = useState<boolean>(hasVoiceWords || !!script0.trim());
+  const boardOk = useStore((s) => { const b = s.project.storyboard; return !!b && b.key === sentenceKey(narration(s.project).sentences); });
+  const [useBoard, setUseBoard] = useState(true);
   const [storyEngine, setStoryEngine] = useState<'local' | 'google'>(hasGoogle() ? 'google' : 'local');
   const google = hasGoogle();
 
@@ -86,7 +89,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         if (panels.length && sentences.length) matches = await geminiMatchPanels(panels, sentences.map((s) => s.text));
       }
       setBusy('Montage en cours…');
-      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story ? storyEngine : false, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
+      const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story || (boardOk && useBoard) ? storyEngine : false, board: boardOk && useBoard ? getState().project.storyboard : undefined, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       // the state before the auto edit stays one click away in the project's versions
       try { const { takeVersion } = await import('../lib/studio'); await takeVersion('Avant le montage automatique', true); } catch { /* no workspace: undo still works */ }
       update(() => project);
@@ -201,6 +204,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="story-box">
+          {boardOk && <Toggle on={useBoard} set={setUseBoard} label="Suivre mon storyboard" hint="Les images, mouvements et sons choisis phrase par phrase sont repris tels quels" />}
           <Toggle on={story} set={setStory} label="Suivre la narration : chaque phrase reçoit la case qui l’illustre"
             hint={hasVoiceWords ? 'Voix transcrite trouvée' : script.trim() ? 'Durées estimées depuis le script' : 'Transcris ta voix ou colle un script'} />
           {story && (

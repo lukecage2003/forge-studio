@@ -15,6 +15,7 @@ import { isFiller, keptShare, toTimeline, segsDuration, type Seg } from './speec
 import { validateProject } from './validate';
 import { narration } from './narration';
 import { planStory } from './story';
+import { applyBoardChoices, boardToPlan, type Board } from './storyboard';
 import { emphasisTimes } from './emphasis';
 import { brandOf } from './brand';
 import type { FxItem } from '../types';
@@ -55,6 +56,8 @@ export interface AutoOptions {
   matches?: Record<string, number>;
   /** follow the narration: each sentence gets the panel that illustrates it */
   story?: 'auto' | 'local' | 'google' | false;
+  /** the storyboard the user prepared: followed as written instead of a new match (engine/storyboard) */
+  board?: Board;
   /** creative direction profile (engine/direction): rhythm, palette, look, sound, budget */
   profile?: ProfileId;
   /** production model: what the video is made of (see MODELS) */
@@ -526,7 +529,10 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
   if (o.story && narr.sentences.length && panels.length) {
     /* ============================ story mode: follow the narration ============================ */
     const sents = narr.sentences;
-    const plan = await planStory(proj, panels.map((x) => x.shot), sents, o.story, o.onProgress);
+    const fromBoard = o.board ? boardToPlan(o.board, sents) : null;
+    if (o.board && !fromBoard) notes.push('Le script a changé depuis le storyboard : nouvelle association phrase → case. Refais le storyboard pour garder tes choix.');
+    else if (fromBoard) notes.push('Montage fait d’après ton storyboard');
+    const plan = fromBoard ?? await planStory(proj, panels.map((x) => x.shot), sents, o.story, o.onProgress);
     const byId = new Map(panels.map((x) => [x.shot.id, x]));
     const used = new Set<string>();
     const named = new Set<string>();
@@ -1037,6 +1043,8 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     again.report.notes.unshift('Aucune case ne correspond clairement à la narration : alternance visage / cases classique à la place. Ajoute les bonnes planches ou corrige dans « À vérifier ».');
     return again;
   }
+  // camera and sound chosen in the storyboard win over the director's choice
+  if (o.board) proj = { ...proj, shots: applyBoardChoices(proj.shots, o.board) };
   o.onProgress?.('Contrôle final…', 0.97);
   noteMontage();
   const checked = validateProject(proj);

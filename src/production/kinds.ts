@@ -192,6 +192,36 @@ export function registerKinds(q: TaskQueue) {
     },
   });
 
+  /* ---------------------------------------------------- storyboard */
+  q.register<{ engine: 'local' | 'google'; key: string }, import('../engine/storyboard').Board>({
+    kind: 'storyboard.plan', lane: 'heavy', family: 'ocr', keepResult: true, priority: 65,
+    label: () => 'Storyboard : une image par phrase',
+    key: (p) => `${pid()}|${p.key}|${p.engine}`,
+    // edits made in the storyboard while it is computed are never overwritten
+    guard: () => `${pid()}|${JSON.stringify((getState().project.storyboard?.rows ?? []).map((r) => r.edited ? [r.shotId, r.mode, r.camera, r.sound] : 0))}`,
+    run: async (ctx, p) => {
+      const { narration } = await import('../engine/narration');
+      const { planStory } = await import('../engine/story');
+      const { buildBoard } = await import('../engine/storyboard');
+      const { cachedDetection } = await import('../engine/panelAI');
+      const project = getState().project;
+      const sents = narration(project).sentences;
+      if (!sents.length) throw Object.assign(new Error('Pas de narration : ajoute un script ou transcris le rush'), { kind: 'input' });
+      const skip = new Set(project.pages.filter((pg) => pg.skip).map((pg) => pg.id));
+      const panels = project.shots.filter((s) => s.pageId && !skip.has(s.pageId));
+      if (!panels.length) throw Object.assign(new Error('Pas encore de cases : importe des planches'), { kind: 'input' });
+      const plan = await planStory(project, panels, sents, p.engine, (label, x) => ctx.progress(x, label));
+      const bubblesOf = (id: string) => {
+        const s = project.shots.find((x) => x.id === id); const pg = s && project.pages.find((g) => g.id === s.pageId);
+        const det = pg && cachedDetection(pg.mediaId);
+        if (s?.balloons?.length) return s.balloons.length;
+        return det && s ? det.bubbles.filter((b) => b.s >= 0.35 && b.x + b.w / 2 > s.rect.x && b.x + b.w / 2 < s.rect.x + s.rect.w && b.y + b.h / 2 > s.rect.y && b.y + b.h / 2 < s.rect.y + s.rect.h).length : 0;
+      };
+      return buildBoard(getState().project, sents, plan, { hasFace: !!project.aroll, bubblesOf, prev: getState().project.storyboard });
+    },
+    commit: (b) => { update((x) => ({ ...x, storyboard: b })); toast(`Storyboard prêt : ${b.rows.length} phrases`); },
+  });
+
   /* ---------------------------------------------------- animation */
   q.register<{ shots: number }, { ok: true }>({
     kind: 'motion.prepare', lane: 'heavy', family: 'vision', priority: 30,
@@ -346,6 +376,13 @@ export const scriptHash = () => hashOf(getState().project.script ?? '');
 export async function deliver(o: { name: string; quality: 'high' | 'max'; fps: number; burn: boolean; platforms: import('../engine/delivery').PlatformId[] }) {
   const r = await renderVideo({ name: o.name, quality: o.quality, fps: o.fps, scale: 1, burn: o.burn, format: '9:16' });
   return { render: r, kit: enqueue('deliver', { platforms: o.platforms, name: o.name }, { group: 'render', after: [r.id] }) };
+}
+
+export async function planBoard(engine: 'local' | 'google' = 'local') {
+  await startOrchestrator();
+  const { narration } = await import('../engine/narration');
+  const { sentenceKey } = await import('../engine/storyboard');
+  return enqueue('storyboard.plan', { engine, key: sentenceKey(narration(getState().project).sentences) }, { force: true, priority: 85 });
 }
 
 export async function runTask(kind: string, params: Record<string, unknown>, force = true) {

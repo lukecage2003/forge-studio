@@ -17,6 +17,7 @@ const AssistantModal = lazy(() => import('./components/AssistantModal').then((m)
 import { ConsentDialog } from './components/ConsentDialog';
 const LibraryModal = lazy(() => import('./components/LibraryModal').then((m) => ({ default: m.LibraryModal })));
 const LiveModal = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveModal })));
+const StoryboardModal = lazy(() => import('./components/StoryboardModal').then((m) => ({ default: m.StoryboardModal })));
 const TasksPanel = lazy(() => import('./components/TasksPanel').then((m) => ({ default: m.TasksPanel })));
 const ProjectsModal = lazy(() => import('./components/ProjectsModal').then((m) => ({ default: m.ProjectsModal })));
 const ReviewModal = lazy(() => import('./components/ReviewModal').then((m) => ({ default: m.ReviewModal })));
@@ -50,6 +51,7 @@ export default function App() {
   const reviewOpen = useStore((s) => !!s.ui.reviewOpen);
   const projectsOpen = useStore((s) => !!s.ui.projectsOpen);
   const tasksOpen = useStore((s) => !!s.ui.tasksOpen);
+  const storyboardOpen = useStore((s) => !!s.ui.storyboardOpen);
   const liveLog = useStore((s) => !!s.ui.liveLog);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
@@ -94,7 +96,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen || ui.reviewOpen || ui.projectsOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen || ui.reviewOpen || ui.projectsOpen || ui.storyboardOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -191,6 +193,7 @@ export default function App() {
       {reviewOpen && <ErrorBoundary area="fenêtre"><ReviewModal /></ErrorBoundary>}
       {projectsOpen && <ErrorBoundary area="fenêtre"><ProjectsModal /></ErrorBoundary>}
       {tasksOpen && <ErrorBoundary area="fenêtre"><TasksPanel /></ErrorBoundary>}
+      {storyboardOpen && <ErrorBoundary area="fenêtre"><StoryboardModal /></ErrorBoundary>}
       {liveLog && !liveOpen && <ErrorBoundary area="journal"><LiveLog /></ErrorBoundary>}
       </Suspense>
       <ConsentDialog />

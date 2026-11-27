@@ -141,6 +141,8 @@ export interface Shot {
   why?: string;
   /** set by the auto editor; used by Forge Brain to learn from corrections */
   auto?: { duration: number; layout: Layout; motion: Motion; style: string };
+  /** sound of this shot: automatic (transitions, impacts), none, or forced (storyboard / by hand) */
+  sfx?: 'auto' | 'none' | 'impact' | 'whoosh';
 }
 
 export type DiagramKind = 'timeline' | 'network' | 'versus' | 'ranking'
@@ -282,6 +284,8 @@ export interface Project {
   /** creative direction profile used by the last auto edit */
   /** display time ranges by kind of image (seconds), used by the review: simple, panel, page, reveal */
   holds?: { simple: readonly [number, number]; panel: readonly [number, number]; page: readonly [number, number]; reveal: readonly [number, number] };
+  /** storyboard: the plan of the video sentence by sentence, edited before the auto edit (engine/storyboard) */
+  storyboard?: import('./engine/storyboard').Board;
   /** production management (studio): where the video stands, its checklist, notes */
   production?: {
     status: 'idee' | 'script' | 'tournage' | 'montage' | 'finition' | 'publie';
