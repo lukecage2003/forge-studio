@@ -1,0 +1,105 @@
+# Rapport de campagne — Forge Complete Creative Production Studio
+
+27 novembre 2026. Commits `363cb65` → `ea34d48`, tous publiés après les contrôles automatiques (Linux, Windows, puis vérification du site en ligne).
+
+## 1. État initial
+Voir [ETAT-TECHNIQUE.md](ETAT-TECHNIQUE.md). En résumé :
+- Socle opérationnel : planches, caméra BD, montage auto, storyboard, orchestrateur de tâches, médiathèque, son, livraison, Zéro coût.
+- Partiel : pas de numéro de schéma, mémoire globale seulement, contexte IA non ciblé, aucun outil d'espace disque, pas de scénario complet dans la CI.
+- Absent : espaces de travail (studios).
+- Aucune fonction factice trouvée.
+
+## 2. Architecture réellement présente
+- Une source de vérité, `store.ts`, avec historique d'annulation.
+- Moteurs purs (`engine/`) et un seul rendu pour l'aperçu et l'export.
+- Stockage `lib/workspace` : dossier ou OPFS.
+- Orchestrateur de production (`production/`) et orchestrateur IA (`ai/`).
+- Les huit studios sont des vues sur ce même noyau.
+- L'export passe par WebCodecs avec mediabunny. FFmpeg n'est pas utilisé, et ce choix est assumé.
+
+## 3–4. Modifications et fonctionnalités finalisées
+| Phase | Réalisé | Validation |
+|---|---|---|
+| 2–3 Projets | `schemaVersion`, migrations ordonnées ; un projet d'une version plus récente garde ses réglages inconnus et l'utilisateur est prévenu | tests unitaires |
+| 2–3 `.forge` | manifeste (schéma, version de Forge, versions des moteurs, médias manquants) ; versions du projet et médias qu'elles utilisent | tests unitaires et e2e |
+| 2–3 Ouverture d'un `.forge` | un projet remplacé est d'abord gardé dans ses versions | tests unitaires et e2e |
+| 2–3 Stockage | place prise par type ; « Libérer de la place » met à la corbeille (restaurable) et ne touche jamais un média utilisé par un projet ou une version | tests unitaires et navigateur |
+| 4/6 Studios | huit studios, état lu dans le projet, vraies commandes ; une seule liste de commandes pour la palette et les studios ; pas de faux « prêt » | tests unitaires et e2e |
+| 4/6 Barre du haut | le sélecteur de format ne chevauche plus le reste à 1440 px (bug existant) | mesuré dans le navigateur |
+| 5 Contexte IA | l'assistant n'envoie que le passage et les parties concernés, et affiche ce qui est envoyé (4 fois moins de texte pour une demande ciblée) | tests unitaires |
+| 5 Mémoire | Forge Brain par projet, par format et en général ; effacement par niveau, annulable ; reprise de l'ancienne mémoire | tests unitaires |
+| 5 Zéro coût | vérifié : aucun appel payant ne contourne la garde | tests existants |
+| 7 Performance | moteur vidéo retiré du premier chargement | mesuré |
+| 7–8 Corrections | rush WebM sans durée (durée infinie) ; versions perdues en ouvrant un `.forge` juste après le démarrage | e2e |
+| 8 Scénario complet | les 15 étapes demandées | e2e, CI Linux et Windows |
+| 10 Documentation | lancement, compilation, sauvegarde et récupération, studios, licences | — |
+
+## 5. Encore incomplet (non fait dans cette campagne)
+- **Montage multipiste libre** : il y a une seule piste d'images, plus le rush, la voix, la musique, les sous-titres et les effets. Ce n'est pas une timeline de NLE avec des pistes vidéo empilées à volonté.
+- **Proxies vidéo** : il n'y en a pas. Les rushes sont lus en original.
+- **Historique d'annulation** : il n'est pas conservé après fermeture. Les versions jouent ce rôle.
+- **Barre de nouvelle version et fenêtre de rechargement** : testées localement et en CI, pas encore observées en ligne sur un vrai changement de version.
+
+## 6. Fichiers importants
+- **Nouveaux :**
+  - `src/lib/schema.ts`
+  - `src/lib/commands.ts`
+  - `src/lib/studios.ts`
+  - `src/components/StudioBar.tsx`
+  - `tests/e2e/production.e2e.cjs`
+  - `tests/{schema,studios,context,brain}.test.ts`
+  - `docs/ETAT-TECHNIQUE.md`
+- **Modifiés :**
+  - `src/lib/projectFile.ts`, `src/lib/workspace.ts`, `src/lib/studio.ts`
+  - `src/engine/brain.ts`, `src/engine/media.ts`
+  - `src/ai/tasks.ts`
+  - `src/store.ts`, `src/App.tsx`
+  - `ProjectsModal`, `SettingsModal`, `AssistantModal`, `CommandPalette`, `TopBar`
+  - `README.md`, `CLAUDE.md`, `deploy.yml`
+
+## 7. Tests
+- **Unitaires :** 217 passés, 5 ignorés. Les 5 ignorés sont les tests de services en ligne, lancés seulement à la demande.
+- **Régression visuelle :** 104 images, 0 différence.
+- **Bout en bout :** 9 scénarios, tous passés. Ils couvrent la production complète, la livraison, le storyboard, la médiathèque, la finition, l'orchestrateur, le studio et la mise à jour de version.
+- **Build :** vérification des références passée (102 fichiers).
+- **CI :** tout passe sur Linux et sur Windows, puis le site en ligne est vérifié.
+
+## 8. Mesures
+Mesurées sur le build de production, sous `/forge-studio/`.
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Premier chargement | 1,63 Mo | 1,05 Mo |
+| Interface visible, local | 0,23 s | 0,21 s |
+| Interface visible, 4G simulée | 1,84 s | 1,38 s |
+| Import et analyse de 4 planches (modèle compris) | — | 11 à 13 s |
+| Rendu 1080×1920 | — | environ 4 × la durée de la vidéo |
+| Réouverture d'un `.forge` de 2,2 Mo | — | 0,4 s |
+
+Le rendu a été mesuré sans GPU, dans un conteneur Linux. Il n'a pas été mesuré sur ton PC.
+
+## 9. Compatibilité
+- **Linux et Windows :** les scénarios de bout en bout passent sur Linux et sur Windows, dans Chromium sur les machines de GitHub Actions. Le scénario complet passe sur les deux. Ton PC Windows : **non testé**.
+- **Firefox et Safari :** non testés de bout en bout.
+
+## 10. Licences
+Le tableau est dans [ETAT-TECHNIQUE.md](ETAT-TECHNIQUE.md#licences-vérifiées-le-27-novembre-2026).
+- Les licences sont toutes permissives et npm audit ne trouve aucune vulnérabilité.
+- À surveiller :
+  - **Qwen2.5-3B** (IA locale) est **non commercial** ;
+  - **Llama** demande une mention ;
+  - pour **YOLOv13**, la licence est à revérifier avant tout usage commercial.
+
+## 11–12. Problèmes connus et risques
+- Les modèles transformers.js viennent d'un CDN au premier usage : ils sont indisponibles hors ligne tant qu'ils ne sont pas en cache.
+- Le rendu logiciel est lent sans carte graphique.
+- La mémoire de préférences reste dans ce navigateur. Elle ne voyage pas dans le `.forge`, et c'est volontaire.
+- Un onglet resté ouvert plus de 30 jours après une publication passera par la fenêtre de rechargement.
+
+## 13–15. Lancement, compilation, sauvegarde
+Voir le [README](../README.md) : « Lancer en local », « Compiler et vérifier », « Sauvegarder et récupérer son travail ».
+
+## 16. Préparation à la release
+**Utilisable en production personnelle.** La chaîne complète, du projet vide à la vidéo exportée puis au projet rouvert, est validée automatiquement à chaque publication, sur Linux et Windows.
+
+**Pas une release « professionnelle » complète.** Il manque la timeline multipiste libre et les proxies, et le test sur ta machine reste à faire.
