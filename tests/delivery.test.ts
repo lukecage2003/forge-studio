@@ -40,6 +40,7 @@ describe('kit de publication', () => {
   const p = { ...newProject(), name: 'Galactus contre les Ultimates', script: 'Dans l’espace, une machine géante hurle un seul mot. Black Panther réunit une équipe.', pages: [{ source: 'The Ultimates (2015) 001.pdf' }, { source: 'The Ultimates (2015) 001.pdf' }] as never };
   it('lit la série dans le nom des fichiers et l’accroche dans le script', () => {
     expect(seriesOf(p)).toEqual(['The Ultimates']);
+    expect(seriesOf({ ...p, pages: [{ source: 'images' }] as never })).toEqual([]); // loose pictures: no series
     expect(hookOf(p)).toBe('Dans l’espace, une machine géante hurle un seul mot.');
   });
   it('propose titre, description et hashtags sans inventer, dans la limite de la plateforme', () => {

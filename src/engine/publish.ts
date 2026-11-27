@@ -28,7 +28,9 @@ const tag = (s: string) => '#' + s.normalize('NFD').replace(/[̀-ͯ]/g, '').repl
 export function seriesOf(p: Project): string[] {
   const out = new Map<string, number>();
   for (const pg of p.pages) {
-    const src = (pg.source ?? '').replace(/\.[a-z0-9]{2,4}$/i, '');
+    // loose pictures have no series: their « source » is only the word « images »
+    if (!pg.source || pg.source === 'images') continue;
+    const src = pg.source.replace(/\.[a-z0-9]{2,4}$/i, '');
     const name = words(src.replace(/[_.]/g, ' ').replace(/\(?\b(19|20)\d{2}\b\)?/g, ' ').replace(/#?\b\d{1,4}\b.*$/, ' ').replace(/\b(vol|v|n°|no|tome|issue)\.?\s*$/i, ''));
     if (name.length >= 3 && /\p{L}{3}/u.test(name)) out.set(name, (out.get(name) ?? 0) + 1);
   }
@@ -49,10 +51,10 @@ export function buildPost(p: Project, id: PlatformId): Post {
   const hook = hookOf(p);
   const title = words(p.name && !/^nouveau projet|sans titre/i.test(p.name) ? p.name : hook || series[0] || 'Vidéo comics').slice(0, id === 'shorts' ? 100 : 150);
   sources.push(p.name ? 'titre : nom du projet' : hook ? 'titre : première phrase du script' : 'titre : série importée');
-  const lines = [hook, series.length ? `📚 ${series.slice(0, 2).join(' · ')}` : '', names.length ? `Avec ${names.slice(0, 4).join(', ')}.` : ''].filter(Boolean);
+  const lines = [hook, series.length ? `📚 ${series.slice(0, 2).join(' · ')}` : '', names.length ? `Noms cités : ${names.slice(0, 4).join(', ')}.` : ''].filter(Boolean);
   if (hook) sources.push('description : accroche du script');
   if (series.length) sources.push(`série : nom des fichiers importés (${series[0]})`);
-  if (names.length) sources.push(`personnages : trouvés dans le script et les cases (${names.slice(0, 3).join(', ')})`);
+  if (names.length) sources.push(`noms cités : trouvés dans le script et les cases (${names.slice(0, 3).join(', ')})`);
   const pool = [...series.slice(0, 1).map(tag), ...names.slice(0, 3).map(tag), '#comics', id === 'shorts' ? '#shorts' : id === 'tiktok' ? '#comicstok' : '#bd'];
   const hashtags = [...new Set(pool.filter((h) => h.length > 2))].slice(0, pf.hashtagsMax);
   const description = words(lines.join('\n')) ? lines.join('\n') + `\n\n${hashtags.join(' ')}` : hashtags.join(' ');
