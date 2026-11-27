@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Scissors, MonitorPlay, Upload, Wand2, ImagePlus, Download, FileVideo, Loader2 } from 'lucide-react';
 import { TopBar } from './components/TopBar';
+import { StudioBar } from './components/StudioBar';
 import { Sidebar } from './components/Sidebar';
 import { PageEditor } from './components/PageEditor';
 import { Preview } from './components/Preview';
@@ -165,6 +166,7 @@ export default function App() {
   return (
     <div className="app">
       <TopBar />
+      <StudioBar />
       <div className="workspace">
         <ErrorBoundary area="planches"><Sidebar /></ErrorBoundary>
         <main className="center">

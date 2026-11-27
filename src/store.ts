@@ -47,6 +47,9 @@ export interface UIState {
   where?: 'folder' | 'browser' | 'reconnect' | 'none';
   /** name of the chosen folder */
   whereName?: string;
+  /** current studio (workspace) and whether its panel is open */
+  studio?: import('./lib/commands').StudioId;
+  studioPanel?: boolean;
 }
 
 export const defaultCaption = (): Omit<Caption, 'text'> => ({ preset: 'tiktok', anim: 'pop', y: 0.78, size: 1 });
