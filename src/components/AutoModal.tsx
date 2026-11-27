@@ -93,7 +93,8 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
         if (doubt) toast(`${doubt} association(s) phrase → case à vérifier : ouvre la « Correction express » (inspecteur du projet), au clavier en quelques secondes.`); }
       setUI({ mode: 'preview', playhead: 0, selection: null });
-      void prepareMotion({ quiet: true }); // balloons + 2.5D depth in the background
+      // balloons + 2.5D depth in the background, as a task (pausable, after the more urgent work)
+      void import('../production/kinds').then((K) => K.runTask('motion.prepare', { shots: getState().project.shots.length }, false)).catch(() => prepareMotion({ quiet: true }));
       const bits = [`${report.shots} cases`, `${report.duration.toFixed(1)} s`];
       if (report.faceShare != null) bits.push(`visage ${Math.round(report.faceShare * 100)} %`);
       if (report.subtitles) bits.push(`${report.subtitles} sous-titres`);

@@ -9,13 +9,13 @@ Comic video editor (TikTok, Shorts, YouTube) in the browser: React 19 + TypeScri
 ## Commands
 | Task | Command |
 |---|---|
-| Typecheck | `npx tsc -b` |
+| Typecheck | `npx tsc -p tsconfig.app.json --noEmit` (the root `tsc -p .` checks nothing: it only has references) |
 | Unit tests | `npm test` (vitest, about 90 tests, under 10 s) |
 | Visual regression | `npm run test:visual`, then `npm run test:visual:update` after an intended change. CI compares against the previous commit; put `[visuel]` in the commit message to accept a change. |
 | Live services | `FORGE_LIVE=1 npx vitest run tests/live.test.ts` (no key needed) |
 | Build | `npm run build` |
 | Dev server | `npx vite --port 5199 --strictPort` (end-to-end scripts drive it with Playwright) |
-| End-to-end | `node tests/e2e/studio.e2e.cjs` against the dev server. Restart the dev server after editing sources first: Vite's HMR timestamps can load a second copy of a module (two stores), which breaks scripts that import modules directly. |
+| End-to-end | `node tests/e2e/studio.e2e.cjs` and `node tests/e2e/orchestrator.e2e.cjs` against the dev server (CI runs both on Linux and Windows before every deploy). Restart the dev server after editing sources first: Vite's HMR timestamps can load a second copy of a module (two stores), which breaks scripts that import modules directly. |
 
 ## Invariants (never break)
 - **Preview equals export.** One renderer, `createRenderer().draw(ctx, project, t)` in `src/engine/render.ts`, and it is a pure function of time.
@@ -28,11 +28,14 @@ Comic video editor (TikTok, Shorts, YouTube) in the browser: React 19 + TypeScri
 - **Editorial relevance over animation.** Every automatic choice says why in `shot.why`; the director only touches `shot.auto` shots the user never edited; the review (`qc.ts`) recommends, it never changes the video silently.
 - **Artwork is never altered.** Only views (camera paths) and masks (panel shapes, shared composition) change; a panel that can't be isolated cleanly is filmed inside its page.
 - **Existing features stay.** Never remove one. Extend by modules.
+- **Long work is a task.** Anything that runs for seconds goes through the production orchestrator (`src/production/kinds.ts`), never a new queue: it calls the existing engines (`jobs.heavy`, the AI orchestrator), gives a `guard` so a result computed before a manual edit is never applied silently, and awaits `ctx.checkpoint()` between steps.
+- **Large media are stored once.** Files over 8 MB (rushes) live in the project workspace only (`engine/media` sink); pages stay cached in IndexedDB.
 
 ## Map
 | Folder | Contents |
 |---|---|
-| `src/engine/` | Pure engines: `render` (frame), `auto` (auto edit), `direction` (8 creative profiles + effect budget), `director` (Creative Director: editorial sequences, treatments, camera grammar, transition diversity; runs after `direction`), `narrative` / `scriptIntel` (script understanding), `speech` (rough cut), `faces` (`cameraPath` = vertical reframing), `audio` / `loudness` / `denoise` / `voicepro` (sound), `library` (music), `export` (MP4 via mediabunny/WebCodecs), `otio` (DaVinci), `report` / `qc` (quality), `scene3d` (three.js), `gl/` (GPU transitions), `hardware` (PC profile), `panelAI` (local YOLO panel + balloon detector, model in `public/models`), `paddleOcr` (local PaddleOCR line detection + English reading of the lettering, Tesseract as fallback; `understand.ocrPages` groups lines by balloon), `classify` (page kinds), `ink` ("Encre" comic-print look of diagrams and maps), `hold` (display time per image), `styles` (8 art directions), `favorites` (user presets), `camerapath` (smooth keyed camera paths), `comicCamera` (comic camera engine: page glide, panel navigation, reveal, detail, shared composition, panel shapes) |
+| `src/engine/` | Pure engines: `render` (frame), `auto` (auto edit), `direction` (8 creative profiles + effect budget), `director` (Creative Director: editorial sequences, treatments, camera grammar, transition diversity; runs after `direction`), `narrative` / `scriptIntel` (script understanding), `speech` (rough cut), `faces` (`cameraPath` = vertical reframing), `audio` / `loudness` / `denoise` / `voicepro` (sound), `library` (music), `export` (MP4 via mediabunny/WebCodecs), `otio` (DaVinci), `report` / `qc` (quality), `scene3d` (three.js), `gl/` (GPU transitions), `hardware` (PC profile), `panelAI` (local YOLO panel + balloon detector, model in `public/models`), `paddleOcr` (local PaddleOCR line detection + English reading of the lettering, Tesseract as fallback; `understand.ocrPages` groups lines by balloon), `classify` (page kinds), `ink` ("Encre" comic-print look of diagrams and maps), `hold` (display time per image), `styles` (8 art directions), `favorites` (user presets), `camerapath` (smooth keyed camera paths), `comicCamera` (comic camera engine: page glide, panel navigation, reveal, detail, shared composition, panel shapes), `queue` (production orchestrator: task queue with dependencies, priorities, pause / cancel / retry one step, persistence, stale-result protection), `resources` (resource governor: slots per lane from cores, memory, battery, interface lag, user activity; `yieldToUI`), `jobs` (one local model family in memory; the queue groups heavy work by it) |
+| `src/production/` | The app's orchestrator: `orchestrator` (queue instance, IndexedDB persistence, start / resume), `kinds` (tasks: page reading, page text, classification, rush analysis, face, transcription, subtitles, script analysis, motion preparation, render, quality control) |
 | `src/lib/` | `workspace` (project storage: folder on disk or browser OPFS, versions, templates, shared media), `studio` (session side: autosave, crash recovery, open / create / duplicate projects), `projectFile` (.forge zip with every media), `db` (IndexedDB journal and media cache) |
 | `src/ai/` | Multi-AI orchestrator: `types`, `config`, `vault`, `ledger` (quotas, cost, cache, history), `providers/*`, `models`, `orchestrator`, `prompts`, `tasks` |
 | `src/components/` | UI, one modal per feature, lazy-loaded from `App.tsx` |

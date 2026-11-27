@@ -1,10 +1,10 @@
 import type { DiagramKind, FxItem, FxKind } from './types';
-import type { AudioKind, Page, Project, Rect } from './types';
+import type { AudioKind, Page, Project, Rect, Shot } from './types';
 import { getState, newShot, setUI, update } from './store';
 import { getImage, importAudio, importImage } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
-import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, readPageText, trimBottomToArt, type PageText } from './engine/classify';
+import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, trimBottomToArt, type PageText } from './engine/classify';
 import { comicOrder, cutPageSmart, detectWithAI } from './engine/panelAI';
 import { panelShape } from './engine/comicCamera';
 import type { PageCut } from './engine/detect';
@@ -33,113 +33,108 @@ export async function importPages(files: File[], opts: { autoCut?: boolean } = {
         toast(`${imgs[i].name} : image illisible, ignorée.`, 'error');
       }
     }
-    let zones = 0, byAI = 0;
-    const kinds: Partial<Record<PageKind, number>> = {};
-    // 1. read every page first (AI panels + balloons, async), 2. then classify with the issue's context
-    const cuts = new Map<string, PageCut & { by: 'ia' | 'algo'; bubbles: number }>();
-    const rtl = getState().project.readingOrder === 'rtl';
-    if (opts.autoCut) {
-      for (let i = 0; i < pages.length; i++) {
-        setUI({ busy: `Lecture des cases et des bulles ${i + 1}/${pages.length}…` });
-        const pg = pages[i], a = getImage(pg.mediaId)!;
-        const cut = await cutPageSmart(pg.mediaId, a.img, a.width, a.height, rtl);
-        cuts.set(pg.id, cut);
-        if (cut.by === 'ia') byAI++;
-      }
-    }
-    // pages that may not be story pages (few balloons, or the first/last ones of a file):
-    // read their text, because credits, ads and prose say what they are better than the picture
-    const texts = new Map<string, PageText>();
-    if (opts.autoCut) {
-      const suspects = pages.filter((pg) => {
-        const c = cuts.get(pg.id);
-        const i = pg.srcIndex ?? 0, n = pg.srcCount ?? 1;
-        return (c?.bubbles ?? -1) <= 2 || i < 6 || i >= n - 4;
-      });
-      try {
-        const { pageText } = await import('./engine/understand');
-        for (let i = 0; i < suspects.length; i++) {
-          setUI({ busy: `Lecture du texte des pages spéciales ${i + 1}/${suspects.length}…` });
-          const a = getImage(suspects[i].mediaId);
-          if (a) { const r = await pageText(a.img, a.width, a.height); texts.set(suspects[i].id, readPageText(r.text, r.words)); }
-        }
-      } catch {
-        toast('Lecture du texte des pages indisponible (hors ligne ?) : classement par l’image seulement.', 'info');
-      }
-    }
-    // scan duplicates: same picture as an earlier page of the import or of the project
-    const seen = [...getState().project.pages, ...pages].map((pg) => {
-      const a = getImage(pg.mediaId);
-      return { pg, h: a ? pageHash(a.img, a.width, a.height) : '' };
-    });
-    let dups = 0;
-    for (let i = 0; i < seen.length; i++) {
-      if (!pages.includes(seen[i].pg) || !seen[i].h) continue;
-      const twin = seen.slice(0, i).find((o) => o.h && hashDistance(o.h, seen[i].h) <= 4 && Math.abs(o.pg.width / o.pg.height - seen[i].pg.width / seen[i].pg.height) < 0.02);
-      if (twin) { seen[i].pg.dupOf = twin.pg.id; dups++; }
-    }
-    update((p) => {
-      let next: Project = { ...p, pages: [...p.pages, ...pages] };
-      if (opts.autoCut) {
-        const aspects = new Map<string, number>();
-        for (const src of new Set(pages.map((x) => x.source ?? ''))) aspects.set(src, medianAspect(pages.filter((x) => x.source === src)));
-        let prev: { source?: string; kind?: PageKind } = {};
-        for (const pg of pages) {
-          const a = getImage(pg.mediaId)!;
-          const cut = cuts.get(pg.id) ?? { ...cutPage(a.img, a.width, a.height, p.readingOrder === 'rtl'), by: 'algo' as const, bubbles: -1 };
-          const cls = classifyPage(a.img, a.width, a.height, cut, {
-            srcIndex: pg.srcIndex ?? 0, srcCount: pg.srcCount ?? 1, medianAspect: aspects.get(pg.source ?? '') ?? 0.65,
-            hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined, bubbles: cut.bubbles,
-          });
-          const pt = texts.get(pg.id);
-          const byText = pt && !(pg.kindWhy && cls.why === 'ComicInfo.xml') ? kindFromText(pt, cut.bubbles, cut.diag?.biggest ?? (cut.kind === 'splash' ? 1 : 0), cut.kind === 'panels' ? cut.rects.length : 0) : null;
-          // the first page of a file stays its cover even when it names its authors
-          if (byText && !(cls.kind === 'cover' && pg.srcIndex === 0)) { cls.kind = byText.kind; cls.why = byText.why; }
-          // front matter with names and no balloons: the cast / team roster page, not story
-          else if (!byText && pt && (pg.srcIndex ?? 9) <= 5 && cut.bubbles === 0 && pt.words >= 20 && cls.kind === 'story') { cls.kind = 'text'; cls.why = `page de présentation (${pt.words} mots, aucune bulle, début du numéro)`; }
-          // opening page: panels that sit on the credits block are not story
-          if (byText?.dropCredits) cut.rects = cut.rects.map((r) => trimBottomToArt(a.img, a.width, a.height, r));
-          if (byText?.dropCredits && pt?.creditsBox) {
-            const cb = pt.creditsBox;
-            const over = (r: Rect) => { const w = Math.min(r.x + r.w, cb.x + cb.w) - Math.max(r.x, cb.x), h = Math.min(r.y + r.h, cb.y + cb.h) - Math.max(r.y, cb.y); return w > 0 && h > 0 ? (w * h) / (r.w * r.h) : 0; };
-            // a panel that runs into the block from above stops where the block starts;
-            // a panel inside the block goes
-            cut.rects = cut.rects
-              .map((r) => (over(r) > 0 && cb.y > r.y + r.h * 0.25 ? { ...r, h: Math.round(cb.y - r.y) } : r))
-              .filter((r) => over(r) < 0.4);
-          }
-          prev = { source: pg.source, kind: cls.kind };
-          pg.kind = cls.kind;
-          pg.kindWhy = cls.why;
-          pg.skip = PAGE_KINDS[cls.kind].skip;
-          if (pg.dupOf && cls.kind !== 'cover') { pg.skip = true; pg.kindWhy = `${cls.why} · doublon d'une page précédente`; }
-          pg.cut = cut.kind;
-          pg.cutBy = cut.by;
-          if (cut.doubt && cut.rects.length > 2) pg.orderDoubt = cut.doubt;
-          pg.bubbles = cut.bubbles;
-          kinds[cls.kind] = (kinds[cls.kind] ?? 0) + 1;
-          const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'title' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
-          if (!whole && cut.kind === 'zones') zones++;
-          const rects = whole ? [{ x: 0, y: 0, w: a.width, h: a.height }] : cut.rects;
-          // the real outline of each panel (slanted gutters): a mask, never a crop of the neighbour
-          const shots = rects.map((rect) => {
-            const shape = !whole && cut.kind === 'panels' ? panelShape(a.img, a.width, a.height, rect) : null;
-            return newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind, ...(shape ? { shape } : {}) });
-          });
-          next = { ...next, shots: [...next.shots, ...shots] };
-        }
-      }
-      return next;
-    });
-    const n = getState().project.shots.length;
+    // the pages are in the project at once: an interruption never loses an import
+    for (const pg of pages) if (opts.autoCut) pg.analysing = true;
+    update((p) => ({ ...p, pages: [...p.pages, ...pages] }));
     setUI({ activePageId: pages[0]?.id ?? null, selection: pages[0] ? { kind: 'page', id: pages[0].id } : null });
-    toast(`${pages.length} page${pages.length > 1 ? 's' : ''} importée${pages.length > 1 ? 's' : ''} · ${n} plans${zones ? ` · ${zones} page${zones > 1 ? 's' : ''} animée${zones > 1 ? 's' : ''} par bandes` : ''}`);
-    const skipped = Object.entries(kinds).filter(([k]) => PAGE_KINDS[k as PageKind].skip).map(([k, v]) => `${v} ${PAGE_KINDS[k as PageKind].label.toLowerCase()}`);
-    const covers = kinds.cover ?? 0;
-    toast(`Pages reconnues : ${covers} couverture${covers > 1 ? 's' : ''}, ${kinds.story ?? 0} planches${kinds.splash ? `, ${kinds.splash} pleines pages` : ''}${kinds.spread ? `, ${kinds.spread} doubles pages` : ''}${kinds.title ? `, ${kinds.title} page${kinds.title > 1 ? 's' : ''} de titre` : ''}${dups ? ` · ${dups} doublon${dups > 1 ? 's' : ''} écarté${dups > 1 ? 's' : ''}` : ''}${byAI ? ` · cases lues par l'IA locale sur ${byAI}/${pages.length} pages` : ''}${skipped.length ? ` · exclues : ${skipped.join(', ')}` : ''}`);
+    if (!opts.autoCut) { toast(`${pages.length} page${pages.length > 1 ? 's' : ''} importée${pages.length > 1 ? 's' : ''}`); return; }
+    // reading and classifying run as resumable tasks (production orchestrator): one per page, then the issue
+    const { analysePages } = await import('./production/kinds');
+    await analysePages(pages.map((x) => x.id));
+    toast(`${pages.length} page${pages.length > 1 ? 's' : ''} ajoutée${pages.length > 1 ? 's' : ''} : lecture des cases en cours (file de tâches)`);
   } finally {
     setUI({ busy: null });
   }
+}
+
+/**
+ * Classify the pages of an import with the context of the whole issue and cut
+ * them into shots, from the panel readings and page texts of the tasks.
+ * Pages the user already cut by hand meanwhile (or removed) are left alone.
+ */
+export function applyPageAnalysis(pageIds: string[], cuts: Map<string, PageCut & { by: 'ia' | 'algo'; bubbles: number }>, texts: Map<string, PageText>) {
+  let zones = 0, byAI = 0, dups = 0, done = 0;
+  const kinds: Partial<Record<PageKind, number>> = {};
+  update((p) => {
+    const ids = new Set(pageIds);
+    const pages = p.pages.filter((pg) => ids.has(pg.id) && !p.shots.some((s) => s.pageId === pg.id)).map((pg) => ({ ...pg }));
+    if (!pages.length) return { ...p, pages: p.pages.map((pg) => (ids.has(pg.id) ? { ...pg, analysing: undefined } : pg)) };
+    // scan duplicates: same picture as an earlier page of the project
+    const seen = p.pages.map((pg) => {
+      const a = getImage(pg.mediaId);
+      return { id: pg.id, w: pg.width, h: pg.height, hash: a ? pageHash(a.img, a.width, a.height) : '' };
+    });
+    for (const pg of pages) {
+      const i = seen.findIndex((o) => o.id === pg.id);
+      if (i < 0 || !seen[i].hash) continue;
+      const twin = seen.slice(0, i).find((o) => o.hash && hashDistance(o.hash, seen[i].hash) <= 4 && Math.abs(o.w / o.h - pg.width / pg.height) < 0.02);
+      if (twin) { pg.dupOf = twin.id; dups++; }
+    }
+    let next: Project = p;
+    const aspects = new Map<string, number>();
+    for (const src of new Set(pages.map((x) => x.source ?? ''))) aspects.set(src, medianAspect(pages.filter((x) => x.source === src)));
+    let prev: { source?: string; kind?: PageKind } = {};
+    const newShots: Shot[] = [];
+    for (const pg of pages) {
+      const a = getImage(pg.mediaId);
+      if (!a) continue;
+      const cut = cuts.get(pg.id) ?? { ...cutPage(a.img, a.width, a.height, p.readingOrder === 'rtl'), by: 'algo' as const, bubbles: -1 };
+      if (cut.by === 'ia') byAI++;
+      const cls = classifyPage(a.img, a.width, a.height, cut, {
+        srcIndex: pg.srcIndex ?? 0, srcCount: pg.srcCount ?? 1, medianAspect: aspects.get(pg.source ?? '') ?? 0.65,
+        hint: pg.kindWhy, prevKind: prev.source === pg.source ? prev.kind : undefined, bubbles: cut.bubbles,
+      });
+      const pt = texts.get(pg.id);
+      const byText = pt && !(pg.kindWhy && cls.why === 'ComicInfo.xml') ? kindFromText(pt, cut.bubbles, cut.diag?.biggest ?? (cut.kind === 'splash' ? 1 : 0), cut.kind === 'panels' ? cut.rects.length : 0) : null;
+      // the first page of a file stays its cover even when it names its authors
+      if (byText && !(cls.kind === 'cover' && pg.srcIndex === 0)) { cls.kind = byText.kind; cls.why = byText.why; }
+      // front matter with names and no balloons: the cast / team roster page, not story
+      else if (!byText && pt && (pg.srcIndex ?? 9) <= 5 && cut.bubbles === 0 && pt.words >= 20 && cls.kind === 'story') { cls.kind = 'text'; cls.why = `page de présentation (${pt.words} mots, aucune bulle, début du numéro)`; }
+      // opening page: panels that sit on the credits block are not story
+      if (byText?.dropCredits) cut.rects = cut.rects.map((r) => trimBottomToArt(a.img, a.width, a.height, r));
+      if (byText?.dropCredits && pt?.creditsBox) {
+        const cb = pt.creditsBox;
+        const over = (r: Rect) => { const w = Math.min(r.x + r.w, cb.x + cb.w) - Math.max(r.x, cb.x), h = Math.min(r.y + r.h, cb.y + cb.h) - Math.max(r.y, cb.y); return w > 0 && h > 0 ? (w * h) / (r.w * r.h) : 0; };
+        // a panel that runs into the block from above stops where the block starts;
+        // a panel inside the block goes
+        cut.rects = cut.rects
+          .map((r) => (over(r) > 0 && cb.y > r.y + r.h * 0.25 ? { ...r, h: Math.round(cb.y - r.y) } : r))
+          .filter((r) => over(r) < 0.4);
+      }
+      prev = { source: pg.source, kind: cls.kind };
+      pg.kind = cls.kind;
+      pg.kindWhy = cls.why;
+      pg.skip = PAGE_KINDS[cls.kind].skip;
+      if (pg.dupOf && cls.kind !== 'cover') { pg.skip = true; pg.kindWhy = `${cls.why} · doublon d'une page précédente`; }
+      pg.cut = cut.kind;
+      pg.cutBy = cut.by;
+      if (cut.doubt && cut.rects.length > 2) pg.orderDoubt = cut.doubt;
+      pg.bubbles = cut.bubbles;
+      pg.analysing = undefined;
+      kinds[cls.kind] = (kinds[cls.kind] ?? 0) + 1;
+      const whole = cls.kind === 'cover' || cls.kind === 'variant' || cls.kind === 'title' || cls.kind === 'splash' || cls.kind === 'text' || cls.kind === 'ad' || cls.kind === 'blank';
+      if (!whole && cut.kind === 'zones') zones++;
+      const rects = whole ? [{ x: 0, y: 0, w: a.width, h: a.height }] : cut.rects;
+      // the real outline of each panel (slanted gutters): a mask, never a crop of the neighbour
+      for (const rect of rects) {
+        const shape = !whole && cut.kind === 'panels' ? panelShape(a.img, a.width, a.height, rect) : null;
+        newShots.push(newShot(next, { pageId: pg.id, rect, zone: whole ? 'splash' : cut.kind === 'panels' ? undefined : cut.kind, ...(shape ? { shape } : {}) }));
+      }
+      done++;
+    }
+    const byId = new Map(pages.map((x) => [x.id, x]));
+    // shots keep the page order of the project
+    const order = new Map(p.pages.map((pg, i) => [pg.id, i]));
+    newShots.sort((x, y) => (order.get(x.pageId!) ?? 0) - (order.get(y.pageId!) ?? 0));
+    next = { ...p, pages: p.pages.map((pg) => byId.get(pg.id) ?? (ids.has(pg.id) ? { ...pg, analysing: undefined } : pg)), shots: [...p.shots, ...newShots] };
+    return next;
+  });
+  if (!done) return;
+  const n = getState().project.shots.length;
+  toast(`${done} page${done > 1 ? 's' : ''} analysée${done > 1 ? 's' : ''} · ${n} plans${zones ? ` · ${zones} page${zones > 1 ? 's' : ''} animée${zones > 1 ? 's' : ''} par bandes` : ''}`);
+  const skipped = Object.entries(kinds).filter(([k]) => PAGE_KINDS[k as PageKind].skip).map(([k, v]) => `${v} ${PAGE_KINDS[k as PageKind].label.toLowerCase()}`);
+  const covers = kinds.cover ?? 0;
+  toast(`Pages reconnues : ${covers} couverture${covers > 1 ? 's' : ''}, ${kinds.story ?? 0} planches${kinds.splash ? `, ${kinds.splash} pleines pages` : ''}${kinds.spread ? `, ${kinds.spread} doubles pages` : ''}${kinds.title ? `, ${kinds.title} page${kinds.title > 1 ? 's' : ''} de titre` : ''}${dups ? ` · ${dups} doublon${dups > 1 ? 's' : ''} écarté${dups > 1 ? 's' : ''}` : ''}${byAI ? ` · cases lues par l'IA locale sur ${byAI}/${done} pages` : ''}${skipped.length ? ` · exclues : ${skipped.join(', ')}` : ''}`);
 }
 
 export async function redetect(pageId: string) {
@@ -495,7 +490,7 @@ export async function researchComics() {
 const balloonCache = new Map<string, Rect[]>();
 
 /** balloons per panel (for the pop-in) and depth layers (for the 2.5D parallax) of the edit's shots */
-export async function prepareMotion(opts: { quiet?: boolean } = {}) {
+export async function prepareMotion(opts: { quiet?: boolean; step?: (i: number, n: number) => Promise<void> } = {}) {
   const { findBalloons } = await import('./engine/understand');
   const { ensureLayers } = await import('./engine/layers');
   const p = getState().project;
@@ -521,6 +516,7 @@ export async function prepareMotion(opts: { quiet?: boolean } = {}) {
   if (p.look?.parallax === false) return;
   const todo = getState().project.shots.filter((s) => s.pageId && !s.zone && s.layout === 'full').slice(0, 120);
   for (let i = 0; i < todo.length; i++) {
+    await opts.step?.(i, todo.length);
     if (!opts.quiet) setUI({ busy: `Relief 2.5D ${i + 1}/${todo.length}…` });
     await ensureLayers(getState().project, todo[i], (pr) => !opts.quiet && setUI({ busy: `Modèle de profondeur… ${Math.round(pr * 100)} %` }));
   }

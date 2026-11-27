@@ -1,7 +1,7 @@
 import type { Project } from '../types';
 import { flushSave, getState, loadProject, newProject, onSaved, setUI } from '../store';
 import { idb } from './db';
-import { mediaBlob, putMediaBlob } from '../engine/media';
+import { evictCached, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
 import { loadMediaOf, mediaRefs } from './projectFile';
 import { uid } from './util';
 import {
@@ -24,6 +24,11 @@ let lastSnapAt = 0;
 let dirtySinceSnap = false;
 const SNAP_EVERY = 10 * 60 * 1000;
 const listeners = new Set<() => void>();
+/** large media live in the workspace only (engine/media) */
+function plug(w: Workspace | null) {
+  ws = w;
+  setMediaSink(w ? { put: (id, b) => w.putMedia(id, b), get: (id) => w.getMedia(id) } : null);
+}
 const changed = () => listeners.forEach((f) => f());
 export const onStudio = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
 export const workspace = () => ws;
@@ -38,12 +43,14 @@ async function writeNow(p: Project) {
   if (!ws) return;
   try {
     await ws.saveProject(p, (id) => mediaBlob(id));
+    // a large media now safe in the workspace: its cache copy is a duplicate, free it
+    for (const { id } of mediaRefs(p)) await evictCached(id).catch(() => 0);
     if (dirtySinceSnap && Date.now() - lastSnapAt > SNAP_EVERY) { await ws.snapshot(p, 'Sauvegarde automatique', true); lastSnapAt = Date.now(); dirtySinceSnap = false; }
     changed();
   } catch (e) {
     console.warn('Écriture du projet impossible :', e);
     // a folder can lose its permission: keep journaling in the browser and ask for access again
-    if (ws.kind === 'folder') { ws = null; setUI({ where: 'reconnect' }); changed(); }
+    if (ws.kind === 'folder') { plug(null); setUI({ where: 'reconnect' }); changed(); }
   }
 }
 
@@ -55,10 +62,12 @@ async function start(): Promise<{ recovered: boolean; loadedFromDisk: boolean }>
   onSaved((p) => writeSoon(p));
   const saved = await idb.get<DirLike & { name: string }>('projects', '__folder').catch(() => undefined);
   const st = await folderState(saved as never);
-  if (saved && st === 'granted') { folderHandle = saved; ws = await new Workspace(saved, 'folder').init(); setUI({ where: 'folder', whereName: saved.name }); }
+  if (saved && st === 'granted') { folderHandle = saved; plug(await new Workspace(saved, 'folder').init()); setUI({ where: 'folder', whereName: saved.name }); }
   else if (saved && st === 'prompt') { folderHandle = saved; setUI({ where: 'reconnect', whereName: saved.name }); changed(); return { recovered: false, loadedFromDisk: false }; }
-  else { ws = await browserWorkspace(); setUI({ where: ws ? 'browser' : 'none' }); }
+  else { plug(await browserWorkspace()); setUI({ where: ws ? 'browser' : 'none' }); }
   changed();
+  // media kept only in the workspace (large rushes) can be decoded now
+  await loadMediaOf(getState().project); notifyMedia();
   return reconcile();
 }
 
@@ -104,7 +113,7 @@ export async function chooseFolder(onStep?: (d: number, n: number) => void): Pro
   const from = ws?.kind === 'browser' ? ws : await browserWorkspace();
   const copied = from ? await from.copyAllTo(dest, onStep) : 0;
   await idb.put('projects', '__folder', h);
-  folderHandle = h; ws = dest;
+  folderHandle = h; plug(dest);
   setUI({ where: 'folder', whereName: h.name });
   await flushSave();
   await writeNow(getState().project);
@@ -113,8 +122,9 @@ export async function chooseFolder(onStep?: (d: number, n: number) => void): Pro
 /** a click is needed after a restart to use the folder again (browser rule) */
 export async function reconnectFolder(): Promise<boolean> {
   if (!folderHandle || !(await requestFolder(folderHandle as never))) return false;
-  ws = await new Workspace(folderHandle, 'folder').init();
+  plug(await new Workspace(folderHandle, 'folder').init());
   setUI({ where: 'folder', whereName: folderHandle.name });
+  await loadMediaOf(getState().project); notifyMedia();
   await reconcile();
   changed();
   return true;
@@ -123,7 +133,7 @@ export async function reconnectFolder(): Promise<boolean> {
 export async function forgetFolder() {
   await idb.del('projects', '__folder');
   folderHandle = null;
-  ws = await browserWorkspace();
+  plug(await browserWorkspace());
   setUI({ where: ws ? 'browser' : 'none', whereName: undefined });
   await writeNow(getState().project);
   changed();

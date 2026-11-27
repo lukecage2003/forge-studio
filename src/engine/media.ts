@@ -76,16 +76,38 @@ async function decodeAudio(id: string, blob: Blob): Promise<AudioBuffer> {
   return buf;
 }
 
+/* ------------------------------------------------------------ media store
+ * Small media (comic pages) are kept in IndexedDB, a fast cache for decoding.
+ * Large media (rushes, long audio) are written once, into the project
+ * workspace (the user's folder, or the browser's file system when no folder
+ * was chosen) and read from there: no second copy of a big rush on the disk.
+ * Media of older projects already in IndexedDB keep working (read first).
+ */
+export const LARGE_MEDIA = 8 * 1024 * 1024;
+type Sink = { put(id: string, b: Blob): Promise<void>; get(id: string): Promise<Blob | null> };
+let sink: Sink | null = null;
+/** the studio plugs the workspace in here */
+export const setMediaSink = (s: Sink | null) => { sink = s; };
+async function storeBlob(id: string, b: Blob) {
+  if (b.size >= LARGE_MEDIA && sink) { try { await sink.put(id, b); return; } catch { /* fall back to the cache */ } }
+  await idb.put('media', id, b);
+}
+async function readBlob(id: string): Promise<Blob | undefined> {
+  const b = await idb.get<Blob>('media', id).catch(() => undefined);
+  if (b) return b;
+  return (await sink?.get(id).catch(() => null)) ?? undefined;
+}
+
 export async function importImage(file: Blob) {
   const id = uid('m_');
-  await idb.put('media', id, file);
+  await storeBlob(id, file);
   const a = await decodeImage(id, file);
   return { id, asset: a };
 }
 
 export async function importAudio(file: Blob) {
   const id = uid('m_');
-  await idb.put('media', id, file);
+  await storeBlob(id, file);
   const b = await decodeAudio(id, file);
   return { id, buffer: b };
 }
@@ -95,7 +117,7 @@ export function ensureMedia(id: string, kind: 'image' | 'audio'): Promise<unknow
   if (kind === 'image' && images.has(id)) return Promise.resolve(images.get(id));
   if (kind === 'audio' && audios.has(id)) return Promise.resolve(audios.get(id));
   if (pending.has(id)) return pending.get(id)!;
-  const p: Promise<unknown> = idb.get<Blob>('media', id).then((blob): Promise<unknown> => {
+  const p: Promise<unknown> = readBlob(id).then((blob): Promise<unknown> => {
     if (!blob) throw new Error('Média introuvable : ' + id);
     return kind === 'image' ? decodeImage(id, blob) : decodeAudio(id, blob);
   });
@@ -105,11 +127,18 @@ export function ensureMedia(id: string, kind: 'image' | 'audio'): Promise<unknow
 }
 
 export async function mediaBlob(id: string) {
-  return idb.get<Blob>('media', id);
+  return readBlob(id);
 }
 
 export async function putMediaBlob(id: string, blob: Blob) {
-  await idb.put('media', id, blob);
+  await storeBlob(id, blob);
+}
+/** the cache copy of a large media can go once the workspace holds it (frees the duplicate) */
+export async function evictCached(id: string): Promise<number> {
+  const b = await idb.get<Blob>('media', id).catch(() => undefined);
+  if (!b || b.size < LARGE_MEDIA || !sink || !(await sink.get(id).catch(() => null))) return 0;
+  await idb.del('media', id);
+  return b.size;
 }
 
 /* ------------------------------------------------------------ video */
@@ -146,7 +175,7 @@ async function decodeVideo(id: string, blob: Blob) {
 
 export async function importVideo(file: Blob) {
   const id = uid('m_');
-  await idb.put('media', id, file);
+  await storeBlob(id, file);
   const asset = await decodeVideo(id, file);
   return { id, asset };
 }
@@ -154,7 +183,7 @@ export async function importVideo(file: Blob) {
 export function ensureVideo(id: string): Promise<unknown> {
   if (videos.has(id)) return Promise.resolve(videos.get(id));
   if (pending.has(id)) return pending.get(id)!;
-  const p: Promise<unknown> = idb.get<Blob>('media', id).then((blob): Promise<unknown> => {
+  const p: Promise<unknown> = readBlob(id).then((blob): Promise<unknown> => {
     if (!blob) throw new Error('Rush introuvable : ' + id);
     return decodeVideo(id, blob);
   });

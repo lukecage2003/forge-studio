@@ -29,6 +29,8 @@ export interface ExportOpts {
   onEncoder?: (e: { codec: string; mbps: number; hardware: boolean; audio: string | null }) => void;
   /** loudness of the exported mix, once measured */
   onMix?: (info: MixInfo) => void;
+  /** awaited between frames: pause point and a turn for the interface (production orchestrator) */
+  step?: () => Promise<void>;
 }
 
 export interface SyncCheck { video: number; audio: number | null; expected: number; startGap: number; ok: boolean }
@@ -173,6 +175,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
         // motion blur: average 4 sub-frames across the shutter (180°) on fast moves only
         const n = 4;
         for (let k = 0; k < n; k++) {
+          if (k) await o.step?.();
           renderer.draw(subCtx, project, t + ((k + 0.5) / n - 0.5) * dt * 0.5, () => faceFrame);
           ctx.globalAlpha = 1 / (k + 1);
           ctx.drawImage(sub, 0, 0);
@@ -180,6 +183,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
         ctx.globalAlpha = 1;
       } else renderer.draw(ctx, project, t, () => faceFrame);
       await video.add(t, dt);
+      await o.step?.();
       if (f % 6 === 0) o.onProgress(0.03 + 0.95 * (f / frames), `Rendu image ${f + 1} / ${frames}`);
     }
     video.close();

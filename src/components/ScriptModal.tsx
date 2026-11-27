@@ -4,7 +4,7 @@ import { getState, setUI, update, useStore } from '../store';
 import { analyseScript, KIND_FR, ROLE_FR, type Role, type SuggestionKind } from '../engine/scriptIntel';
 import { acceptSuggestion } from '../actions';
 import { toast } from './Toast';
-import { aiAnalyseScript, aiReviewScript, roleLabel, type AiAnalysis, type ReviewNote } from '../ai/tasks';
+import { aiReviewScript, roleLabel, type AiAnalysis, type ReviewNote } from '../ai/tasks';
 import { INFO } from '../ai/providers';
 import { Bot, Loader2 } from 'lucide-react';
 import type { Suggestion } from '../engine/scriptIntel';
@@ -31,7 +31,14 @@ export function ScriptModal() {
   const runAi = async (what: 'analyse' | 'review') => {
     setBusyAi(what);
     try {
-      if (what === 'analyse') { const r = await aiAnalyseScript(getState().project); setAi({ data: r.data, by: by(r.via) }); }
+      if (what === 'analyse') {
+        // a production task: shown in the queue, retried on network errors and quotas, same script = no second call
+        const { runTask, scriptHash } = await import('../production/kinds');
+        const t = await runTask('script.analyse', { hash: scriptHash() }, false);
+        if (t.state !== 'done') throw new Error(t.error?.message ?? 'Analyse interrompue');
+        const r = t.result as { data: Parameters<typeof setAi>[0] extends infer A ? A extends { data: infer D } ? D : never : never; via: { provider: keyof typeof INFO; model: string } };
+        setAi({ data: r.data, by: by(r.via) });
+      }
       else { const r = await aiReviewScript(getState().project); setRev({ notes: r.notes, verdict: r.verdict, by: by(r.via) }); }
     } catch (e) { toast((e as Error).message, 'error'); }
     setBusyAi(null);

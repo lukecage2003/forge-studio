@@ -17,6 +17,7 @@ const AssistantModal = lazy(() => import('./components/AssistantModal').then((m)
 import { ConsentDialog } from './components/ConsentDialog';
 const LibraryModal = lazy(() => import('./components/LibraryModal').then((m) => ({ default: m.LibraryModal })));
 const LiveModal = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveModal })));
+const TasksPanel = lazy(() => import('./components/TasksPanel').then((m) => ({ default: m.TasksPanel })));
 const ProjectsModal = lazy(() => import('./components/ProjectsModal').then((m) => ({ default: m.ProjectsModal })));
 const ReviewModal = lazy(() => import('./components/ReviewModal').then((m) => ({ default: m.ReviewModal })));
 const LiveLog = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveLog })));
@@ -48,6 +49,7 @@ export default function App() {
   const liveOpen = useStore((s) => !!s.ui.liveOpen);
   const reviewOpen = useStore((s) => !!s.ui.reviewOpen);
   const projectsOpen = useStore((s) => !!s.ui.projectsOpen);
+  const tasksOpen = useStore((s) => !!s.ui.tasksOpen);
   const liveLog = useStore((s) => !!s.ui.liveLog);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
@@ -80,6 +82,8 @@ export default function App() {
         const msg = r.recovered ? 'Dernières modifications récupérées après une fermeture inattendue' : r.loadedFromDisk ? 'Version plus récente du projet ouverte depuis le dossier' : '';
         if (msg) window.setTimeout(() => toast(msg), 300);
       } catch (e) { console.warn('Espace de projets indisponible :', e); }
+      // production orchestrator: resumes the tasks a previous session left unfinished
+      try { const { startOrchestrator } = await import('./production/orchestrator'); await startOrchestrator(); } catch (e) { console.warn('File de tâches indisponible :', e); }
       setBooted(true);
     })();
   }, []);
@@ -186,6 +190,7 @@ export default function App() {
       {liveOpen && <ErrorBoundary area="fenêtre"><LiveModal /></ErrorBoundary>}
       {reviewOpen && <ErrorBoundary area="fenêtre"><ReviewModal /></ErrorBoundary>}
       {projectsOpen && <ErrorBoundary area="fenêtre"><ProjectsModal /></ErrorBoundary>}
+      {tasksOpen && <ErrorBoundary area="fenêtre"><TasksPanel /></ErrorBoundary>}
       {liveLog && !liveOpen && <ErrorBoundary area="journal"><LiveLog /></ErrorBoundary>}
       </Suspense>
       <ConsentDialog />

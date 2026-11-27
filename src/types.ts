@@ -38,6 +38,8 @@ export interface Page {
   locked?: boolean;
   /** why its reading order may be wrong (to be checked by the user) */
   orderDoubt?: string;
+  /** reading and classification still running (production orchestrator) */
+  analysing?: boolean;
 }
 
 export type PageKind = 'story' | 'cover' | 'variant' | 'title' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';

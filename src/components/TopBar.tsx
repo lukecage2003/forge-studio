@@ -1,11 +1,13 @@
 import { useRef } from 'react';
-import { Download, Wand2, FolderOpen, FilePlus2, FolderKanban, Redo2, Save, Undo2, Settings2, Crown, Bot, MessageSquareText } from 'lucide-react';
+import { Download, Wand2, FolderOpen, FilePlus2, FolderKanban, ListTodo, Redo2, Save, Undo2, Settings2, Crown, Bot, MessageSquareText } from 'lucide-react';
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
 import { openProjectFile, saveProjectFile } from '../lib/projectFile';
 import { download } from '../engine/export';
 import { toast } from './Toast';
+import { lazy, Suspense } from 'react';
+const TaskBadge = lazy(() => import('./TasksPanel').then((m) => ({ default: () => { const n = m.useActiveTasks(); return n ? <span className="task-badge">{n}</span> : null; } })));
 
 export function TopBar() {
   const name = useStore((s) => s.project.name);
@@ -49,6 +51,7 @@ export function TopBar() {
       <div className="topbar-sep" />
       <div className="file-actions">
         <button className="icon-btn" title="Projets : liste, avancement, versions" aria-label="Projets" onClick={() => setUI({ projectsOpen: true })}><FolderKanban size={17} /></button>
+        <button className="icon-btn badge-host" title="File de tâches : progression, pause, relance" aria-label="File de tâches" onClick={() => setUI({ tasksOpen: !getState().ui.tasksOpen })}><ListTodo size={17} /><Suspense fallback={null}><TaskBadge /></Suspense></button>
         <button className="icon-btn" title="Nouveau projet" onClick={() => void fresh()}><FilePlus2 size={17} /></button>
         <button className="icon-btn" title="Ouvrir un projet .forge" onClick={() => openRef.current?.click()}><FolderOpen size={17} /></button>
         <button className="icon-btn" title="Enregistrer le projet (.forge)" onClick={saveFile}><Save size={17} /></button>

@@ -40,8 +40,9 @@ export async function importRush(file: File) {
     };
     update((p) => ({ ...p, aroll: ar, shots: p.shots.map((s, i, arr) => ({ ...s, start: s.start ?? arr.slice(0, i).reduce((a, b) => a + b.duration, 0) })) }));
     setUI({ mode: 'rush', selection: { kind: 'aroll' } });
-    await roughCut();
-    await detectFace(true);
+    // voice analysis and face tracking run as tasks (production orchestrator): resumable, cancellable
+    const { analyseRush } = await import('./production/kinds');
+    await analyseRush(id);
   } catch (e) {
     toast((e as Error).message, 'error');
   } finally {
@@ -79,36 +80,37 @@ export async function roughCut(silent = false) {
   }
 }
 
+/** transcribe the rush as a task chain: transcription → cuts → subtitles (production orchestrator) */
 export async function transcribe(engine: 'whisper' | 'gemini' | 'ai', model: WhisperModel = 'base') {
+  if (!getState().project.aroll) return;
+  const { transcribeRush } = await import('./production/kinds');
+  await transcribeRush(engine, model);
+  toast('Transcription ajoutée à la file de tâches');
+}
+
+/** the transcription itself, without touching the project (the task applies it if nothing changed meanwhile) */
+export async function computeTranscript(engine: 'whisper' | 'gemini' | 'ai', model: WhisperModel, onProgress: (label: string, p: number) => void, signal?: AbortSignal): Promise<{ words: Word[]; via: string }> {
   const ar = getState().project.aroll;
-  if (!ar) return;
-  try {
-    const { pcm } = await analysisOf(ar);
-    let words: Word[];
-    const lang = getGoogle().language === 'en' ? 'en' : 'fr';
-    if (engine === 'ai') {
-      // orchestrator: fast remote Whisper (Groq, Gemini…) when allowed, else Whisper in this browser
-      setUI({ busy: 'Transcription IA…' });
-      const { aiTranscribe } = await import('./ai/tasks');
-      const r = await aiTranscribe(pcm, lang, () => whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label })));
-      words = r.words;
-      toast(`Transcrit par ${r.via.provider === 'local' ? 'Whisper (sur ton ordinateur)' : r.via.provider + ' · ' + r.via.model}`);
-    } else if (engine === 'gemini') {
-      setUI({ busy: 'Transcription Google… 0 %' });
-      words = await geminiTranscribe(pcm, (p) => setUI({ busy: `Transcription Google… ${Math.round(p * 100)} %` }));
-    } else {
-      setUI({ busy: 'Chargement de Whisper…' });
-      words = await whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label }));
-    }
-    const fix = correctNames(words, comicNames(getState().project));
-    setAroll((x) => ({ ...x, words: fix.words, transcriptSource: engine }));
-    toast(`${words.length} mots transcrits${fix.fixed ? ` · ${fix.fixed} noms corrigés d’après les comics` : ''}`);
-    await roughCut();
-  } catch (e) {
-    toast((e as Error).message, 'error');
-  } finally {
-    setUI({ busy: null });
+  if (!ar) throw Object.assign(new Error('Pas de rush dans le projet'), { kind: 'input' });
+  const { pcm } = await analysisOf(ar);
+  if (signal?.aborted) throw new DOMException('Annulé', 'AbortError');
+  const lang = getGoogle().language === 'en' ? 'en' : 'fr';
+  if (engine === 'ai') {
+    // orchestrator: fast remote Whisper (Groq, Gemini…) when allowed, else Whisper in this browser
+    onProgress('Transcription IA…', 0);
+    const { aiTranscribe } = await import('./ai/tasks');
+    const r = await aiTranscribe(pcm, lang, () => whisperTranscribe(pcm, model, lang, (label, p) => onProgress(label, p)));
+    return { words: r.words, via: r.via.provider === 'local' ? 'Whisper (sur ton ordinateur)' : `${r.via.provider} · ${r.via.model}` };
   }
+  if (engine === 'gemini') return { words: await geminiTranscribe(pcm, (p) => onProgress('Transcription Google…', p)), via: 'Google' };
+  onProgress('Chargement de Whisper…', -1);
+  return { words: await whisperTranscribe(pcm, model, lang, (label, p) => onProgress(label, p)), via: 'Whisper (sur ton ordinateur)' };
+}
+
+export function applyTranscript(words: Word[], engine: 'whisper' | 'gemini' | 'ai', via: string) {
+  const fix = correctNames(words, comicNames(getState().project));
+  setAroll((x) => ({ ...x, words: fix.words, transcriptSource: engine }));
+  toast(`${words.length} mots transcrits par ${via}${fix.fixed ? ` · ${fix.fixed} noms corrigés d’après les comics` : ''}`);
 }
 
 export function toggleCut(index: number) {

@@ -172,6 +172,12 @@ export class Workspace {
   }
   async deleteTemplate(id: string) { await (await sub(this.root, 'templates')).removeEntry(`${safeId(id)}.json`); }
 
+  /* -------- exports (finished videos): written straight into the workspace, so into the user's folder */
+  async putExport(name: string, blob: Blob) { await writeFile(await sub(this.root, 'exports'), name.replace(/[\\/:*?"<>|]/g, '_'), blob); }
+  async getExport(name: string): Promise<Blob | null> {
+    try { return await (await (await sub(this.root, 'exports', false)).getFileHandle(name.replace(/[\\/:*?"<>|]/g, '_'))).getFile(); } catch { return null; }
+  }
+
   /** copy every project (and its media) into another workspace: moving from the browser to a folder */
   async copyAllTo(dest: Workspace, onStep?: (done: number, total: number) => void) {
     const list = await this.listProjects();

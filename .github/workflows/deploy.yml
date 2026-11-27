@@ -42,8 +42,44 @@ jobs:
         with:
           name: images-differentes
           path: tests/visual/out/
+  # Vérifications sur Windows et Linux : vérification des types, tests unitaires, construction,
+  # puis tests de bout en bout dans Chromium (studio et orchestrateur). Un échec bloque la mise en ligne.
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vérification des types
+        run: npx tsc -p tsconfig.app.json --noEmit
+      - name: Tests unitaires
+        run: npm test
+      - name: Construction
+        run: npm run build
+      - name: Navigateur de test
+        run: npx playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} chromium
+      - name: Tests de bout en bout
+        run: |
+          npx vite --port 5199 --strictPort > vite.log 2>&1 &
+          for i in $(seq 1 90); do curl -s -o /dev/null http://localhost:5199/ && break; sleep 2; done
+          node tests/e2e/studio.e2e.cjs
+          node tests/e2e/orchestrator.e2e.cjs
+      - name: Journal du serveur
+        if: failure()
+        run: tail -n 80 vite.log || true
   build:
-    needs: visual
+    needs: [visual, checks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

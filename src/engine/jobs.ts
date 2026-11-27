@@ -29,3 +29,5 @@ export function heavy<T>(family: Family, fn: () => Promise<T>): Promise<T> {
   return run;
 }
 export const jobsPending = () => pending;
+/** model family currently in memory (the task queue groups heavy work by it) */
+export const loadedFamily = () => current;

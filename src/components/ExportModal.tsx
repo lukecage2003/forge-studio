@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Download, X, Captions, ImageDown, Loader2, CheckCircle2, ListOrdered } from 'lucide-react';
 import { FORMATS } from '../types';
 import { getState, setUI, useStore } from '../store';
-import { download, exportMp4, exportSrt, youtubeChapters } from '../engine/export';
+import { download, exportSrt, youtubeChapters } from '../engine/export';
 import { toast } from './Toast';
 import { checkProject } from '../engine/qc';
 import { update } from '../store';
@@ -37,8 +37,10 @@ export function ExportModal() {
   const busy = !!prog && !result;
   const fileBase = (project.name || 'forge').replace(/[^\w\- ]+/g, '').trim() || 'forge';
 
+  const taskId = useRef<string | null>(null);
   const close = () => {
-    abort.current?.abort();
+    // the render is a task: it goes on in the background, the file waits in the task queue
+    if (busy) toast('Le rendu continue dans la file de tâches : tu pourras télécharger le fichier depuis là');
     if (result) URL.revokeObjectURL(result.url);
     setUI({ exportOpen: false });
   };
@@ -47,19 +49,34 @@ export function ExportModal() {
     pause();
     setErr('');
     setResult(null);
-    abort.current = new AbortController();
-    const t0 = performance.now();
-    try {
-      const blob = await exportMp4(getState().project, {
-        quality, fps, scale, burnSubtitles: burn, onCheck: setSync, onEncoder: setEnc, signal: abort.current.signal, onMix: setMixInfo,
-        onProgress: (p, label) => setProg({ p, label }),
-      });
-      setResult({ url: URL.createObjectURL(blob), size: blob.size, blob });
-      setProg({ p: 1, label: `Rendu en ${((performance.now() - t0) / 1000).toFixed(1)} s` });
-    } catch (e) {
-      setProg(null);
-      if ((e as Error).name !== 'AbortError') setErr((e as Error).message);
-    }
+    setProg({ p: 0, label: 'Dans la file de tâches…' });
+    // the render runs as a production task: pause, cancel, priority, and the interface stays usable
+    const { renderVideo, renders, renderHooks } = await import('../production/kinds');
+    const { queue } = await import('../production/orchestrator');
+    const t = await renderVideo({ name: `${fileBase}-${getState().project.format.replace(':', 'x')}.mp4`, quality, fps, scale, burn });
+    taskId.current = t.id;
+    renderHooks.set(t.id, { onCheck: setSync, onEncoder: setEnc, onMix: setMixInfo });
+    const off = queue.subscribe(() => {
+      const x = queue.get(t.id);
+      if (!x) return;
+      if (x.state === 'running' || x.state === 'paused') setProg({ p: x.progress, label: x.state === 'paused' ? 'En pause' : (x.note ?? 'Rendu…') });
+      if (x.state === 'done') {
+        off(); renderHooks.delete(t.id);
+        const blob = renders.get(t.id);
+        if (blob) setResult({ url: URL.createObjectURL(blob), size: blob.size, blob });
+        setProg({ p: 1, label: `Rendu en ${((x.ms ?? 0) / 1000).toFixed(1)} s` });
+      }
+      if (x.state === 'failed' || x.state === 'cancelled') {
+        off(); renderHooks.delete(t.id);
+        setProg(null);
+        if (x.state === 'failed') setErr(x.error?.message ?? 'Échec du rendu');
+      }
+    });
+  };
+  const cancel = async () => {
+    const { queue } = await import('../production/orchestrator');
+    if (taskId.current) queue.cancel(taskId.current);
+    abort.current?.abort();
   };
 
   const thumb = async () => {
@@ -73,7 +90,7 @@ export function ExportModal() {
   };
 
   return (
-    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && !busy && close()}>
+    <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal export-modal" role="dialog" aria-labelledby="exp-title">
         <header className="modal-head">
           <div className="modal-title">
@@ -238,7 +255,7 @@ export function ExportModal() {
               <Download size={17} /> Télécharger le MP4
             </button>
           ) : busy ? (
-            <button className="btn lg" onClick={() => abort.current?.abort()}>Annuler</button>
+            <button className="btn lg" onClick={() => void cancel()}>Annuler</button>
           ) : (
             <button className="btn primary lg" onClick={run} disabled={!project.shots.length}>
               <Download size={17} /> Exporter en MP4
