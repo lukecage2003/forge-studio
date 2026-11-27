@@ -67,19 +67,43 @@ export function readable(shot: Shot) {
 
 export function resolveMotion(shot: Shot, aspect: number, rtl: boolean) {
   if (shot.path?.length) return { motion: shot.motion, framing: 'fit' as const };
-  if (shot.motion === 'tour') return { motion: 'tour' as const, framing: 'fit' as const };
+  const ratio = shot.rect.w / shot.rect.h / aspect;
+  // a panel much longer than the frame (a strip in a tall video, a column in a wide one), with a move the
+  // auto edit chose: framed big and travelled along its long side; a thin strip in a blurred frame, or a
+  // pan across its short side, is never the result. A move set by hand is kept as it is.
+  const autoMove = !!shot.auto && shot.auto.motion === shot.motion;
+  if (autoMove && (ratio > 1.35 || ratio < 1 / 1.35) && (['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down', 'static'].includes(shot.motion) || (shot.motion === 'read' && !readable(shot)))) {
+    if (shot.motion === 'static') return { motion: 'static' as const, framing: 'fill' as const };
+    if (ratio > 1.35) return { motion: shot.motion === 'pan-left' || (rtl && shot.motion !== 'pan-right') ? 'pan-left' as const : 'pan-right' as const, framing: 'fill' as const };
+    return { motion: shot.motion === 'pan-up' ? 'pan-up' as const : 'pan-down' as const, framing: 'fill' as const };
+  }
+  const long = ratio > 1.35 || ratio < 1 / 1.35;
+  // exploring a long panel starts and ends framed big too (never on the thin whole strip)
+  if (shot.motion === 'tour') return { motion: 'tour' as const, framing: long && autoMove ? 'fill' as const : 'fit' as const };
   if (shot.motion === 'read') return readable(shot) ? { motion: 'read' as const, framing: 'fill' as const } : { motion: 'zoom-in' as const, framing: shot.framing };
   if (shot.motion !== 'auto') return { motion: shot.motion, framing: shot.framing };
   if (readable(shot)) return { motion: 'read' as const, framing: 'fill' as const };
-  const ratio = shot.rect.w / shot.rect.h / aspect;
   if (ratio > 1.35) return { motion: rtl ? 'pan-left' : 'pan-right', framing: 'fill' as const };
   if (ratio < 1 / 1.35) return { motion: 'pan-down' as const, framing: 'fill' as const };
   return { motion: 'zoom-in' as const, framing: shot.framing };
 }
 
-function baseView(r: Rect, aspect: number, framing: 'fit' | 'fill', pad = 1.08): View {
+/**
+ * the widest view still sharp: the export's frame width (1080 in a tall frame, 1920 in a wide one) over
+ * 1.8 — comic line art enlarged up to ~1.8× its scan stays clean, beyond that it turns soft
+ */
+const sharpVw = (aspect: number) => (aspect < 1 ? 1080 : 1920) / 1.8;
+function baseView(r: Rect, aspect: number, framing: 'fit' | 'fill', pad = 1.08, camera = false): View {
   const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
-  if (framing === 'fill') return { cx, cy, vw: Math.min(r.w, r.h * aspect) };
+  // a box filled exactly (diagram thumbnails, backgrounds): plain cover
+  if (framing === 'fill' && !camera) return { cx, cy, vw: Math.min(r.w, r.h * aspect) };
+  if (framing === 'fill') {
+    // fill the frame with the panel, but never show less than half of it nor blow it up past « sharp »
+    const fill = Math.min(r.w, r.h * aspect);
+    const longW = r.w / r.h > aspect; // panel wider than the frame: its width is the long side
+    const vw = longW ? Math.min(r.w, Math.max(fill, r.w * 0.5, sharpVw(aspect))) : Math.min(r.w, Math.max(fill, r.h * 0.5 * aspect, sharpVw(aspect)));
+    return { cx, cy, vw };
+  }
   return { cx, cy, vw: Math.max(r.w * pad, r.h * pad * aspect) };
 }
 
@@ -87,7 +111,7 @@ export function cameraAt(shot: Shot, p: number, aspect: number, rtl: boolean, r:
   // a camera path (comic camera engine or the user's preset) drives everything
   if (shot.path?.length && r === shot.rect) return evalPath(shot.path, p);
   const { motion, framing } = resolveMotion({ ...shot, rect: r }, aspect, rtl);
-  const v = baseView(r, aspect, framing);
+  const v = baseView(r, aspect, framing, 1.08, true);
   const vh = v.vw / aspect;
   const k = shot.intensity;
   // cut on motion: the camera never fully stops at a cut (part linear, part eased),
@@ -357,9 +381,10 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   if (opts.layers) {
     // 2.5D: background drifts a little, the subject drifts more and comes forward
     const { L, dx, dy, s: sc } = opts.layers;
-    const g = 1.04;
+    // background: moved back by 35 % of the drift and enlarged just enough to cover its own move (1 at rest)
+    const g = 1 + (2 * Math.max(Math.abs(dx), Math.abs(dy)) * 0.35) / Math.min(clip.w, clip.h);
     ctx.drawImage(L.bg, clip.x - (clip.w * (g - 1)) / 2 - dx * 0.35, clip.y - (clip.h * (g - 1)) / 2 - dy * 0.35, clip.w * g, clip.h * g);
-    const fw = clip.w * g * sc, fh = clip.h * g * sc;
+    const fw = clip.w * sc, fh = clip.h * sc;
     ctx.drawImage(L.fg, clip.x + clip.w / 2 - fw / 2 + dx * 0.65, clip.y + clip.h / 2 - fh / 2 + dy * 0.65, fw, fh);
   } else ctx.drawImage(asset.img, 0, 0);
   if (page?.tone) ctx.filter = 'none';
@@ -1785,13 +1810,14 @@ export function createRenderer(W: number, H: number): Renderer {
         const L = !override && project.look?.parallax !== false && !shot.zone ? layersFor(project, shot) : null;
         let layers;
         if (L) {
-          const e = easeInOutSine(clamp(p, 0, 1));
-          const A = shot.rect.w * 0.03 * (0.5 + shot.intensity);
+          // 2.5D: the layers part a little in the middle of the shot and meet again at both ends, so the
+          // first and last frames are exactly the drawing (no jump at a cut or a glide); small enough that
+          // the filled hole behind the subject never shows; the subject comes forward only slightly
+          const env = Math.sin(Math.PI * clamp(p, 0, 1));
+          const A = Math.min(shot.rect.w, shot.rect.h) * 0.014 * (0.6 + 0.4 * shot.intensity) * env;
           const m = resolveMotion(shot, W / H, rtl).motion;
-          const dx = m === 'pan-right' ? (0.5 - e) * A * 2 : m === 'pan-left' ? (e - 0.5) * A * 2 : (e - 0.5) * A * 0.8;
-          const dy = m === 'pan-down' ? (0.5 - e) * A * 2 : m === 'pan-up' ? (e - 0.5) * A * 2 : 0;
-          const sc = m === 'zoom-in' ? 1 + 0.045 * e : m === 'zoom-out' ? 1.045 - 0.045 * e : 1.015;
-          layers = { L, dx, dy, s: sc };
+          const dir = m === 'pan-right' ? [-1, 0] : m === 'pan-left' ? [1, 0] : m === 'pan-down' ? [0, -1] : m === 'pan-up' ? [0, 1] : [rtl ? 1 : -1, 0];
+          layers = { L, dx: dir[0] * A, dy: dir[1] * A, s: 1 + (m === 'zoom-out' ? 0.006 : 0.014) * env };
         }
         // balloons pop on the words the voice says over the shot (engine/polish), else at a fixed rhythm
         const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration, follow: resolveMotion(shot, W / H, rtl).motion === 'read', times: balloonTimes(project, shot.id, ts.start, shot.duration, shot.balloons.length) } : undefined;
@@ -2246,13 +2272,14 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.drawImage(A, 0, 0);
           const U = Math.min(W, H) * 0.035;
           ctx.save();
-          ctx.globalAlpha = clamp(a / 0.2, 0, 1);
+          ctx.globalAlpha = clamp(a / 0.25, 0, 1);
           paperBackground(ctx, W, H, project.accent, U, t);
           ctx.restore();
           const open = EASE.cinematic(clamp((a - 0.6) / 0.4, 0, 1));
           const m = lerp(U * 2.2, 0, open), mt = lerp(H * 0.16, 0, open);
           const fr = { x: m, y: mt, w: W - 2 * m, h: H - 2 * mt };
-          const fill = clamp((a - 0.3) / 0.25, 0, 1);
+          // the picture fills the frame while the paper comes in: never a blank page on screen
+          const fill = clamp((a - 0.1) / 0.25, 0, 1);
           if (fill > 0) {
             ctx.save();
             ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();

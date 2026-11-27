@@ -61,7 +61,7 @@ export const STYLES: ArtDirection[] = [
   S({ id: 'cosmic', label: 'Épopée cosmique', desc: 'Ample et lent : étoiles, profondeur, vitesse lumière et trou noir pour les révélations.', profile: 'cosmic',
     typography: { caption: 'cinema', keywords: true }, palette: { accent: '#7B5CFF', grade: 'cinema', bg: '#05040c' },
     animation: { caption: 'type', intensity: 0.45, handheld: 0.25, balloonPop: true, parallax: true, chroma: true, speedLines: false },
-    transitions: { calm: ['fade', 'cut', 'defocus'], accent: ['warp', 'blur', 'crosszoom'], strong: ['warpspeed', 'gravitylens'], budget: { accent: 4, strong: 1.5 } },
+    transitions: { calm: ['fade', 'cut', 'defocus'], accent: ['warp', 'blur', 'crosszoom'], strong: ['warpspeed', 'crosszoom'], budget: { accent: 4, strong: 1.5 } },
     composition: { layouts: [['full', 7], ['page', 0.6]], background: 'blur' },
     illustration: { sharpen: 0.4, paper: 0, vignette: 0.55, grain: 0.25, diagram: 'neon' },
     subtitles: { preset: 'cinema', anim: 'words', y: 0.76, size: 0.95, maxWords: 6 }, titles: 'cosmic', sound: { volume: 0.6, perMin: 4 } }),

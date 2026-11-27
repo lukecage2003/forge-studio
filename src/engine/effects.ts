@@ -65,7 +65,7 @@ export const TRANSITIONS: TransitionDef[] = [
   { id: 'defocus', label: 'Mise au point', category: 'cinematic', desc: 'Fondu à travers un flou d’objectif.', moves: false, sfx: 0, ease: 'linear', gl: 'DefocusBlur',
     params: [{ key: 'blurSize', label: 'Flou', min: 0.005, max: 0.08, step: 0.005, def: 0.02 }] },
   { id: 'halftone', label: 'Trame BD', category: 'comic', desc: 'L’image se décompose en points de trame imprimée, puis se recompose.', moves: false, sfx: 0, ease: 'linear', gl: 'Halftone', minDur: 0.6,
-    params: [{ key: 'dots', label: 'Points', min: 8, max: 80, step: 1, def: 28 }, { key: 'angle', label: 'Angle de trame', min: 0, max: 90, step: 1, def: 45, fmt: (v) => v + '°' }] },
+    params: [{ key: 'dots', label: 'Points', min: 8, max: 120, step: 1, def: 64 }, { key: 'angle', label: 'Angle de trame', min: 0, max: 90, step: 1, def: 45, fmt: (v) => v + '°' }] },
   { id: 'inkbleed', label: 'Encre', category: 'comic', desc: 'La case suivante se répand comme de l’encre dans l’eau.', moves: false, sfx: 0, ease: 'linear', gl: 'InkBleed', minDur: 0.7,
     params: [{ key: 'drops', label: 'Gouttes', min: 1, max: 8, step: 1, def: 4 }, { key: 'tendrils', label: 'Filaments', min: 0, max: 1, step: 0.05, def: 0.7, fmt: pct }] },
   { id: 'warpspeed', label: 'Vitesse lumière', category: 'cosmic', desc: 'Saut en hyperespace : traînées d’étoiles et éclair.', moves: true, sfx: 0.8, ease: 'linear', gl: 'WarpSpeed', minDur: 0.7,

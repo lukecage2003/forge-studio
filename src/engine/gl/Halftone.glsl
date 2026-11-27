@@ -3,8 +3,8 @@
 // Description: The image breaks into printed halftone dots whose size follows its shades, the dots reshape into the incoming image, then merge back into it
 // Tags: dots, pattern, retro
 
-// @range(4, 80) Number of dots across the shorter side
-uniform float dots; // = 28.0
+// @range(4, 120) Number of dots across the shorter side
+uniform float dots; // = 64.0
 // @range(0, 90) Angle of the dot grid, in degrees
 uniform float angle; // = 45.0
 // @color Color of the paper between the dots

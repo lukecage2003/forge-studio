@@ -128,6 +128,23 @@ Toutes vérifiées sur de vraies planches Watchmen.
 - **Chapitres** : chacun est rattaché à son plan (`anchor`) et suit le plan si le minutage change. Pas de carton dans les 3 premières secondes, au moins 8 s entre deux, aucun dans les 4 dernières secondes.
 - **Bug corrigé à la source** : le montage automatique recalculait les durées sans mettre à jour son empreinte. Tous les plans semblaient donc modifiés à la main : la finition pro les sautait et la mémoire de Forge apprenait de fausses corrections. Le montage terminé est maintenant la référence.
 
+## Suite : refonte des effets (banc d'essai complet)
+Un banc d'essai rend chaque mouvement de caméra, chaque transition (24) et la 2.5D sur de vraies cases de Watchmen. Chaque résultat a été regardé, puis corrigé.
+- **Cases allongées** (bandeau en vertical, colonne en 16:9) : tous les mouvements choisis par le montage automatique (zoom, panoramique, fixe, lecture des bulles, exploration) les cadrent maintenant en grand et les parcourent le long de leur grand côté, avec au moins la moitié de la case visible et un agrandissement de 1,8× au plus. Il n'y a plus de mince bande dans un fond flou, ni de panoramique dans le mauvais sens. Les mouvements réglés à la main sont respectés.
+- **2.5D refaite** :
+  - l'effet part de l'image exacte et y revient, donc aucun saut aux coupes ni aux glissés ;
+  - le décalage est réduit (1,4 % au lieu de 4,5 %) et le personnage avance à peine ;
+  - les bulles et les légendes restent sur le dessin ;
+  - les calques sont en pleine résolution (2400 px au lieu de 1200) ;
+  - le trou derrière le personnage est reconstruit à partir du décor seul, ce qui supprime le halo sombre ;
+  - l'effet est refusé quand le sujet n'est pas une silhouette nette, et sur une image qui couvre plus de 60 % de la page (souvent plusieurs cases mal séparées).
+- **Transitions** :
+  - « Trame BD » : points 2,3 fois plus fins ;
+  - « Tracé de case » : plus de page vide, l'image arrive avec le papier ;
+  - « Trou noir » : il noircit tout l'écran, donc il n'est plus choisi par le montage automatique (toujours disponible à la main).
+  - Les 21 autres transitions ont été vérifiées sans défaut.
+- **Tests visuels** : 4 références mises à jour (trame et tracé de case), après comparaison à l'œil.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`
