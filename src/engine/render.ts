@@ -1,4 +1,5 @@
 import { DIAGRAM_3D, FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
+import { toneFilter } from './color';
 import { personMask } from './segment';
 import { faceAt } from './faces';
 import { layersFor, type Layers } from './layers';
@@ -347,6 +348,8 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
   else ctx.rect(clip.x, clip.y, clip.w, clip.h);
   ctx.clip();
   ctx.imageSmoothingQuality = 'high';
+  // the scan's colour harmonisation (quality review, applied by the user)
+  if (page?.tone) ctx.filter = toneFilter(page.tone);
   if (opts.layers) {
     // 2.5D: background drifts a little, the subject drifts more and comes forward
     const { L, dx, dy, s: sc } = opts.layers;
@@ -355,6 +358,7 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
     const fw = clip.w * g * sc, fh = clip.h * g * sc;
     ctx.drawImage(L.fg, clip.x + clip.w / 2 - fw / 2 + dx * 0.65, clip.y + clip.h / 2 - fh / 2 + dy * 0.65, fw, fh);
   } else ctx.drawImage(asset.img, 0, 0);
+  if (page?.tone) ctx.filter = 'none';
   if (opts.balloons) drawBalloons(ctx, asset, opts.balloons);
   ctx.restore();
   if (paper) {

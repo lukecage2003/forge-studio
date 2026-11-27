@@ -1,6 +1,8 @@
 import type { Project } from '../types';
 import { FORMATS } from '../types';
-import { getImage, getVideo } from './media';
+import { getAudio, getImage, getVideo } from './media';
+import { harmonize, measurePage } from './color';
+import { sourceAudio } from './audioCheck';
 import { layoutShots, videoDuration } from './timeline';
 import { cameraAt, resolveMotion } from './render';
 import { directSequences, motionClash, variety } from './director';
@@ -27,6 +29,25 @@ export function checkProject(p: Project): Issue[] {
   if (missingPages.length) out.push({ level: 'error', text: `${missingPages.length} page(s) introuvable(s) : réimporte les fichiers.` });
   if (p.aroll && !getVideo(p.aroll.mediaId)) out.push({ level: 'error', text: 'Le rush face caméra est introuvable : réimporte-le.' });
   if (dur <= 0) out.push({ level: 'error', text: 'La vidéo est vide.' });
+
+  // colour: story pages of one comic that stand out (darker, greyer, faded scans)
+  try {
+    const measured = p.pages.filter((pg) => !pg.skip && !pg.tone && getImage(pg.mediaId)).map((pg) => { const a = getImage(pg.mediaId)!; return { id: pg.id, source: pg.source, kind: pg.kind, stats: measurePage(pg.mediaId, a.img, a.width, a.height) }; });
+    const fixes = harmonize(measured);
+    if (fixes.length) {
+      const names = fixes.slice(0, 3).map((f) => `${p.pages.find((pg) => pg.id === f.id)?.name} (${f.why})`).join(', ');
+      out.push({ level: 'warn', text: `${fixes.length} page${fixes.length > 1 ? 's' : ''} ne ressemble${fixes.length > 1 ? 'nt' : ''} pas aux autres du même numéro : ${names}${fixes.length > 3 ? '…' : ''}.`,
+        fix: { label: 'Harmoniser les couleurs', apply: (x) => ({ ...x, pages: x.pages.map((pg) => { const f = fixes.find((y) => y.id === pg.id); return f ? { ...pg, tone: f.tone } : pg; }) }) } });
+    }
+  } catch { /* no picture decoded (tests, headless) */ }
+  // sound at the source: a saturated or noisy recording can't be repaired by the mix
+  for (const src of [...(p.aroll ? [{ id: p.aroll.mediaId, name: 'le rush' }] : []), ...p.audio.filter((a) => a.kind === 'voice').map((a) => ({ id: a.mediaId, name: `la voix « ${a.name} »` }))]) {
+    const a = sourceAudio(src.id, getAudio(src.id));
+    if (!a) continue;
+    if (a.clippedRuns > 0) out.push({ level: a.clippedSec > 0.2 ? 'error' : 'warn', text: `Son saturé à l’enregistrement dans ${src.name} (${a.clippedRuns} passage${a.clippedRuns > 1 ? 's' : ''}, ${(a.clippedSec * 1000).toFixed(0)} ms) : le mixage ne peut pas le réparer ; réenregistre ces phrases ou baisse le gain du micro.` });
+    if (a.lowLevel) out.push({ level: 'warn', text: `Voix enregistrée bas dans ${src.name} (${a.speechDb.toFixed(0)} dB) : le nettoyage la remonte, mais le souffle monte avec.` });
+    if (a.noisy) out.push({ level: 'warn', text: `Bruit de fond élevé dans ${src.name} (voix ${(a.speechDb - a.noiseDb).toFixed(0)} dB au-dessus du fond) : active la réduction de bruit (Export → Voix).` });
+  }
 
   // shots too short to be read
   const short = timed.filter((t) => t.shot.pageId && t.shot.duration < 0.7 && !t.shot.match);

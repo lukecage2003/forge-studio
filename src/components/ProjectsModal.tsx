@@ -199,6 +199,13 @@ function VersionsTab() {
   const [list] = useStudio(load, [] as VersionInfo[]);
   const [label, setLabel] = useState('');
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [cmp, setCmp] = useState<{ file: string; lines: { kind: string; text: string }[] } | null>(null);
+  const compare = async (file: string) => {
+    const v = await S.workspace()?.readVersion(id, file);
+    if (!v) return;
+    const { compareProjects } = await import('../engine/versionDiff');
+    setCmp({ file, lines: compareProjects(v, getState().project) });
+  };
   if (!S.workspace()) return <NoSpace where={where} />;
   return (
     <section className="set-section pj-section">
@@ -218,8 +225,10 @@ function VersionsTab() {
               {confirm === v.file
                 ? <span className="pj-confirm">Remplacer l’état actuel ? <button className="btn sm primary" onClick={() => void S.restoreVersion(v.file).then((ok) => { setConfirm(null); toast(ok ? 'Version restaurée (l’état précédent est gardé en version)' : 'Restauration impossible', ok ? 'info' : 'error'); })}><Check size={13} /> Restaurer</button><button className="btn sm ghost" onClick={() => setConfirm(null)}>Annuler</button></span>
                 : <button className="btn sm" onClick={() => setConfirm(v.file)}><RotateCcw size={13} /> Restaurer</button>}
+              <button className="btn sm ghost" onClick={() => (cmp?.file === v.file ? setCmp(null) : void compare(v.file))}>{cmp?.file === v.file ? 'Masquer' : 'Comparer avec maintenant'}</button>
               {!v.auto && <button className="icon-btn ghost" aria-label={`Supprimer la version ${v.label}`} title="Supprimer" onClick={() => void S.deleteVersion(v.file)}><Trash2 size={15} /></button>}
             </div>
+            {cmp?.file === v.file && <ul className="pj-diff" aria-label="Différences avec l’état actuel">{cmp.lines.map((l, k) => <li key={k} className={`d-${l.kind}`}>{l.kind === 'add' ? '+ ' : l.kind === 'del' ? '− ' : l.kind === 'mod' ? '~ ' : ''}{l.text}</li>)}</ul>}
           </li>
         ))}
         {!list.length && <li className="pj-empty">Pas encore de version pour ce projet.</li>}

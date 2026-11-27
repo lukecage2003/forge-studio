@@ -42,6 +42,8 @@ export interface Page {
   analysing?: boolean;
   /** picture fingerprint (dHash): duplicates across projects (media library) */
   hash?: string;
+  /** colour harmonisation of the scan (engine/color), applied at render time on the user's request */
+  tone?: { brightness: number; contrast: number; saturate: number };
 }
 
 export type PageKind = 'story' | 'cover' | 'variant' | 'title' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';

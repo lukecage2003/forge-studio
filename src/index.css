@@ -928,3 +928,5 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .link-btn { background: none; border: 0; color: var(--ember); cursor: pointer; font: inherit; padding: 0 4px 0 0; display: inline-flex; gap: 3px; align-items: center; }
 .link-btn:disabled { opacity: 0.5; cursor: default; }
 @media (max-width: 640px) { .ml-detail dl { grid-template-columns: 1fr; } }
+.pj-diff { list-style: none; margin: 4px 0 0; padding: 8px 10px; width: 100%; background: var(--surface-2); border-radius: var(--r-sm); display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.pj-diff .d-add { color: var(--ok); } .pj-diff .d-del { color: #fca5a5; } .pj-diff .d-mod { color: var(--text-2); } .pj-diff .d-same { color: var(--muted); }
