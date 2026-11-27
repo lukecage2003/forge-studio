@@ -77,6 +77,7 @@ jobs:
           node tests/e2e/orchestrator.e2e.cjs
           node tests/e2e/delivery.e2e.cjs
           node tests/e2e/storyboard.e2e.cjs
+          node tests/e2e/library.e2e.cjs
       - name: Journal du serveur
         if: failure()
         run: tail -n 80 vite.log || true

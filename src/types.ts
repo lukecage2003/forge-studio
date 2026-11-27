@@ -40,6 +40,8 @@ export interface Page {
   orderDoubt?: string;
   /** reading and classification still running (production orchestrator) */
   analysing?: boolean;
+  /** picture fingerprint (dHash): duplicates across projects (media library) */
+  hash?: string;
 }
 
 export type PageKind = 'story' | 'cover' | 'variant' | 'title' | 'splash' | 'spread' | 'text' | 'ad' | 'blank';

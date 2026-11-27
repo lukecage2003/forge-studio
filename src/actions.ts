@@ -10,6 +10,7 @@ import { panelShape } from './engine/comicCamera';
 import type { PageCut } from './engine/detect';
 import { PAGE_KINDS, type PageKind } from './types';
 import { uid } from './lib/util';
+import { informative } from './lib/mediaLibrary';
 import { layoutShots } from './engine/timeline';
 import { fixRepeats, insertAtTime, suggestionElement } from './engine/suggest';
 import { toast } from './components/Toast';
@@ -67,7 +68,9 @@ export function applyPageAnalysis(pageIds: string[], cuts: Map<string, PageCut &
     for (const pg of pages) {
       const i = seen.findIndex((o) => o.id === pg.id);
       if (i < 0 || !seen[i].hash) continue;
-      const twin = seen.slice(0, i).find((o) => o.hash && hashDistance(o.hash, seen[i].hash) <= 4 && Math.abs(o.w / o.h - pg.width / pg.height) < 0.02);
+      // a nearly flat page has a fingerprint that tells nothing: never a duplicate on that basis
+      const twin = informative(seen[i].hash) ? seen.slice(0, i).find((o) => o.hash && informative(o.hash) && hashDistance(o.hash, seen[i].hash) <= 4 && Math.abs(o.w / o.h - pg.width / pg.height) < 0.02) : undefined;
+      pg.hash = seen[i].hash;
       if (twin) { pg.dupOf = twin.id; dups++; }
     }
     let next: Project = p;
@@ -586,4 +589,26 @@ export async function setCameraMode(shotId: string, motion: import('./types').Mo
   const focus = info.balloons[0] ?? s.rect;
   const path = motion === 'page-glide' ? pageGlide(info, aspect) : motion === 'panel-nav' ? panelNavigation(info, aspect) : reveal(info, focus, aspect);
   update((x) => ({ ...x, shots: x.shots.map((q) => (q.id === shotId ? { ...q, motion, path, shared: true, auto: undefined } : q)) }), 'motion');
+}
+
+/** pages of other projects (media library) added to this one: the same file is referenced, never copied */
+export async function addFromLibrary(items: { id: string; name: string; width?: number; height?: number; source?: string; srcIndex?: number; srcCount?: number }[]) {
+  const have = new Set(getState().project.pages.map((pg) => pg.mediaId));
+  const todo = items.filter((x) => !have.has(x.id));
+  if (!todo.length) { toast('Ces pages sont déjà dans le projet'); return 0; }
+  const { ensureMedia } = await import('./engine/media');
+  const pages: Page[] = [];
+  for (const x of todo) {
+    try {
+      await ensureMedia(x.id, 'image');
+      const a = getImage(x.id);
+      pages.push({ id: uid('pg_'), name: x.name, mediaId: x.id, width: a?.width ?? x.width ?? 1000, height: a?.height ?? x.height ?? 1500, source: x.source, srcIndex: x.srcIndex, srcCount: x.srcCount, analysing: true });
+    } catch { toast(`${x.name} : image introuvable dans l’espace de projets`, 'error'); }
+  }
+  if (!pages.length) return 0;
+  update((p) => ({ ...p, pages: [...p.pages, ...pages] }));
+  const { analysePages } = await import('./production/kinds');
+  await analysePages(pages.map((pg) => pg.id));
+  toast(`${pages.length} page${pages.length > 1 ? 's' : ''} ajoutée${pages.length > 1 ? 's' : ''} depuis la médiathèque (lecture des cases en cours)`);
+  return pages.length;
 }

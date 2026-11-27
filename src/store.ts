@@ -40,6 +40,8 @@ export interface UIState {
   tasksOpen?: boolean;
   /** storyboard window */
   storyboardOpen?: boolean;
+  /** media library window */
+  mediaOpen?: boolean;
   /** where projects are kept: a folder on disk, the browser, a folder waiting for access again, nothing yet */
   where?: 'folder' | 'browser' | 'reconnect' | 'none';
   /** name of the chosen folder */

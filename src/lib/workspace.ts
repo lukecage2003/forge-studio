@@ -172,6 +172,11 @@ export class Workspace {
   }
   async deleteTemplate(id: string) { await (await sub(this.root, 'templates')).removeEntry(`${safeId(id)}.json`); }
 
+  /* -------- shared data files (media library index) */
+  async readData(name: string): Promise<string | null> { try { return await readText(await sub(this.root, 'library'), name); } catch { return null; } }
+  async writeData(name: string, text: string) { await writeFile(await sub(this.root, 'library'), name, text); }
+  async mediaInfo(id: string): Promise<{ type?: string; size?: number; addedAt?: string; name?: string; source?: string } | null> { return readJson(await sub(this.root, 'media'), `${safeId(id)}.json`); }
+
   /* -------- exports (finished videos): written straight into the workspace, so into the user's folder */
   async putExport(name: string, blob: Blob) { await writeFile(await sub(this.root, 'exports'), name.replace(/[\\/:*?"<>|]/g, '_'), blob); }
   async getExport(name: string): Promise<Blob | null> {

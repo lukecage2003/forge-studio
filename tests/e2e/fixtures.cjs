@@ -5,7 +5,9 @@ async function comicPages(ctx, n) {
   for (let i = 0; i < n; i++) {
     await art.setContent(`<canvas id=c width=900 height=1350></canvas><script>
       const x=c.getContext('2d');x.fillStyle='#f4efe4';x.fillRect(0,0,900,1350);x.lineWidth=9;x.strokeStyle='#111';
-      const P=[[40,40,400,600],[470,40,390,600],[40,690,820,620]];
+      // a different panel layout on every page (classic grid, wide band, tall column…)
+      const L=[[[40,40,400,600],[470,40,390,600],[40,690,820,620]],[[40,40,820,380],[40,450,400,860],[470,450,390,860]],[[40,40,260,1270],[330,40,530,620],[330,690,530,620]],[[40,40,820,1270]]];
+      const P=L[${i}%L.length];
       P.forEach(([a,b,w,h],k)=>{x.fillStyle=['#d9532b','#2f62c9','#3a9a5b','#a63fb5'][(k+${i})%4];x.fillRect(a,b,w,h);x.strokeRect(a,b,w,h);
         x.fillStyle='#fff';x.beginPath();x.ellipse(a+w*0.35,b+90,120,55,0,0,7);x.fill();x.stroke();
         x.fillStyle='#111';x.font='bold 26px sans-serif';x.fillText('PAGE ${i + 1}!',a+w*0.35-75,b+100);});

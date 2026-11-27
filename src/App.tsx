@@ -17,6 +17,7 @@ const AssistantModal = lazy(() => import('./components/AssistantModal').then((m)
 import { ConsentDialog } from './components/ConsentDialog';
 const LibraryModal = lazy(() => import('./components/LibraryModal').then((m) => ({ default: m.LibraryModal })));
 const LiveModal = lazy(() => import('./components/LiveModal').then((m) => ({ default: m.LiveModal })));
+const MediaLibraryModal = lazy(() => import('./components/MediaLibraryModal').then((m) => ({ default: m.MediaLibraryModal })));
 const StoryboardModal = lazy(() => import('./components/StoryboardModal').then((m) => ({ default: m.StoryboardModal })));
 const TasksPanel = lazy(() => import('./components/TasksPanel').then((m) => ({ default: m.TasksPanel })));
 const ProjectsModal = lazy(() => import('./components/ProjectsModal').then((m) => ({ default: m.ProjectsModal })));
@@ -52,6 +53,7 @@ export default function App() {
   const projectsOpen = useStore((s) => !!s.ui.projectsOpen);
   const tasksOpen = useStore((s) => !!s.ui.tasksOpen);
   const storyboardOpen = useStore((s) => !!s.ui.storyboardOpen);
+  const mediaOpen = useStore((s) => !!s.ui.mediaOpen);
   const liveLog = useStore((s) => !!s.ui.liveLog);
   const busy = useStore((s) => s.ui.busy);
   const hasPages = useStore((s) => s.project.pages.length > 0);
@@ -96,7 +98,7 @@ export default function App() {
       const t = e.target as HTMLElement;
       if (t.closest('input, textarea, select, [contenteditable]')) return;
       const { ui, project } = getState();
-      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen || ui.reviewOpen || ui.projectsOpen || ui.storyboardOpen) return;
+      if (ui.exportOpen || ui.autoOpen || ui.settingsOpen || ui.paletteOpen || ui.channelOpen || ui.scriptOpen || ui.aiOpen || ui.assistantOpen || ui.libraryOpen || ui.liveOpen || ui.reviewOpen || ui.projectsOpen || ui.storyboardOpen || ui.mediaOpen) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setUI({ paletteOpen: true }); return; }
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
@@ -194,6 +196,7 @@ export default function App() {
       {projectsOpen && <ErrorBoundary area="fenêtre"><ProjectsModal /></ErrorBoundary>}
       {tasksOpen && <ErrorBoundary area="fenêtre"><TasksPanel /></ErrorBoundary>}
       {storyboardOpen && <ErrorBoundary area="fenêtre"><StoryboardModal /></ErrorBoundary>}
+      {mediaOpen && <ErrorBoundary area="fenêtre"><MediaLibraryModal /></ErrorBoundary>}
       {liveLog && !liveOpen && <ErrorBoundary area="journal"><LiveLog /></ErrorBoundary>}
       </Suspense>
       <ConsentDialog />

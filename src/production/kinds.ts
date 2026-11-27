@@ -222,6 +222,50 @@ export function registerKinds(q: TaskQueue) {
     commit: (b) => { update((x) => ({ ...x, storyboard: b })); toast(`Storyboard prêt : ${b.rows.length} phrases`); },
   });
 
+  /* ---------------------------------------------------- media library index */
+  q.register<{ clip: boolean }, { hashed: number; embedded: number; total: number }>({
+    kind: 'library.index', lane: 'heavy', family: 'clip', keepResult: true, priority: 20,
+    label: (p) => p.clip ? 'Médiathèque : analyse visuelle des images' : 'Médiathèque : empreintes des images',
+    key: (p) => `${p.clip}|${Date.now()}`,
+    run: async (ctx, p) => {
+      const { workspace } = await import('../lib/studio');
+      const ws = workspace();
+      if (!ws) throw Object.assign(new Error('Aucun espace de projets'), { kind: 'input' });
+      const L = await import('../lib/mediaLibrary');
+      const { pageHash } = await import('../engine/classify');
+      const { entries, index } = await L.scanLibrary(ws);
+      const imgs = entries.filter((e) => e.kind === 'image');
+      let hashed = 0, embedded = 0, k = 0;
+      const blobOf = async (id: string) => (await ws.getMedia(id)) ?? (await (await import('../engine/media')).mediaBlob(id)) ?? null;
+      // fingerprints first (cheap), saved as they come: an interruption keeps what is done
+      for (const e of imgs) {
+        await ctx.checkpoint();
+        if (!index.items[e.id]?.hash && !e.hash) {
+          const b = await blobOf(e.id);
+          if (b) { const bmp = await createImageBitmap(b, { resizeWidth: 64 }); index.items[e.id] = { ...index.items[e.id], hash: pageHash(bmp, bmp.width, bmp.height) }; bmp.close(); hashed++; }
+        }
+        if (++k % 20 === 0) { ctx.progress(0.3 * k / imgs.length, `Empreintes ${k} / ${imgs.length}`); await L.writeIndex(ws, index); }
+      }
+      await L.writeIndex(ws, index);
+      if (p.clip) {
+        const { embedImages, packVec } = await import('../engine/clip');
+        const todo = imgs.filter((e) => !index.items[e.id]?.clip);
+        for (let i = 0; i < todo.length; i += 6) {
+          await ctx.checkpoint();
+          const batch = todo.slice(i, i + 6);
+          const blobs = (await Promise.all(batch.map((e) => blobOf(e.id)))) as (Blob | null)[];
+          const ok = batch.filter((_, j) => blobs[j]);
+          const vecs = await embedImages(blobs.filter((b): b is Blob => !!b), (label, x) => ctx.progress(0.3 + 0.7 * (i + x * batch.length) / todo.length, label));
+          ok.forEach((e, j) => { index.items[e.id] = { ...index.items[e.id], clip: packVec(vecs[j]) }; });
+          embedded += ok.length;
+          await L.writeIndex(ws, index);
+          ctx.progress(0.3 + 0.7 * Math.min(1, (i + 6) / todo.length), `Analyse visuelle ${Math.min(todo.length, i + 6)} / ${todo.length}`);
+        }
+      }
+      return { hashed, embedded, total: imgs.length };
+    },
+  });
+
   /* ---------------------------------------------------- animation */
   q.register<{ shots: number }, { ok: true }>({
     kind: 'motion.prepare', lane: 'heavy', family: 'vision', priority: 30,
