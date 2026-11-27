@@ -219,11 +219,10 @@ function drawVerticalThumb(b: Brand, title: string, layout: ThumbLayout, a: HTML
   // the title in the upper third: below TikTok's top bar, readable in the grid of the profile
   spacedTitle(x, title, W / 2, H * 0.24, W * 0.9, 240, b.ink);
   const place = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.95) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
-  // characters big, bottom at 84 % (the caption and the buttons cover the last part of the screen)
-  // two characters stacked, the second lower and slightly to the right, each up to 92 % of the width:
-  // the frame stays full whether the pictures are tall cut-outs or wide panels
-  const fit = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.92) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
-  if (a && c2 && layout !== 'solo') { fit(a, W * 0.46, H * 0.6, H * 0.28); fit(c2, W * 0.54, H * 0.88, H * 0.3); }
+  // characters big, bottom at 88 % (the caption and the buttons cover the last part of the screen)
+  // two cut-out characters side by side, facing the title, overlapping a little in the middle
+  const fit = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.76) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
+  if (a && c2 && layout !== 'solo') { fit(c2, W * 0.66, H * 0.88, H * 0.6); fit(a, W * 0.34, H * 0.92, H * 0.64); }
   else if (a) place(a, W / 2, H * 0.86, H * 0.58);
   if (logo) drawLogo(x, b, 40, H * 0.06, 140);
   return cv;

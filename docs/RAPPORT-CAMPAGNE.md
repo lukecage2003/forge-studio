@@ -94,7 +94,13 @@ Toutes vérifiées sur de vraies planches Watchmen.
   - Variété : jamais trois fois le même mouvement de caméra d'affilée.
   - La musique suit l'histoire : plus forte sur les révélations et les combats, plus douce pendant les explications. Cela vaut pour l'aperçu et l'export.
   - Fin en boucle (formats verticaux) : la dernière demi-seconde fond vers la première image.
-- **Couverture TikTok automatique** : le bouton « Choix auto » prend les deux cases les plus fortes (grandes, avec des personnages, peu de bulles).
+- **Couverture TikTok automatique** : le bouton « Choix auto » parcourt les cases les plus fortes et n'en garde que les **personnages détourés**, jamais une case entière.
+  - Le détourage se fait avec BiRefNet, sur la carte graphique.
+  - Les bulles et le lettrage lus sur la page sont effacés, et une seule silhouette est gardée.
+  - Un résultat est refusé s'il reste une case : bords opaques, forme plus large que haute (un véhicule, deux personnages collés), ou trou laissé par une bulle sur le corps.
+  - Si aucun personnage ne sort proprement, Forge demande de coller un PNG au lieu de poser une case.
+  - Testé sur 4 pages de Watchmen avec le modèle exécuté hors navigateur : Rorschach est gardé, les 7 autres cases sont refusées.
+  - **Non testé** : le détourage dans le navigateur sur ta carte graphique. Ici, sans carte graphique, le modèle manque de mémoire et les secours (Magic Touch, profondeur) sont refusés par les mêmes règles.
 - **Contrôle « première seconde »** dans la revue : ouverture sur un carton, transition depuis le noir, image fixe, voix qui commence tard. Chaque point propose une correction.
 - **Moins d'appels payants** :
   - une réponse déjà obtenue est réutilisée, quel que soit le fournisseur ;
