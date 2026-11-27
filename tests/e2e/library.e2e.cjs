@@ -45,7 +45,8 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
   await p.locator('.ml-grid li input[type=checkbox]').first().check();
   await p.getByRole('button', { name: /Ajouter 1 page au projet ouvert/ }).click();
   await p.waitForFunction((n) => window.__forge.getState().project.pages.length > n, before.pages, { timeout: 30000 });
-  await settle();
+  // the added page is read like any import: wait until its analysis is over (not just an idle queue)
+  await p.waitForFunction(() => { const pr = window.__forge.getState().project; const pg = pr.pages.at(-1); return !pg.analysing && pr.shots.some((s) => s.pageId === pg.id); }, null, { timeout: 180000, polling: 250 });
   const after = await p.evaluate(async () => { const st = (await import('/src/store.ts')).getState(); const pr = st.project; const S = await import('/src/lib/studio.ts'); return { pages: pr.pages.length, shotsOnNew: pr.shots.filter((s) => s.pageId === pr.pages.at(-1).id).length, mediaId: pr.pages.at(-1).mediaId }; });
   const sameFile = await p.evaluate(async (id) => { const S = await import('/src/lib/studio.ts'); const r = await S.workspace().readProject((await S.listProjects()).find((m) => m.name === 'Projet A').id); return r.project.pages.some((pg) => pg.mediaId === id); }, after.mediaId);
   check(after.pages === before.pages + 1 && after.shotsOnNew > 0, `page ajoutée au projet B et découpée (${after.shotsOnNew} plans)`);
