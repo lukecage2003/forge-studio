@@ -399,11 +399,10 @@ export async function analyzeComics(engine: 'local' | 'google') {
   const p0 = getState().project;
   try {
     if (engine === 'local') {
-      const { ocrPages } = await import('./engine/understand');
-      const texts = await ocrPages(p0, (i, n) => setUI({ busy: i < 0 ? 'Chargement du lecteur de bulles…' : `Lecture des bulles ${Math.min(i + 1, n)}/${n}…` }));
-      const { tagCharacters } = await import('./engine/lexicon');
-      update((p) => tagCharacters({ ...p, shots: p.shots.map((s) => (texts.has(s.id) ? { ...s, text: texts.get(s.id) } : s)) }));
-      toast(`Bulles lues sur ${texts.size} cases`);
+      // a production task: resumable, and panels whose text was typed by hand meanwhile are left alone
+      const { runTask } = await import('./production/kinds');
+      toast('Lecture des bulles ajoutée à la file de tâches');
+      void runTask('comics.read', { n: p0.pages.filter((pg) => !pg.skip).length });
       return;
     }
     const { geminiReadPages, hasGoogle } = await import('./engine/google');

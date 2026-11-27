@@ -75,6 +75,7 @@ jobs:
           for i in $(seq 1 90); do curl -s -o /dev/null http://localhost:5199/ && break; sleep 2; done
           node tests/e2e/studio.e2e.cjs
           node tests/e2e/orchestrator.e2e.cjs
+          node tests/e2e/delivery.e2e.cjs
       - name: Journal du serveur
         if: failure()
         run: tail -n 80 vite.log || true

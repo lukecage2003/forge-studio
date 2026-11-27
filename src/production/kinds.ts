@@ -144,6 +144,42 @@ export function registerKinds(q: TaskQueue) {
     commit: () => { void import('../rush').then((R) => R.rebuildSubtitles()); },
   });
 
+  q.register<{ clipId: string; mediaId: string; engine: 'whisper' | 'gemini'; model: string }, { words: Word[] }>({
+    kind: 'clip.transcribe', lane: 'heavy', family: 'whisper', keepResult: true, priority: 70, maxAttempts: 4,
+    label: () => 'Transcription de la voix off',
+    key: (p) => `${p.mediaId}|${p.engine}|${p.model}`,
+    guard: (p) => `${pid()}|${p.clipId}|${wordsPrint(getState().project.audio.find((x) => x.id === p.clipId)?.words)}`,
+    run: async (ctx, p) => {
+      const { computeClipTranscript } = await import('../rush');
+      return { words: await computeClipTranscript(p.clipId, p.engine, p.model as never, (label, x) => ctx.progress(Math.max(0, x), label)) };
+    },
+    commit: (r, p) => { void import('../rush').then((R) => R.applyClipTranscript(p.clipId, r.words)); },
+  });
+
+  /* ---------------------------------------------------- reading the balloons (local OCR) for the story match */
+  q.register<{ n: number }, { texts: [string, string][]; before: [string, string][] }>({
+    kind: 'comics.read', lane: 'heavy', family: 'ocr', keepResult: true, priority: 55,
+    label: (p) => `Lecture des bulles (${p.n} pages)`,
+    key: (p) => `${pid()}|${p.n}`,
+    guard: () => pid(),
+    run: async (ctx) => {
+      const p0 = getState().project;
+      const before: [string, string][] = p0.shots.map((s) => [s.id, s.text ?? '']);
+      const { ocrPages } = await import('../engine/understand');
+      const texts = await ocrPages(p0, (i, n) => { ctx.progress(n ? Math.max(0, i) / n : 0, i < 0 ? 'Chargement du lecteur' : `Page ${Math.min(i + 1, n)} / ${n}`); });
+      return { texts: [...texts], before };
+    },
+    // only panels whose text nobody typed meanwhile get the reading
+    commit: (r) => {
+      const was = new Map(r.before), got = new Map(r.texts);
+      let n = 0;
+      void import('../engine/lexicon').then(({ tagCharacters }) => {
+        update((p) => tagCharacters({ ...p, shots: p.shots.map((s) => (got.has(s.id) && (s.text ?? '') === (was.get(s.id) ?? '') ? (n++, { ...s, text: got.get(s.id) }) : s)) }));
+        toast(`Bulles lues sur ${n} cases${got.size > n ? ` · ${got.size - n} case(s) modifiée(s) à la main laissée(s) telles quelles` : ''}`);
+      });
+    },
+  });
+
   /* ---------------------------------------------------- script */
   q.register<{ hash: string }, { data: unknown; via: { provider: string; model: string } }>({
     kind: 'script.analyse', lane: 'network', keepResult: true, priority: 50,
@@ -169,7 +205,7 @@ export function registerKinds(q: TaskQueue) {
   });
 
   /* ---------------------------------------------------- render */
-  q.register<{ name: string; quality: 'high' | 'max'; fps: number; scale: 1 | 2; burn: boolean; format: Project['format'] }, { file: string; size: number; sec: number; saved: boolean }>({
+  q.register<{ name: string; quality: 'high' | 'max'; fps: number; scale: 1 | 2; burn: boolean; format: Project['format'] }, { file: string; size: number; sec: number; saved: boolean; report: import('../engine/delivery').FileReport | null }>({
     kind: 'render', lane: 'render', keepResult: true, priority: 45, maxAttempts: 1,
     label: (p) => `Rendu ${p.format} · ${p.name}`,
     key: (p) => `${pid()}|${p.name}|${Date.now()}`,
@@ -185,9 +221,60 @@ export function registerKinds(q: TaskQueue) {
         step: async () => { await ctx.checkpoint(); await yieldToUI(); },
       });
       renders.set(ctx.task.id, blob);
+      const sec = (performance.now() - t0) / 1000;
+      // the file itself is checked, not the project: format, cadence, black frames, loudness, true peak, clipping
+      ctx.progress(0.99, 'Vérification technique du fichier…');
+      let report: import('../engine/delivery').FileReport | null = null;
+      try { const { analyzeFile } = await import('../engine/delivery'); report = await analyzeFile(blob); } catch { /* reported as not checked */ }
       let saved = false;
       try { const { workspace } = await import('../lib/studio'); const ws = workspace(); if (ws) { await ws.putExport(p.name, blob); saved = true; } } catch { /* download stays possible */ }
-      return { file: p.name, size: blob.size, sec: (performance.now() - t0) / 1000, saved };
+      if (report) ctx.progress(1, `${report.width}×${report.height} · ${report.fps.toFixed(0)} i/s · ${report.lufs != null ? report.lufs.toFixed(1) + ' LUFS' : 'pas de son'}${report.black.length ? ` · ${report.black.length} passage(s) noir(s)` : ''}`);
+      return { file: p.name, size: blob.size, sec, saved, report };
+    },
+  });
+
+  /* ---------------------------------------------------- publication kit */
+  q.register<{ platforms: import('../engine/delivery').PlatformId[]; name: string }, { file: string; size: number; checks: Record<string, import('../engine/delivery').DeliveryIssue[]>; saved: boolean }>({
+    kind: 'deliver', lane: 'light', keepResult: true, priority: 44,
+    label: (p) => `Kit de publication · ${p.platforms.length} plateforme${p.platforms.length > 1 ? 's' : ''}`,
+    key: (p) => `${pid()}|${p.name}|${p.platforms.join(',')}|${Date.now()}`,
+    run: async (ctx, p) => {
+      const r = ctx.input<{ file: string; report: import('../engine/delivery').FileReport | null }>('render')[0];
+      const dep = ctx.task.deps.map((d) => queue.get(d)).find((d) => d?.kind === 'render');
+      let video = dep ? renders.get(dep.id) ?? null : null;
+      const { workspace } = await import('../lib/studio');
+      if (!video && r?.file) video = (await workspace()?.getExport(r.file)) ?? null;
+      if (!video) throw Object.assign(new Error('Vidéo rendue introuvable : relance le rendu'), { kind: 'input' });
+      const D = await import('../engine/delivery');
+      const P = await import('../engine/publish');
+      const { exportSrt } = await import('../engine/export');
+      const { zipSync, strToU8 } = await import('fflate');
+      const project = getState().project;
+      const report = r?.report ?? await D.analyzeFile(video);
+      ctx.progress(0.4, 'Image de couverture');
+      const cover = await D.frameAt(video, Math.min(1.2, report.duration / 3));
+      const files: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = {};
+      const base = p.name.replace(/\.mp4$/i, '');
+      files[`${base}.mp4`] = [new Uint8Array(await video.arrayBuffer()), { level: 0 }];
+      if (cover) files['couverture.png'] = [new Uint8Array(await cover.arrayBuffer()), { level: 0 }];
+      if (project.subtitles.length) files[`${base}.srt`] = strToU8(exportSrt(project));
+      const checks: Record<string, import('../engine/delivery').DeliveryIssue[]> = {};
+      const qcLines: string[] = [`Fichier : ${report.width}×${report.height}, ${report.fps.toFixed(2)} i/s, ${report.duration.toFixed(1)} s, ${report.sizeMB.toFixed(1)} Mo, ${report.mbps.toFixed(1)} Mb/s`, `Vidéo : ${report.videoCodec} · Son : ${report.audioCodec ?? 'aucun'}${report.sampleRate ? ` ${report.sampleRate} Hz` : ''}`, `Volume : ${report.lufs?.toFixed(1) ?? '—'} LUFS · crête ${report.truePeakDb?.toFixed(1) ?? '—'} dBTP · ${report.clipped} échantillon(s) saturé(s)`, ''];
+      for (const id of p.platforms) {
+        checks[id] = D.checkDelivery(report, D.PLATFORMS[id], project);
+        files[`${id}.txt`] = strToU8(P.postText(P.buildPost(project, id)));
+        qcLines.push(`${D.PLATFORMS[id].label} :`, ...checks[id].map((c) => `  ${c.level === 'error' ? '✗' : c.level === 'warn' ? '!' : '✓'} ${c.text}`), '');
+      }
+      files['controle-technique.txt'] = strToU8(qcLines.join('\n'));
+      ctx.progress(0.8, 'Archive');
+      const zip = new Blob([zipSync(files as never)], { type: 'application/zip' });
+      const file = `${base}-publication.zip`;
+      renders.set(ctx.task.id, zip);
+      let saved = false;
+      try { const ws = workspace(); if (ws) { await ws.putExport(file, zip); saved = true; } } catch { /* download stays possible */ }
+      const errs = Object.values(checks).flat().filter((c) => c.level === 'error').length;
+      ctx.progress(1, errs ? `${errs} point(s) bloquant(s) à corriger avant de publier` : 'Prêt à publier (texte à relire)');
+      return { file, size: zip.size, checks, saved };
     },
   });
 
@@ -240,6 +327,12 @@ export async function transcribeRush(engine: 'whisper' | 'gemini' | 'ai', model 
   return t;
 }
 
+export async function trackFace() {
+  await startOrchestrator();
+  const ar = getState().project.aroll;
+  return ar ? enqueue('rush.face', { mediaId: ar.mediaId }, { group: 'rush', force: true, priority: 80 }) : null;
+}
+
 export async function renderVideo(o: { name: string; quality: 'high' | 'max'; fps: number; scale: 1 | 2; burn: boolean; format?: Project['format'] }) {
   await startOrchestrator();
   // the quality review of the project as it is rendered, kept with the render in the queue
@@ -248,6 +341,12 @@ export async function renderVideo(o: { name: string; quality: 'high' | 'max'; fp
 }
 
 export const scriptHash = () => hashOf(getState().project.script ?? '');
+
+/** render once (the three platforms share 1080×1920), then one kit with the text and checks of each platform */
+export async function deliver(o: { name: string; quality: 'high' | 'max'; fps: number; burn: boolean; platforms: import('../engine/delivery').PlatformId[] }) {
+  const r = await renderVideo({ name: o.name, quality: o.quality, fps: o.fps, scale: 1, burn: o.burn, format: '9:16' });
+  return { render: r, kit: enqueue('deliver', { platforms: o.platforms, name: o.name }, { group: 'render', after: [r.id] }) };
+}
 
 export async function runTask(kind: string, params: Record<string, unknown>, force = true) {
   await startOrchestrator();

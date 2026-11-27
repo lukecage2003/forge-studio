@@ -21,6 +21,7 @@ export function ExportModal() {
   const [fps, setFps] = useState(30);
   const [scale, setScale] = useState<1 | 2>(1);
   const [burn, setBurn] = useState(true);
+  const [pubs, setPubs] = useState<('tiktok' | 'shorts' | 'reels')[]>(['tiktok', 'shorts', 'reels']);
   const [sync, setSync] = useState<SyncCheck | null>(null);
   const [enc, setEnc] = useState<{ codec: string; mbps: number; hardware: boolean; audio: string | null } | null>(null);
   const [mixInfo, setMixInfo] = useState<MixInfo | null>(null);
@@ -72,6 +73,12 @@ export function ExportModal() {
         if (x.state === 'failed') setErr(x.error?.message ?? 'Échec du rendu');
       }
     });
+  };
+  const kit = async () => {
+    const { deliver } = await import('../production/kinds');
+    await deliver({ name: `${fileBase}-9x16.mp4`, quality, fps, burn, platforms: pubs });
+    toast('Rendu et kit de publication ajoutés à la file de tâches');
+    setUI({ exportOpen: false, tasksOpen: true });
   };
   const cancel = async () => {
     const { queue } = await import('../production/orchestrator');
@@ -161,6 +168,19 @@ export function ExportModal() {
               </div>
             </div>
           </>
+        )}
+
+        {project.format === '9:16' && !busy && (
+          <div className="field pub-field">
+            <label>Publications</label>
+            <div className="pub-row">
+              {(['tiktok', 'shorts', 'reels'] as const).map((id) => (
+                <label key={id} className="pub-check"><input type="checkbox" checked={pubs.includes(id)} onChange={(e) => setPubs((x) => (e.target.checked ? [...x, id] : x.filter((y) => y !== id)))} /> {({ tiktok: 'TikTok', shorts: 'Shorts', reels: 'Reels' })[id]}</label>
+              ))}
+              <button className="btn sm" disabled={!pubs.length || !project.shots.length} onClick={() => void kit()}>Préparer le kit de publication</button>
+            </div>
+            <p className="help">Un seul rendu pour les trois (même format 1080×1920), puis un dossier par vidéo : le MP4, la couverture, les sous-titres, le texte proposé pour chaque plateforme et le contrôle technique du fichier. Rien n’est publié automatiquement.</p>
+          </div>
         )}
 
         {prog && (

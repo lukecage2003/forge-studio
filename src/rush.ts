@@ -8,9 +8,8 @@ import { whisperTranscribe, type WhisperModel } from './engine/whisper';
 import { geminiTranscribe, getGoogle } from './engine/google';
 import { buildSubtitles, timelineWords, STYLES } from './engine/auto';
 import { toast } from './components/Toast';
-import { trackFaces } from './engine/faces';
 import { comicNames, correctNames } from './engine/lexicon';
-import { getVideo } from './engine/media';
+import { ensureMedia } from './engine/media';
 
 const cache = new Map<string, { pcm: Float32Array; a: Analysis }>();
 
@@ -169,45 +168,36 @@ export function removeRush() {
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
 /** find and follow the speaker's face; the framing and the zooms use it */
+/** find and follow the speaker's face (a production task); the framing and the zooms use it */
 export async function detectFace(quiet = false) {
-  const ar = getState().project.aroll;
-  const v = ar && getVideo(ar.mediaId);
-  if (!ar || !v) return;
-  setUI({ busy: 'Détection du visage… 0 %' });
-  try {
-    const track = await trackFaces(v.url, ar.duration, (p) => setUI({ busy: `Détection du visage… ${Math.round(p * 100)} %` }));
-    if (!track.length) {
-      if (!quiet) toast('Aucun visage trouvé : clique sur ton visage avec « Centrer sur le visage ».', 'error');
-      return;
-    }
-    const xs = track.map((k) => k.x).sort((a, b) => a - b), ys = track.map((k) => k.y).sort((a, b) => a - b);
-    setAroll((x) => ({ ...x, faceTrack: track, focus: { x: xs[xs.length >> 1], y: ys[ys.length >> 1] } }));
-    toast(`Visage suivi automatiquement (${track.length} repères)`);
-  } catch (e) {
-    if (!quiet) toast('Détection du visage indisponible : ' + (e as Error).message, 'error');
-  } finally {
-    setUI({ busy: null });
-  }
+  if (!getState().project.aroll) return;
+  const { trackFace } = await import('./production/kinds');
+  await trackFace();
+  if (!quiet) toast('Suivi du visage ajouté à la file de tâches');
 }
 
 /** transcribe a voice-over clip so the edit can follow it (and subtitle it) */
+/** transcribe a voice-over clip so the edit can follow it (and subtitle it): a production task */
 export async function transcribeClip(id: string, engine: 'whisper' | 'gemini', model: WhisperModel = 'base') {
   const c = getState().project.audio.find((x) => x.id === id);
+  if (!c) return;
+  const { startOrchestrator, enqueue } = await import('./production/orchestrator');
+  await startOrchestrator();
+  enqueue('clip.transcribe', { clipId: id, mediaId: c.mediaId, engine, model }, { force: true });
+  toast('Transcription de la voix off ajoutée à la file de tâches');
+}
+export async function computeClipTranscript(id: string, engine: 'whisper' | 'gemini', model: WhisperModel, onProgress: (label: string, p: number) => void): Promise<Word[]> {
+  const c = getState().project.audio.find((x) => x.id === id);
+  if (c) await ensureMedia(c.mediaId, 'audio');
   const buf = c && getAudio(c.mediaId);
-  if (!c || !buf) return;
-  try {
-    setUI({ busy: 'Préparation de la voix…' });
-    const pcm = await toMono16k(buf);
-    const lang = getGoogle().language === 'en' ? 'en' : 'fr';
-    const words = engine === 'gemini'
-      ? await geminiTranscribe(pcm, (p) => setUI({ busy: `Transcription Google… ${Math.round(p * 100)} %` }))
-      : await whisperTranscribe(pcm, model, lang, (label, p) => setUI({ busy: p >= 0 ? `${label} ${Math.round(p * 100)} %` : label }));
-    const fix = correctNames(words, comicNames(getState().project));
-    update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === id ? { ...x, words: fix.words } : x)) }));
-    toast(`Voix off transcrite : ${words.length} mots${fix.fixed ? ` · ${fix.fixed} noms corrigés` : ''}`);
-  } catch (e) {
-    toast((e as Error).message, 'error');
-  } finally {
-    setUI({ busy: null });
-  }
+  if (!c || !buf) throw Object.assign(new Error('Clip audio introuvable'), { kind: 'input' });
+  onProgress('Préparation de la voix…', 0);
+  const pcm = await toMono16k(buf);
+  const lang = getGoogle().language === 'en' ? 'en' : 'fr';
+  return engine === 'gemini' ? geminiTranscribe(pcm, (p) => onProgress('Transcription Google…', p)) : whisperTranscribe(pcm, model, lang, (label, p) => onProgress(label, p));
+}
+export function applyClipTranscript(id: string, words: Word[]) {
+  const fix = correctNames(words, comicNames(getState().project));
+  update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === id ? { ...x, words: fix.words } : x)) }));
+  toast(`Voix off transcrite : ${words.length} mots${fix.fixed ? ` · ${fix.fixed} noms corrigés` : ''}`);
 }

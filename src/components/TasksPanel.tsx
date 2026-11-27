@@ -68,7 +68,7 @@ function Row({ t }: { t: TaskRecord }) {
   const s = STATE[t.state];
   const Icon = s.icon;
   const pct = Math.round(t.progress * 100);
-  const r = t.kind === 'render' ? (t.result as { file?: string; size?: number; saved?: boolean } | undefined) : undefined;
+  const r = t.kind === 'render' || t.kind === 'deliver' ? (t.result as { file?: string; size?: number; saved?: boolean } | undefined) : undefined;
   const save = async () => {
     let blob = renders.get(t.id) ?? null;
     if (!blob && r?.file) { const { workspace } = await import('../lib/studio'); blob = (await workspace()?.getExport(r.file)) ?? null; }
