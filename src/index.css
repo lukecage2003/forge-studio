@@ -1000,3 +1000,27 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .ov-handle.end .ov-handle-tag { background: #facc15; }
 .ov-handle-corner { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; background: #fff; border: 2px solid #38bdf8; cursor: nwse-resize; }
 .btn.wrap-btn { white-space: normal; text-align: left; height: auto; padding-block: 5px; max-width: 100%; }
+
+/* ---------- fits the window (laptops at 125 %: 1366×650 up to 1920×900 usable)
+   The timeline takes a share of the height, not a fixed 326 px; its lanes scroll.
+   The work area always keeps the larger part. */
+.timeline { height: clamp(160px, 30vh, 326px); }
+.tl-body { overflow-y: auto; overflow-x: hidden; }
+.workspace, main.center, .stage { min-height: 0; }
+.stage.welcome { overflow: auto; place-items: start center; }
+.stage.welcome > .welcome-card { margin: auto 0; }
+@media (max-height: 820px) {
+  .welcome-card { gap: 8px; }
+  .welcome-card h1 { font-size: 22px; }
+  .welcome-card > p { font-size: 13px; }
+  .steps { margin-top: 6px; }
+  .steps li { padding: 8px; }
+}
+@media (max-height: 900px) { .steps { display: none; } }
+/* short screens: the help line of the cut editor goes, the page gets the room */
+@media (max-height: 760px) { .stage .hint { display: none; } }
+/* its hidden checkbox stays inside it (it used to stretch the page and add a scrollbar) */
+.toggle { position: relative; }
+/* Windows draws thick, always-visible scrollbars: thin ones, and no sideways scroll in the side column */
+* { scrollbar-width: thin; scrollbar-color: #3a3a42 transparent; }
+.sidebar { overflow-x: hidden; scrollbar-gutter: stable; }
