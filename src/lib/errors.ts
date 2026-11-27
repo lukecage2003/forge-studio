@@ -28,6 +28,8 @@ export function installGlobalHandlers(notify: (msg: string) => void) {
   window.addEventListener('unhandledrejection', (ev) => {
     const r = ev.reason;
     if (r?.name === 'AbortError') return;
+    // a module file of an older publication: handled by the reload proposal (lib/staleVersion)
+    if (/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(String(r?.message ?? r))) return;
     logError('async', r);
     notify(`Action interrompue : ${r?.message ?? r}. Ton projet est intact.`);
   });

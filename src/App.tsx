@@ -26,6 +26,8 @@ const LiveLog = lazy(() => import('./components/LiveModal').then((m) => ({ defau
 import { RushEditor } from './components/RushEditor';
 import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
+import { StaleVersion } from './components/StaleVersion';
+import { installStaleHandlers } from './lib/staleVersion';
 import { getState, loadProject, redo, setUI, undo, useStore } from './store';
 import { deleteSelection, importAudioFiles, importPages } from './actions';
 import { idb } from './lib/db';
@@ -61,7 +63,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [booted, setBooted] = useState(false);
 
-  useEffect(() => installGlobalHandlers((m) => toast(m, 'error')), []);
+  useEffect(() => { installGlobalHandlers((m) => toast(m, 'error')); installStaleHandlers(); }, []);
 
   // restore last session
   useEffect(() => {
@@ -207,6 +209,7 @@ export default function App() {
         </div>
       )}
       <Toasts />
+      <StaleVersion />
     </div>
   );
 }

@@ -67,6 +67,8 @@ jobs:
         run: npm test
       - name: Construction
         run: npm run build
+      - name: Références du build (manifeste, imports dynamiques, chemins relatifs)
+        run: node scripts/check-build.mjs dist
       - name: Navigateur de test
         run: npx playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} chromium
       - name: Tests de bout en bout
@@ -79,6 +81,7 @@ jobs:
           node tests/e2e/storyboard.e2e.cjs
           node tests/e2e/library.e2e.cjs
           node tests/e2e/finish.e2e.cjs
+          node tests/e2e/update.e2e.cjs
       - name: Journal du serveur
         if: failure()
         run: tail -n 80 vite.log || true
@@ -95,6 +98,13 @@ jobs:
       - name: Tests (une erreur bloque la mise en ligne)
         run: npm test
       - run: npm run build
+      - name: Garder les fichiers des publications précédentes (30 jours)
+        # un onglet ouvert avant cette publication, ou un index.html encore en cache (10 min sur GitHub Pages),
+        # demande les fichiers de SA version : ils doivent rester disponibles
+        run: |
+          git clone --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" ../site-precedent || mkdir -p ../site-precedent
+          node scripts/keep-old-assets.mjs dist ../site-precedent 30
+          node scripts/check-build.mjs dist
       - name: Publier dist/ sur la branche gh-pages
         run: |
           cd dist
@@ -105,3 +115,26 @@ jobs:
           git add -A
           git commit -q -m "Publication ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+  # Après la mise en ligne : le site réellement servi sous /forge-studio/ est cohérent
+  # (la bonne version, chaque fichier référencé présent, les fichiers gardés accessibles).
+  verify-live:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Attendre la publication par GitHub Pages
+        run: |
+          want="${GITHUB_SHA::12}"
+          url="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
+          for i in $(seq 1 60); do
+            got=$(curl -s -H 'Cache-Control: no-cache' "${url}version.json?t=$(date +%s)" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')
+            [ "$got" = "$want" ] && { echo "Version $got en ligne"; exit 0; }
+            sleep 20
+          done
+          echo "La version $want n'est pas apparue en ligne (dernière vue : $got)"; exit 1
+      - name: Vérifier le site publié
+        run: node scripts/check-build.mjs "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"

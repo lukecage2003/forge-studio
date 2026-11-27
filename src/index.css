@@ -930,3 +930,14 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 @media (max-width: 640px) { .ml-detail dl { grid-template-columns: 1fr; } }
 .pj-diff { list-style: none; margin: 4px 0 0; padding: 8px 10px; width: 100%; background: var(--surface-2); border-radius: var(--r-sm); display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .pj-diff .d-add { color: var(--ok); } .pj-diff .d-del { color: #fca5a5; } .pj-diff .d-mod { color: var(--text-2); } .pj-diff .d-same { color: var(--muted); }
+
+/* ---------- new version of Forge */
+.stale-back { z-index: 400; }
+.stale-modal { width: min(460px, 100%); }
+.stale-modal h2 { margin: 0; font-size: 17px; }
+.stale-modal p { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+.stale-modal code { font-size: 12px; overflow-wrap: anywhere; }
+.stale-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.stale-actions .btn { display: inline-flex; gap: 6px; align-items: center; }
+.update-bar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 300; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; border-radius: var(--r-sm); background: var(--surface-3); border: 1px solid var(--ember-line); box-shadow: var(--shadow); font-size: 12.5px; max-width: calc(100vw - 24px); }
+.update-bar .btn { display: inline-flex; gap: 5px; align-items: center; }

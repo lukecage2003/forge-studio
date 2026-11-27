@@ -143,6 +143,8 @@ export async function forgetFolder() {
 
 export const listProjects = (): Promise<ProjectMeta[]> => ws?.listProjects() ?? Promise.resolve([]);
 
+/** write the open project now (journal + workspace): before a reload or a project switch */
+export async function saveNow() { await saveCurrent(); }
 async function saveCurrent() {
   await flushSave();
   await writeNow(getState().project);

@@ -12,10 +12,11 @@ import { getImage } from './engine/media';
 import { pageStats } from './engine/classify';
 import { cutPageSmart, comicOrder } from './engine/panelAI';
 import { getState } from './store';
+import { checkForUpdate } from './lib/staleVersion';
 
 // small hook for automated tests and power users (no effect on the app)
 import { layersFor } from './engine/layers';
-(window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, cutPageSmart, comicOrder, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin };
+(window as unknown as { __forge: unknown }).__forge = { layersFor, pageStats, cutPageSmart, comicOrder, agreement, cutPage, detectBlobs, detectPanels, getImage, getState, setFlatMin, checkForUpdate };
 
 import { loadVault } from './ai/vault';
 import { migrateGoogleKey } from './engine/google';
