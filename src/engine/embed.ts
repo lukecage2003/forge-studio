@@ -7,15 +7,22 @@
 const LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 const MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
 
+import { GPU_PICK, noteDevice } from './hardware';
+
 const code = `
 import { pipeline, env } from '${LIB}';
 env.allowLocalModels = false;
-let fe = null;
+let fe = null, dev = 'wasm';
+${GPU_PICK}
 self.onmessage = async (ev) => {
   const { id, texts } = ev.data;
   try {
-    if (!fe) fe = await pipeline('feature-extraction', '${MODEL}', { dtype: 'q8',
-      progress_callback: (p) => { if (p.status === 'progress') self.postMessage({ id, type: 'load', p: (p.progress || 0) / 100 }); } });
+    if (!fe) {
+      const progress_callback = (p) => { if (p.status === 'progress') self.postMessage({ id, type: 'load', p: (p.progress || 0) / 100 }); };
+      const g = await gpuPick();
+      if (g) { try { fe = await pipeline('feature-extraction', '${MODEL}', { ...g, progress_callback }); dev = 'webgpu'; } catch {} }
+      if (!fe) { fe = await pipeline('feature-extraction', '${MODEL}', { dtype: 'q8', progress_callback }); dev = 'wasm'; }
+    }
     const out = [];
     for (let i = 0; i < texts.length; i += 16) {
       const t = await fe(texts.slice(i, i + 16), { pooling: 'mean', normalize: true });
@@ -23,7 +30,7 @@ self.onmessage = async (ev) => {
       for (let k = 0; k < t.dims[0]; k++) out.push(Array.from(t.data.slice(k * dim, (k + 1) * dim)));
       self.postMessage({ id, type: 'step', p: Math.min(1, (i + 16) / texts.length) });
     }
-    self.postMessage({ id, type: 'done', out });
+    self.postMessage({ id, type: 'done', out, device: dev });
   } catch (e) { self.postMessage({ id, type: 'error', message: String(e && e.message || e) }); }
 };`;
 
@@ -44,7 +51,7 @@ export async function embed(texts: string[], onProgress?: (label: string, p: num
         if (d.type === 'load') onProgress?.('Chargement du modèle de compréhension…', d.p);
         if (d.type === 'step') onProgress?.('Compréhension du texte…', d.p);
         if (d.type === 'error') { w.removeEventListener('message', h); rej(new Error('Modèle de compréhension : ' + d.message)); }
-        if (d.type === 'done') { w.removeEventListener('message', h); res(d.out); }
+        if (d.type === 'done') { w.removeEventListener('message', h); if (d.device) noteDevice('Compréhension des phrases (MiniLM)', d.device); res(d.out); }
       };
       w.addEventListener('message', h);
       w.postMessage({ id, texts: todo });

@@ -146,7 +146,7 @@ export function SettingsModal() {
 
 /** a plain-text report of this computer for Forge: measures, hardware, browser, room left; nothing is sent */
 async function pcReport(r: BenchResult): Promise<string> {
-  const { detectHardware } = await import('../engine/hardware');
+  const { detectHardware, devicesInUse } = await import('../engine/hardware');
   const h = await detectHardware().catch(() => null);
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const go = (b?: number) => (b == null ? '?' : `${(b / 1e9).toFixed(1)} Go`);
@@ -163,7 +163,10 @@ async function pcReport(r: BenchResult): Promise<string> {
     `Image 1080p : ${ms(r.frame1080)} · image 4K : ${ms(r.frame4k)} · transition GPU : ${ms(r.frameGl)} · 3D : ${ms(r.frame3d)}`,
     `Export : ${r.exportFactor == null ? 'impossible' : `${r.exportFactor.toFixed(2)} × la durée de la vidéo`}`,
     `Encodeurs : H.264 ${r.h264 ? 'oui' : 'non'} · H.264 4K ${r.h264_4k ? 'oui' : 'non'} · AAC ${r.aac ? 'oui' : 'non'}`,
-    `Aperçu : ${r.previewFps} images/s`, '', 'Conseils :', ...r.verdict.map((v) => `- ${v}`), '',
+    `Aperçu : ${r.previewFps} images/s`, '',
+    'Carte graphique utilisée par (moteurs déjà lancés pendant cette session) :',
+    ...(devicesInUse().length ? devicesInUse().map(([e, d]) => `- ${e} : ${d === 'webgpu' ? 'carte graphique' : 'processeur'}`) : ['- aucun moteur d’IA locale lancé pour l’instant : importe des planches ou lance une transcription, puis refais le rapport']),
+    `- Export vidéo : encodeur ${r.h264 ? 'H.264 disponible' : 'H.264 absent'} (l’encodeur de la carte graphique est demandé en priorité)`, '', 'Conseils :', ...r.verdict.map((v) => `- ${v}`), '',
     'Ce rapport reste sur ton ordinateur : Forge n’envoie rien.',
   ].join('\n');
 }

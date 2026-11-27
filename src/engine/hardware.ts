@@ -60,3 +60,24 @@ export function advise(h: Hardware): Advice {
   a.text.push(`Aperçu en ${Math.round(a.previewScale * 100)} % de la définition (l’export reste en pleine définition).`);
   return a;
 }
+
+
+/*
+ * WHERE EACH LOCAL MODEL RUNS — every engine that can use the graphics card says
+ * what it actually got (a card can refuse a model: it then falls back to the
+ * processor). Shown in the « mon PC » report; nothing leaves the computer.
+ */
+const gpuUses = new Map<string, string>();
+export const noteDevice = (engine: string, device: string) => { gpuUses.set(engine, device); };
+export const devicesInUse = () => [...gpuUses.entries()];
+
+/** worker snippet: the WebGPU settings for transformers.js when a real card answers, else null */
+export const GPU_PICK = `
+const gpuPick = async () => {
+  try {
+    const a = self.navigator && navigator.gpu && await navigator.gpu.requestAdapter();
+    // a software adapter (no real card) is slower than the processor path: not used
+    const soft = !a || a.isFallbackAdapter || (a.info && (a.info.isFallbackAdapter || /swiftshader|llvmpipe|software/i.test((a.info.vendor || '') + ' ' + (a.info.architecture || '') + ' ' + (a.info.description || ''))));
+    return soft ? null : { device: 'webgpu', dtype: a.features.has('shader-f16') ? 'fp16' : 'fp32' };
+  } catch { return null; }
+};`;

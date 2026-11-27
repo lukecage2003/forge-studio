@@ -1,5 +1,6 @@
 import { heavy, onRelease } from './jobs';
 import type { Word } from '../types';
+import { GPU_PICK, noteDevice } from './hardware';
 
 /**
  * Local transcription with Whisper (transformers.js) in a Web Worker.
@@ -18,17 +19,19 @@ export type WhisperModel = keyof typeof WHISPER_MODELS;
 const workerCode = `
 import { pipeline, env } from '${LIB}';
 env.allowLocalModels = false;
-let asr = null, loaded = '';
+${GPU_PICK}
+let asr = null, loaded = '', dev = 'wasm';
 self.onmessage = async (ev) => {
   const { pcm, model, language } = ev.data;
   try {
     if (!asr || loaded !== model) {
       let device = 'wasm';
-      try { if (navigator.gpu && await navigator.gpu.requestAdapter()) device = 'webgpu'; } catch {}
-      asr = await pipeline('automatic-speech-recognition', model, {
-        device, dtype: device === 'webgpu' ? 'fp32' : 'q8',
-        progress_callback: (p) => { if (p.status === 'progress') self.postMessage({ type: 'load', p: (p.progress || 0) / 100, file: p.file }); },
-      });
+      if (await gpuPick()) device = 'webgpu';
+      const progress_callback = (p) => { if (p.status === 'progress') self.postMessage({ type: 'load', p: (p.progress || 0) / 100, file: p.file }); };
+      // a card can refuse the model (driver, memory): then the processor takes over instead of failing
+      try { asr = await pipeline('automatic-speech-recognition', model, { device, dtype: device === 'webgpu' ? 'fp32' : 'q8', progress_callback }); }
+      catch (e) { if (device !== 'webgpu') throw e; device = 'wasm'; asr = await pipeline('automatic-speech-recognition', model, { device, dtype: 'q8', progress_callback }); }
+      dev = device;
       loaded = model;
     }
     self.postMessage({ type: 'stage', stage: 'transcribe' });
@@ -45,7 +48,7 @@ self.onmessage = async (ev) => {
       self.postMessage({ type: 'step', p: Math.min(1, (o + WIN) / pcm.length) });
       if (o + WIN >= pcm.length) break;
     }
-    self.postMessage({ type: 'done', windows });
+    self.postMessage({ type: 'done', windows, device: dev });
   } catch (e) {
     self.postMessage({ type: 'error', message: String(e && e.message || e) });
   }
@@ -79,7 +82,7 @@ function whisperNow(
       if (d.type === 'stage') onProgress('Transcription en cours…', -1);
       if (d.type === 'step') onProgress('Transcription en cours…', d.p);
       if (d.type === 'error') rej(new Error('Whisper : ' + d.message));
-      if (d.type === 'done') res(mergeWindows(d.windows));
+      if (d.type === 'done') { if (d.device) noteDevice('Transcription (Whisper)', d.device); res(mergeWindows(d.windows)); }
     };
     w.onerror = (e) => rej(new Error('Whisper : ' + (e.message || 'le module n’a pas pu se charger (connexion ?)')));
     const copy = new Float32Array(pcm);

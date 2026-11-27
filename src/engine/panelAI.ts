@@ -1,3 +1,4 @@
+import { noteDevice } from './hardware';
 import type { Rect } from '../types';
 import { cutPage, type PageCut } from './detect';
 import { heavy, onRelease } from './jobs';
@@ -97,6 +98,7 @@ export async function detectWithAI(key: string, img: CanvasImageSource, width: n
         const done = waiting.get(d.id);
         waiting.delete(d.id);
         if (!d.ok) { broken = true; console.warn('Découpe IA indisponible :', d.message); done?.(null); return; }
+        if (d.device) noteDevice('Détection des cases et bulles (YOLO)', d.device);
         done?.({ panels: d.panels, bubbles: d.bubbles, ms: d.ms, device: d.device });
       };
       worker.onerror = () => { broken = true; for (const f of waiting.values()) f(null); waiting.clear(); };

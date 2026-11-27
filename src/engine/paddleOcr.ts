@@ -1,4 +1,5 @@
 import { heavy, onRelease } from './jobs';
+import { GPU_PICK, noteDevice } from './hardware';
 
 /**
  * Local text reading with PaddleOCR (PP-OCRv3 line detection + PP-OCRv5
@@ -19,13 +20,17 @@ import * as ort from '${ORT}ort.webgpu.min.mjs';
 ort.env.wasm.wasmPaths = '${ORT}';
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
 let det = null, rec = null, chars = null;
-async function session(url) {
+${GPU_PICK}
+let detDevice = 'wasm';
+async function session(url, gpu) {
   const buf = await (await fetch(url)).arrayBuffer();
-  // wasm only: the recogniser's input width changes on every line, which WebGPU recompiles each time
+  // the line detector may run on the graphics card; the reader stays on the processor:
+  // its input width changes on every line, which WebGPU recompiles each time
+  if (gpu && await gpuPick()) { try { const s = await ort.InferenceSession.create(buf, { executionProviders: ['webgpu'] }); detDevice = 'webgpu'; return s; } catch {} }
   return ort.InferenceSession.create(buf, { executionProviders: ['wasm'] });
 }
 async function load(base) {
-  if (!det) det = await session(base + 'ocr-det-v3.onnx');
+  if (!det) det = await session(base + 'ocr-det-v3.onnx', true);
   if (!rec) rec = await session(base + 'ocr-rec-en-v5.onnx');
   if (!chars) chars = ['', ...(await (await fetch(base + 'ocr-rec-en-v5.txt')).text()).split('\\n').filter((c, i, a) => i < a.length - 1 || c), ' '];
 }
@@ -92,7 +97,7 @@ self.onmessage = async (ev) => {
       }
       if (np) lines.push({ text: text.trim(), conf: ps / np, ...b });
     }
-    self.postMessage({ id, ok: true, lines });
+    self.postMessage({ id, ok: true, lines, device: detDevice });
   } catch (e) { self.postMessage({ id, ok: false, message: String(e && e.message || e) }); }
 };`;
 
@@ -134,6 +139,7 @@ export async function readLines(key: string, img: CanvasImageSource, width: numb
         const done = waiting.get(d.id);
         waiting.delete(d.id);
         if (!d.ok) { broken = true; console.warn('Lecture PaddleOCR indisponible :', d.message); done?.(null); return; }
+        if (d.device) noteDevice('Lecture du texte (PaddleOCR, détection)', d.device);
         done?.(d.lines);
       };
       worker.onerror = () => { broken = true; for (const f of waiting.values()) f(null); waiting.clear(); };

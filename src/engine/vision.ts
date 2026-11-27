@@ -7,18 +7,26 @@ import { heavy, onRelease } from './jobs';
  */
 const LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 
+import { GPU_PICK, noteDevice } from './hardware';
+
 const code = `
 import { pipeline, RawImage, env } from '${LIB}';
 env.allowLocalModels = false;
-const pipes = {};
+${GPU_PICK}
+const pipes = {}, devices = {};
 async function get(task) {
   if (pipes[task]) return pipes[task];
   let device = 'wasm';
-  try { if (navigator.gpu && await navigator.gpu.requestAdapter()) device = 'webgpu'; } catch {}
+  if (await gpuPick()) device = 'webgpu';
   const prog = (p) => { if (p.status === 'progress') self.postMessage({ type: 'load', task, p: (p.progress || 0) / 100 }); };
-  pipes[task] = task === 'depth'
-    ? await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', { device, dtype: 'q8', progress_callback: prog })
-    : await pipeline('background-removal', 'onnx-community/BiRefNet_lite-ONNX', { device, dtype: device === 'webgpu' ? 'fp16' : 'fp32', progress_callback: prog });
+  // on the graphics card: fp16 when it has it (q8 is a processor format, slow on a card); refused → processor
+  let f16 = false;
+  try { const a = device === 'webgpu' && await navigator.gpu.requestAdapter(); f16 = !!a && a.features.has('shader-f16'); } catch {}
+  const make = (dev) => task === 'depth'
+    ? pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', { device: dev, dtype: dev === 'webgpu' ? (f16 ? 'fp16' : 'fp32') : 'q8', progress_callback: prog })
+    : pipeline('background-removal', 'onnx-community/BiRefNet_lite-ONNX', { device: dev, dtype: dev === 'webgpu' ? (f16 ? 'fp16' : 'fp32') : 'fp32', progress_callback: prog });
+  try { pipes[task] = await make(device); } catch (e) { if (device !== 'webgpu') throw e; device = 'wasm'; pipes[task] = await make('wasm'); }
+  devices[task] = device;
   return pipes[task];
 }
 self.onmessage = async (ev) => {
@@ -29,12 +37,12 @@ self.onmessage = async (ev) => {
     if (task === 'depth') {
       const out = await p(img);
       const d = out.depth;
-      self.postMessage({ id, type: 'done', width: d.width, height: d.height, data: d.data }, [d.data.buffer]);
+      self.postMessage({ id, type: 'done', width: d.width, height: d.height, data: d.data, device: devices[task] }, [d.data.buffer]);
     } else {
       const out = await p(img);
       const r = Array.isArray(out) ? out[0] : out;
       const rgba = r.channels === 4 ? r : r.rgba();
-      self.postMessage({ id, type: 'done', width: rgba.width, height: rgba.height, data: rgba.data }, [rgba.data.buffer]);
+      self.postMessage({ id, type: 'done', width: rgba.width, height: rgba.height, data: rgba.data, device: devices[task] }, [rgba.data.buffer]);
     }
   } catch (e) { self.postMessage({ id, type: 'error', message: String(e && e.message || e) }); }
 };`;
@@ -59,7 +67,7 @@ function runNow(task: 'depth' | 'cutout', blob: Blob, onLoad?: (p: number) => vo
       if (d.type === 'load' && d.task === task) onLoad?.(d.p);
       if (d.id !== id) return;
       w.removeEventListener('message', h);
-      if (d.type === 'error') rej(new Error(d.message)); else res(d);
+      if (d.type === 'error') rej(new Error(d.message)); else { if (d.device) noteDevice(task === 'depth' ? 'Relief 2.5D (profondeur)' : 'Détourage', d.device); res(d); }
     };
     w.addEventListener('message', h);
     w.postMessage({ id, task, blob });

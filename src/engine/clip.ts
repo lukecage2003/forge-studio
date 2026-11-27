@@ -11,10 +11,15 @@ import { heavy, onRelease } from './jobs';
 const LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
 const MODEL = 'Xenova/clip-vit-base-patch32';
 
+import { GPU_PICK, noteDevice } from './hardware';
+
 const code = `
 import { AutoProcessor, CLIPVisionModelWithProjection, AutoTokenizer, CLIPTextModelWithProjection, RawImage, env } from '${LIB}';
 env.allowLocalModels = false;
-let proc = null, vision = null, tok = null, text = null;
+let proc = null, vision = null, tok = null, text = null, dev = 'wasm';
+${GPU_PICK}
+// on the graphics card when it can (fp16/fp32), else the compact model on the processor
+const load = async (Cls, what, id) => { const g = await gpuPick(); if (g) { try { const m = await Cls.from_pretrained('${MODEL}', { ...g, progress_callback: prog(id, what) }); dev = 'webgpu'; return m; } catch {} } dev = 'wasm'; return Cls.from_pretrained('${MODEL}', { dtype: 'q8', progress_callback: prog(id, what) }); };
 const norm = (d, dim) => { const out = []; for (let k = 0; k < d.length / dim; k++) { const v = d.slice(k * dim, (k + 1) * dim); let n = 0; for (const x of v) n += x * x; n = Math.sqrt(n) || 1; out.push(Array.from(v, (x) => x / n)); } return out; };
 const prog = (id, what) => (p) => { if (p.status === 'progress') self.postMessage({ id, type: 'load', what, p: (p.progress || 0) / 100 }); };
 self.onmessage = async (ev) => {
@@ -22,7 +27,7 @@ self.onmessage = async (ev) => {
   try {
     if (kind === 'image') {
       proc ??= await AutoProcessor.from_pretrained('${MODEL}');
-      vision ??= await CLIPVisionModelWithProjection.from_pretrained('${MODEL}', { dtype: 'q8', progress_callback: prog(id, 'image') });
+      vision ??= await load(CLIPVisionModelWithProjection, 'image', id);
       const out = [];
       for (let i = 0; i < items.length; i++) {
         const img = await RawImage.fromBlob(items[i]);
@@ -30,12 +35,12 @@ self.onmessage = async (ev) => {
         out.push(...norm(image_embeds.data, image_embeds.dims.at(-1)));
         self.postMessage({ id, type: 'step', p: (i + 1) / items.length });
       }
-      self.postMessage({ id, type: 'done', out });
+      self.postMessage({ id, type: 'done', out, device: dev });
     } else {
       tok ??= await AutoTokenizer.from_pretrained('${MODEL}');
-      text ??= await CLIPTextModelWithProjection.from_pretrained('${MODEL}', { dtype: 'q8', progress_callback: prog(id, 'texte') });
+      text ??= await load(CLIPTextModelWithProjection, 'texte', id);
       const { text_embeds } = await text(tok(items, { padding: true, truncation: true }));
-      self.postMessage({ id, type: 'done', out: norm(text_embeds.data, text_embeds.dims.at(-1)) });
+      self.postMessage({ id, type: 'done', out: norm(text_embeds.data, text_embeds.dims.at(-1)), device: dev });
     }
   } catch (e) { self.postMessage({ id, type: 'error', message: String(e && e.message || e) }); }
 };`;
@@ -54,7 +59,7 @@ function call(kind: 'image' | 'text', items: (Blob | string)[], onProgress?: (la
       if (d.type === 'load') onProgress?.(`Chargement du modèle image ↔ texte (${d.what})…`, d.p);
       if (d.type === 'step') onProgress?.('Analyse des images…', d.p);
       if (d.type === 'error') { w.removeEventListener('message', h); rej(new Error('Modèle image ↔ texte : ' + d.message)); }
-      if (d.type === 'done') { w.removeEventListener('message', h); res(d.out); }
+      if (d.type === 'done') { w.removeEventListener('message', h); if (d.device) noteDevice('Recherche visuelle (CLIP)', d.device); res(d.out); }
     };
     w.addEventListener('message', h);
     w.postMessage({ id, kind, items });
