@@ -1,0 +1,25 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./understand-DW57h42p.js","./rolldown-runtime-XKyaHtl9.js","./media-NZmTmA5T.js","./db-DZhDqWKy.js","./util-CjQs9BdX.js","./jobs-13sp0Z_z.js","./preload-helper-DclECHGd.js","./panelAI-DVLjpTbm.js","./hardware-DBvaZWCb.js","./bridge-fr-en-DnX8xuCf.js"])))=>i.map(i=>d[i]);
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";import{n as t,t as n}from"./understand-DW57h42p.js";import{o as r,t as i}from"./hardware-DBvaZWCb.js";import{c as a,i as o}from"./google-DxatY0fp.js";import{t as s}from"./preload-helper-DclECHGd.js";var c=`https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1`,l=`Xenova/paraphrase-multilingual-MiniLM-L12-v2`,u=`
+import { pipeline, env } from '${c}';
+env.allowLocalModels = false;
+let fe = null, dev = 'wasm';
+${i}
+self.onmessage = async (ev) => {
+  const { id, texts } = ev.data;
+  try {
+    if (!fe) {
+      const progress_callback = (p) => { if (p.status === 'progress') self.postMessage({ id, type: 'load', p: (p.progress || 0) / 100 }); };
+      const g = await gpuPick();
+      if (g) { try { fe = await pipeline('feature-extraction', '${l}', { ...g, progress_callback }); dev = 'webgpu'; } catch {} }
+      if (!fe) { fe = await pipeline('feature-extraction', '${l}', { dtype: 'q8', progress_callback }); dev = 'wasm'; }
+    }
+    const out = [];
+    for (let i = 0; i < texts.length; i += 16) {
+      const t = await fe(texts.slice(i, i + 16), { pooling: 'mean', normalize: true });
+      const dim = t.dims[t.dims.length - 1];
+      for (let k = 0; k < t.dims[0]; k++) out.push(Array.from(t.data.slice(k * dim, (k + 1) * dim)));
+      self.postMessage({ id, type: 'step', p: Math.min(1, (i + 16) / texts.length) });
+    }
+    self.postMessage({ id, type: 'done', out, device: dev });
+  } catch (e) { self.postMessage({ id, type: 'error', message: String(e && e.message || e) }); }
+};`,d=null,f=0,p=new Map;async function m(e,t){let n=[...new Set(e.filter(e=>e&&!p.has(e)))];if(n.length){d??=new Worker(URL.createObjectURL(new Blob([u],{type:`text/javascript`})),{type:`module`});let e=++f,i=await new Promise((i,a)=>{let o=d,s=n=>{let c=n.data;c.id===e&&(c.type===`load`&&t?.(`Chargement du modèle de compréhension…`,c.p),c.type===`step`&&t?.(`Compréhension du texte…`,c.p),c.type===`error`&&(o.removeEventListener(`message`,s),a(Error(`Modèle de compréhension : `+c.message))),c.type===`done`&&(o.removeEventListener(`message`,s),c.device&&r(`Compréhension des phrases (MiniLM)`,c.device),i(c.out)))};o.addEventListener(`message`,s),o.postMessage({id:e,texts:n})});n.forEach((e,t)=>p.set(e,Float32Array.from(i[t])))}return e.map(e=>p.get(e)??new Float32Array)}function h(e,t){if(!e.length||e.length!==t.length)return 0;let n=0;for(let r=0;r<e.length;r++)n+=e[r]*t[r];return n}var g=e({planStory:()=>v});async function _(e,t,n){if(t.filter(e=>e.text.trim().length>12).length)try{let r=await m(e.map(e=>e.text),n),i=await m(t.map(e=>e.text.slice(0,600)),n);return r.map(e=>Float32Array.from(i,(n,r)=>t[r].text.trim().length>12?h(e,n):0))}catch{return}}async function v(e,r,i,c,l){let u=r.filter(e=>!e.text?.trim()&&!e.desc?.trim());if(u.length>r.length*.4)try{let{ocrPages:t}=await s(async()=>{let{ocrPages:e}=await import(`./understand-DW57h42p.js`).then(e=>e.r);return{ocrPages:e}},__vite__mapDeps([0,1,2,3,4,5,6,7,8,9]),import.meta.url),n=await t({...e,shots:u},(e,t)=>l?.(e<0?`Lecture des bulles : chargement du lecteur…`:`Lecture des bulles ${Math.min(t,e+1)}/${t} (une seule fois)…`,t?.1+e/t*.25:.1));for(let e of u){let t=n.get(e.id);t&&(e.text=t)}}catch{}if(c===`google`||c===`auto`&&a()){let a=new Map(r.map((e,t)=>[`P${t+1}`,e.id])),s=r.map((t,n)=>{let r=e.pages.find(e=>e.id===t.pageId),i=[t.desc,t.text&&`« ${t.text.slice(0,90)} »`,t.chars?.length?`(${t.chars.join(`, `)})`:``,!t.desc&&r?.summary?`page : ${r.summary.slice(0,120)}`:``].filter(Boolean);return{id:`P${n+1}`,line:`${r?.name??``} — ${i.join(` `)||`case sans description`}`}}),c=[],u=[];for(let t=0;t<i.length;t+=70){let n=i.slice(t,t+70),r=e.research?`CONTEXTE (recherche) : ${e.research.title}. ${e.research.summary}\n`:``,l=await o(n.map(e=>e.text),s,void 0,r);for(let e of l.matches){let r=e.panels.map(e=>a.get(e)).filter(e=>!!e);e.sentence<0||e.sentence>=n.length||c.push({sentence:t+e.sentence,shotId:r[0]??null,conf:e.conf,alts:[],more:r.slice(1)})}for(let e of l.schemas)u.push({...e,sentence:t+e.sentence,items:e.items.map(e=>({...e,panel:a.get(e.panel)??``})).filter(e=>e.panel)})}let d=t(e,r),f=n(i,d,await _(i,d,l));for(let e of f)c.some(t=>t.sentence===e.sentence)||c.push({...e,conf:Math.min(e.conf,.4),more:[]});for(let e of c)e.alts=f[e.sentence]?.alts.filter(t=>t!==e.shotId)??[];return{assign:c.sort((e,t)=>e.sentence-t.sentence),schemas:u,engine:`google`}}let d=t(e,r),f=await _(i,d,l);return{assign:n(i,d,f).map(e=>({...e,more:[]})),schemas:[],engine:`local`}}export{g as n,v as t};

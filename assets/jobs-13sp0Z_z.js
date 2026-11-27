@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-XKyaHtl9.js";var t=e({heavy:()=>l}),n=new Map,r=Promise.resolve(),i=null,a=0,o=new Set;function s(e,t){n.set(e,t)}var c=()=>o.forEach(e=>e(a,i));function l(e,t){a++,c();let o=r.then(async()=>{i&&i!==e&&n.get(i)?.(),i=e,c();try{return await t()}finally{a--,c()}});return r=o.catch(()=>{}),o}var u=()=>i;export{s as i,t as n,u as r,l as t};

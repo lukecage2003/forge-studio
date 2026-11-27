@@ -1,0 +1,1182 @@
+{
+  "_Toast-D0VHeJJC.js": {
+    "file": "assets/Toast-D0VHeJJC.js",
+    "name": "Toast",
+    "imports": [
+      "_react-KPuNr9iS.js"
+    ]
+  },
+  "_actions-DbEKVtCr.js": {
+    "file": "assets/actions-DbEKVtCr.js",
+    "name": "actions",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_types-BQnbdw5z.js",
+      "_store-nK5nax8P.js",
+      "_media-NZmTmA5T.js",
+      "_render-D6DZwT6l.js",
+      "_understand-DW57h42p.js",
+      "_panelAI-DVLjpTbm.js",
+      "_fflate-B7eBzyA4.js",
+      "_preload-helper-DclECHGd.js",
+      "_classify-DCYEzeOp.js",
+      "_comicCamera-C6vEoF67.js",
+      "_util-CjQs9BdX.js",
+      "_mediaLibrary-DdNbbVY5.js",
+      "_timeline-D28gxIDM.js",
+      "_suggest-JloG1BuN.js",
+      "_Toast-D0VHeJJC.js"
+    ],
+    "dynamicImports": [
+      "node_modules/pdfjs-dist/build/pdf.mjs",
+      "node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url",
+      "src/production/kinds.ts",
+      "src/engine/proxy.ts",
+      "_google-DxatY0fp.js",
+      "_lexicon-BKHJPstJ.js",
+      "_understand-DW57h42p.js",
+      "_layers-DEgugTwL.js",
+      "_comicCamera-C6vEoF67.js",
+      "_panelAI-DVLjpTbm.js",
+      "_types-BQnbdw5z.js",
+      "_media-NZmTmA5T.js",
+      "_overlaySuggest-MpaVVOWK.js",
+      "_beats-BPS9JbnP.js",
+      "src/engine/publish.ts",
+      "src/lib/studio.ts",
+      "_workspace-Bj5auUKJ.js",
+      "_render-D6DZwT6l.js",
+      "_pro-CbxwYCR7.js"
+    ]
+  },
+  "_audio-B_lA5U6L.js": {
+    "file": "assets/audio-B_lA5U6L.js",
+    "name": "audio",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_media-NZmTmA5T.js",
+      "_timeline-D28gxIDM.js",
+      "_rng-C47nUYN6.js",
+      "_effects-DZxHtjcQ.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_loudness-DZNrxU7C.js"
+    ]
+  },
+  "_beats-BPS9JbnP.js": {
+    "file": "assets/beats-BPS9JbnP.js",
+    "name": "beats",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_bridge-fr-en-DnX8xuCf.js": {
+    "file": "assets/bridge-fr-en-DnX8xuCf.js",
+    "name": "bridge-fr-en"
+  },
+  "_classify-DCYEzeOp.js": {
+    "file": "assets/classify-DCYEzeOp.js",
+    "name": "classify",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_comicCamera-C6vEoF67.js": {
+    "file": "assets/comicCamera-C6vEoF67.js",
+    "name": "comicCamera",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_db-DZhDqWKy.js": {
+    "file": "assets/db-DZhDqWKy.js",
+    "name": "db"
+  },
+  "_delivery-C6P4YBXg.js": {
+    "file": "assets/delivery-C6P4YBXg.js",
+    "name": "delivery",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_loudness-DZNrxU7C.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_mediabunny-CIi2SWw9.js",
+      "src/engine/resources.ts"
+    ]
+  },
+  "_effects-DZxHtjcQ.js": {
+    "file": "assets/effects-DZxHtjcQ.js",
+    "name": "effects"
+  },
+  "_faces-DrMXrp02.js": {
+    "file": "assets/faces-DrMXrp02.js",
+    "name": "faces",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_fflate-B7eBzyA4.js": {
+    "file": "assets/fflate-B7eBzyA4.js",
+    "name": "fflate",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_google-DxatY0fp.js": {
+    "file": "assets/google-DxatY0fp.js",
+    "name": "google",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_speech-DkKSw2-0.js",
+      "_orchestrator-DKAeyY8A.js"
+    ]
+  },
+  "_hardware-DBvaZWCb.js": {
+    "file": "assets/hardware-DBvaZWCb.js",
+    "name": "hardware",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_icons-DpyJoycO.js": {
+    "file": "assets/icons-DpyJoycO.js",
+    "name": "icons",
+    "imports": [
+      "_react-KPuNr9iS.js"
+    ]
+  },
+  "_jobs-13sp0Z_z.js": {
+    "file": "assets/jobs-13sp0Z_z.js",
+    "name": "jobs",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_layers-DEgugTwL.js": {
+    "file": "assets/layers-DEgugTwL.js",
+    "name": "layers",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_media-NZmTmA5T.js",
+      "_jobs-13sp0Z_z.js",
+      "_hardware-DBvaZWCb.js",
+      "_db-DZhDqWKy.js"
+    ]
+  },
+  "_lexicon-BKHJPstJ.js": {
+    "file": "assets/lexicon-BKHJPstJ.js",
+    "name": "lexicon",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_loudness-DZNrxU7C.js": {
+    "file": "assets/loudness-DZNrxU7C.js",
+    "name": "loudness",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_media-NZmTmA5T.js": {
+    "file": "assets/media-NZmTmA5T.js",
+    "name": "media",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_db-DZhDqWKy.js",
+      "_util-CjQs9BdX.js",
+      "_jobs-13sp0Z_z.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/engine/denoise.ts",
+      "src/engine/voicepro.ts"
+    ]
+  },
+  "_mediaLibrary-DdNbbVY5.js": {
+    "file": "assets/mediaLibrary-DdNbbVY5.js",
+    "name": "mediaLibrary",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_bridge-fr-en-DnX8xuCf.js"
+    ]
+  },
+  "_mediabunny-CIi2SWw9.js": {
+    "file": "assets/mediabunny-CIi2SWw9.js",
+    "name": "mediabunny",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_orchestrator-DKAeyY8A.js": {
+    "file": "assets/orchestrator-DKAeyY8A.js",
+    "name": "orchestrator",
+    "imports": [
+      "_webllm-Dt2x2Im4.js",
+      "_hardware-DBvaZWCb.js"
+    ]
+  },
+  "_overlaySuggest-MpaVVOWK.js": {
+    "file": "assets/overlaySuggest-MpaVVOWK.js",
+    "name": "overlaySuggest",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_types-BQnbdw5z.js",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js"
+    ]
+  },
+  "_panelAI-DVLjpTbm.js": {
+    "file": "assets/panelAI-DVLjpTbm.js",
+    "name": "panelAI",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_hardware-DBvaZWCb.js",
+      "_jobs-13sp0Z_z.js"
+    ]
+  },
+  "_preload-helper-DclECHGd.js": {
+    "file": "assets/preload-helper-DclECHGd.js",
+    "name": "preload-helper"
+  },
+  "_pro-CbxwYCR7.js": {
+    "file": "assets/pro-CbxwYCR7.js",
+    "name": "pro",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_timeline-D28gxIDM.js",
+      "_lexicon-BKHJPstJ.js",
+      "_render-D6DZwT6l.js",
+      "_understand-DW57h42p.js"
+    ]
+  },
+  "_react-KPuNr9iS.js": {
+    "file": "assets/react-KPuNr9iS.js",
+    "name": "react",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_render-D6DZwT6l.js": {
+    "file": "assets/render-D6DZwT6l.js",
+    "name": "render",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_types-BQnbdw5z.js",
+      "_media-NZmTmA5T.js",
+      "_timeline-D28gxIDM.js",
+      "_lexicon-BKHJPstJ.js",
+      "_speech-DkKSw2-0.js",
+      "_util-CjQs9BdX.js",
+      "_panelAI-DVLjpTbm.js",
+      "_effects-DZxHtjcQ.js",
+      "_rng-C47nUYN6.js",
+      "_comicCamera-C6vEoF67.js",
+      "_beats-BPS9JbnP.js",
+      "_store-nK5nax8P.js",
+      "_story-CRZzCc6U.js",
+      "_storyboard-DU059GFq.js",
+      "_preload-helper-DclECHGd.js",
+      "_faces-DrMXrp02.js",
+      "_layers-DEgugTwL.js",
+      "_scene3d-Cj9NEQ4m.js"
+    ],
+    "dynamicImports": [
+      "_render-D6DZwT6l.js",
+      "_suggest-JloG1BuN.js",
+      "src/engine/library.ts"
+    ]
+  },
+  "_rng-C47nUYN6.js": {
+    "file": "assets/rng-C47nUYN6.js",
+    "name": "rng"
+  },
+  "_rolldown-runtime-XKyaHtl9.js": {
+    "file": "assets/rolldown-runtime-XKyaHtl9.js",
+    "name": "rolldown-runtime"
+  },
+  "_rush-CRXDAwnA.js": {
+    "file": "assets/rush-CRXDAwnA.js",
+    "name": "rush",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_store-nK5nax8P.js",
+      "_media-NZmTmA5T.js",
+      "_speech-DkKSw2-0.js",
+      "_jobs-13sp0Z_z.js",
+      "_hardware-DBvaZWCb.js",
+      "_google-DxatY0fp.js",
+      "_render-D6DZwT6l.js",
+      "_Toast-D0VHeJJC.js",
+      "_lexicon-BKHJPstJ.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/production/kinds.ts",
+      "src/ai/tasks.ts",
+      "src/production/orchestrator.ts"
+    ]
+  },
+  "_scene3d-Cj9NEQ4m.js": {
+    "file": "assets/scene3d-Cj9NEQ4m.js",
+    "name": "scene3d",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_media-NZmTmA5T.js",
+      "_util-CjQs9BdX.js",
+      "_rng-C47nUYN6.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "node_modules/three/build/three.module.js"
+    ]
+  },
+  "_schema-Snr__uvF.js": {
+    "file": "assets/schema-Snr__uvF.js",
+    "name": "schema"
+  },
+  "_speech-DkKSw2-0.js": {
+    "file": "assets/speech-DkKSw2-0.js",
+    "name": "speech"
+  },
+  "_store-nK5nax8P.js": {
+    "file": "assets/store-nK5nax8P.js",
+    "name": "store",
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_schema-Snr__uvF.js",
+      "_util-CjQs9BdX.js",
+      "_db-DZhDqWKy.js"
+    ]
+  },
+  "_story-CRZzCc6U.js": {
+    "file": "assets/story-CRZzCc6U.js",
+    "name": "story",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_understand-DW57h42p.js",
+      "_hardware-DBvaZWCb.js",
+      "_google-DxatY0fp.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_understand-DW57h42p.js"
+    ]
+  },
+  "_storyboard-DU059GFq.js": {
+    "file": "assets/storyboard-DU059GFq.js",
+    "name": "storyboard",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_suggest-JloG1BuN.js": {
+    "file": "assets/suggest-JloG1BuN.js",
+    "name": "suggest",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_store-nK5nax8P.js",
+      "_util-CjQs9BdX.js",
+      "_timeline-D28gxIDM.js"
+    ]
+  },
+  "_timeline-D28gxIDM.js": {
+    "file": "assets/timeline-D28gxIDM.js",
+    "name": "timeline",
+    "imports": [
+      "_speech-DkKSw2-0.js"
+    ]
+  },
+  "_types-BQnbdw5z.js": {
+    "file": "assets/types-BQnbdw5z.js",
+    "name": "types",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js"
+    ]
+  },
+  "_understand-DW57h42p.js": {
+    "file": "assets/understand-DW57h42p.js",
+    "name": "understand",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_media-NZmTmA5T.js",
+      "_panelAI-DVLjpTbm.js",
+      "_bridge-fr-en-DnX8xuCf.js",
+      "_jobs-13sp0Z_z.js",
+      "_hardware-DBvaZWCb.js"
+    ]
+  },
+  "_util-CjQs9BdX.js": {
+    "file": "assets/util-CjQs9BdX.js",
+    "name": "util"
+  },
+  "_webllm-Dt2x2Im4.js": {
+    "file": "assets/webllm-Dt2x2Im4.js",
+    "name": "webllm",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_jobs-13sp0Z_z.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "node_modules/@mlc-ai/web-llm/lib/index.js",
+      "_jobs-13sp0Z_z.js"
+    ]
+  },
+  "_workspace-Bj5auUKJ.js": {
+    "file": "assets/workspace-Bj5auUKJ.js",
+    "name": "workspace",
+    "imports": [
+      "_rolldown-runtime-XKyaHtl9.js",
+      "_fflate-B7eBzyA4.js",
+      "_media-NZmTmA5T.js",
+      "_schema-Snr__uvF.js",
+      "_util-CjQs9BdX.js"
+    ]
+  },
+  "index.html": {
+    "file": "assets/index-BAI_-Zte.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_types-BQnbdw5z.js",
+      "_store-nK5nax8P.js",
+      "_util-CjQs9BdX.js",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js",
+      "_timeline-D28gxIDM.js",
+      "_delivery-C6P4YBXg.js",
+      "_actions-DbEKVtCr.js",
+      "_rush-CRXDAwnA.js",
+      "_audio-B_lA5U6L.js",
+      "_media-NZmTmA5T.js",
+      "_speech-DkKSw2-0.js",
+      "_google-DxatY0fp.js",
+      "_render-D6DZwT6l.js",
+      "_scene3d-Cj9NEQ4m.js",
+      "_hardware-DBvaZWCb.js",
+      "_layers-DEgugTwL.js",
+      "_effects-DZxHtjcQ.js",
+      "_orchestrator-DKAeyY8A.js",
+      "_faces-DrMXrp02.js",
+      "_schema-Snr__uvF.js",
+      "_db-DZhDqWKy.js",
+      "_panelAI-DVLjpTbm.js",
+      "_classify-DCYEzeOp.js"
+    ],
+    "dynamicImports": [
+      "src/components/TasksPanel.tsx",
+      "src/lib/studio.ts",
+      "_actions-DbEKVtCr.js",
+      "_rush-CRXDAwnA.js",
+      "src/production/kinds.ts",
+      "_audio-B_lA5U6L.js",
+      "src/ai/tasks.ts",
+      "_hardware-DBvaZWCb.js",
+      "src/components/ExportModal.tsx",
+      "src/components/AutoModal.tsx",
+      "src/components/SettingsModal.tsx",
+      "src/components/ChannelModal.tsx",
+      "src/components/ScriptModal.tsx",
+      "src/components/AiCenter.tsx",
+      "src/components/AssistantModal.tsx",
+      "src/components/LibraryModal.tsx",
+      "src/components/LiveModal.tsx",
+      "src/components/MediaLibraryModal.tsx",
+      "src/components/StoryboardModal.tsx",
+      "src/components/ProjectsModal.tsx",
+      "src/components/ReviewModal.tsx",
+      "src/production/orchestrator.ts"
+    ],
+    "css": [
+      "assets/index-DKkL5ZcR.css"
+    ],
+    "assets": [
+      "assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+      "assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+      "assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+      "assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+      "assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+      "assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+      "assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+      "assets/space-grotesk-vietnamese-wght-normal-D0rl6rjA.woff2",
+      "assets/space-grotesk-latin-ext-wght-normal-D9tNdqV9.woff2",
+      "assets/space-grotesk-latin-wght-normal-BhU9QXUp.woff2",
+      "assets/anton-vietnamese-400-normal-CkBxLiRJ.woff2",
+      "assets/anton-vietnamese-400-normal-2FfR1wHA.woff",
+      "assets/anton-latin-ext-400-normal-SyiqE2Jt.woff2",
+      "assets/anton-latin-ext-400-normal-BMODBQc6.woff",
+      "assets/anton-latin-400-normal-Byf51wtH.woff2",
+      "assets/anton-latin-400-normal-AUNGEG_V.woff",
+      "assets/bangers-vietnamese-400-normal-BbvBhFjQ.woff2",
+      "assets/bangers-vietnamese-400-normal-Ll9rymNv.woff",
+      "assets/bangers-latin-ext-400-normal-7BLmjjiv.woff2",
+      "assets/bangers-latin-ext-400-normal-CzVt_Cgx.woff",
+      "assets/bangers-latin-400-normal-DeHY8Ncq.woff2",
+      "assets/bangers-latin-400-normal-BAEm-Pv0.woff",
+      "assets/comic-neue-latin-700-normal-NE4Vcoll.woff2",
+      "assets/comic-neue-latin-700-normal-yR9qu__P.woff"
+    ]
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-cyrillic-ext-wght-normal.woff2": {
+    "file": "assets/inter-cyrillic-ext-wght-normal-BOeWTOD4.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-cyrillic-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-cyrillic-wght-normal.woff2": {
+    "file": "assets/inter-cyrillic-wght-normal-DqGufNeO.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-cyrillic-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-greek-ext-wght-normal.woff2": {
+    "file": "assets/inter-greek-ext-wght-normal-DlzME5K_.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-greek-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-greek-wght-normal.woff2": {
+    "file": "assets/inter-greek-wght-normal-CkhJZR-_.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-greek-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2": {
+    "file": "assets/inter-latin-ext-wght-normal-DO1Apj_S.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2": {
+    "file": "assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/inter/files/inter-vietnamese-wght-normal.woff2": {
+    "file": "assets/inter-vietnamese-wght-normal-CBcvBZtf.woff2",
+    "src": "node_modules/@fontsource-variable/inter/files/inter-vietnamese-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-ext-wght-normal.woff2": {
+    "file": "assets/space-grotesk-latin-ext-wght-normal-D9tNdqV9.woff2",
+    "src": "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2": {
+    "file": "assets/space-grotesk-latin-wght-normal-BhU9QXUp.woff2",
+    "src": "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-vietnamese-wght-normal.woff2": {
+    "file": "assets/space-grotesk-vietnamese-wght-normal-D0rl6rjA.woff2",
+    "src": "node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-vietnamese-wght-normal.woff2"
+  },
+  "node_modules/@fontsource/anton/files/anton-latin-400-normal.woff": {
+    "file": "assets/anton-latin-400-normal-AUNGEG_V.woff",
+    "src": "node_modules/@fontsource/anton/files/anton-latin-400-normal.woff"
+  },
+  "node_modules/@fontsource/anton/files/anton-latin-400-normal.woff2": {
+    "file": "assets/anton-latin-400-normal-Byf51wtH.woff2",
+    "src": "node_modules/@fontsource/anton/files/anton-latin-400-normal.woff2"
+  },
+  "node_modules/@fontsource/anton/files/anton-latin-ext-400-normal.woff": {
+    "file": "assets/anton-latin-ext-400-normal-BMODBQc6.woff",
+    "src": "node_modules/@fontsource/anton/files/anton-latin-ext-400-normal.woff"
+  },
+  "node_modules/@fontsource/anton/files/anton-latin-ext-400-normal.woff2": {
+    "file": "assets/anton-latin-ext-400-normal-SyiqE2Jt.woff2",
+    "src": "node_modules/@fontsource/anton/files/anton-latin-ext-400-normal.woff2"
+  },
+  "node_modules/@fontsource/anton/files/anton-vietnamese-400-normal.woff": {
+    "file": "assets/anton-vietnamese-400-normal-2FfR1wHA.woff",
+    "src": "node_modules/@fontsource/anton/files/anton-vietnamese-400-normal.woff"
+  },
+  "node_modules/@fontsource/anton/files/anton-vietnamese-400-normal.woff2": {
+    "file": "assets/anton-vietnamese-400-normal-CkBxLiRJ.woff2",
+    "src": "node_modules/@fontsource/anton/files/anton-vietnamese-400-normal.woff2"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-latin-400-normal.woff": {
+    "file": "assets/bangers-latin-400-normal-BAEm-Pv0.woff",
+    "src": "node_modules/@fontsource/bangers/files/bangers-latin-400-normal.woff"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-latin-400-normal.woff2": {
+    "file": "assets/bangers-latin-400-normal-DeHY8Ncq.woff2",
+    "src": "node_modules/@fontsource/bangers/files/bangers-latin-400-normal.woff2"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-latin-ext-400-normal.woff": {
+    "file": "assets/bangers-latin-ext-400-normal-CzVt_Cgx.woff",
+    "src": "node_modules/@fontsource/bangers/files/bangers-latin-ext-400-normal.woff"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-latin-ext-400-normal.woff2": {
+    "file": "assets/bangers-latin-ext-400-normal-7BLmjjiv.woff2",
+    "src": "node_modules/@fontsource/bangers/files/bangers-latin-ext-400-normal.woff2"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-vietnamese-400-normal.woff": {
+    "file": "assets/bangers-vietnamese-400-normal-Ll9rymNv.woff",
+    "src": "node_modules/@fontsource/bangers/files/bangers-vietnamese-400-normal.woff"
+  },
+  "node_modules/@fontsource/bangers/files/bangers-vietnamese-400-normal.woff2": {
+    "file": "assets/bangers-vietnamese-400-normal-BbvBhFjQ.woff2",
+    "src": "node_modules/@fontsource/bangers/files/bangers-vietnamese-400-normal.woff2"
+  },
+  "node_modules/@fontsource/comic-neue/files/comic-neue-latin-700-normal.woff": {
+    "file": "assets/comic-neue-latin-700-normal-yR9qu__P.woff",
+    "src": "node_modules/@fontsource/comic-neue/files/comic-neue-latin-700-normal.woff"
+  },
+  "node_modules/@fontsource/comic-neue/files/comic-neue-latin-700-normal.woff2": {
+    "file": "assets/comic-neue-latin-700-normal-NE4Vcoll.woff2",
+    "src": "node_modules/@fontsource/comic-neue/files/comic-neue-latin-700-normal.woff2"
+  },
+  "node_modules/@mlc-ai/web-llm/lib/index.js": {
+    "file": "assets/lib-BkBIntl4.js",
+    "name": "lib",
+    "src": "node_modules/@mlc-ai/web-llm/lib/index.js",
+    "isDynamicEntry": true
+  },
+  "node_modules/pdfjs-dist/build/pdf.mjs": {
+    "file": "assets/pdf-Bm2p5NBK.js",
+    "name": "pdf",
+    "src": "node_modules/pdfjs-dist/build/pdf.mjs",
+    "isDynamicEntry": true
+  },
+  "node_modules/pdfjs-dist/build/pdf.worker.min.mjs": {
+    "file": "assets/pdf.worker.min-yatZIOMy.mjs",
+    "src": "node_modules/pdfjs-dist/build/pdf.worker.min.mjs"
+  },
+  "node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url": {
+    "file": "assets/pdf.worker.min-EipBoiTd.js",
+    "name": "pdf.worker.min",
+    "src": "node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url",
+    "isDynamicEntry": true,
+    "assets": [
+      "assets/pdf.worker.min-yatZIOMy.mjs"
+    ]
+  },
+  "node_modules/three/build/three.module.js": {
+    "file": "assets/three.module-CeVBJVoU.js",
+    "name": "three.module",
+    "src": "node_modules/three/build/three.module.js",
+    "isDynamicEntry": true
+  },
+  "src/ai/tasks.ts": {
+    "file": "assets/tasks-B3H_c3u7.js",
+    "name": "tasks",
+    "src": "src/ai/tasks.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_overlaySuggest-MpaVVOWK.js",
+      "_timeline-D28gxIDM.js",
+      "_orchestrator-DKAeyY8A.js",
+      "_render-D6DZwT6l.js"
+    ]
+  },
+  "src/components/AiCenter.tsx": {
+    "file": "assets/AiCenter-4P2k-GKN.js",
+    "name": "AiCenter",
+    "src": "src/components/AiCenter.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_orchestrator-DKAeyY8A.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_hardware-DBvaZWCb.js",
+      "_webllm-Dt2x2Im4.js"
+    ]
+  },
+  "src/components/AssistantModal.tsx": {
+    "file": "assets/AssistantModal-ChhNgm3v.js",
+    "name": "AssistantModal",
+    "src": "src/components/AssistantModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_render-D6DZwT6l.js",
+      "_store-nK5nax8P.js",
+      "_effects-DZxHtjcQ.js",
+      "_react-KPuNr9iS.js",
+      "_actions-DbEKVtCr.js",
+      "_icons-DpyJoycO.js",
+      "src/ai/tasks.ts",
+      "_orchestrator-DKAeyY8A.js",
+      "_rush-CRXDAwnA.js",
+      "index.html",
+      "_Toast-D0VHeJJC.js"
+    ]
+  },
+  "src/components/AutoModal.tsx": {
+    "file": "assets/AutoModal-C4sJcqjt.js",
+    "name": "AutoModal",
+    "src": "src/components/AutoModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_render-D6DZwT6l.js",
+      "_google-DxatY0fp.js",
+      "_store-nK5nax8P.js",
+      "_actions-DbEKVtCr.js",
+      "_storyboard-DU059GFq.js",
+      "_Toast-D0VHeJJC.js",
+      "_types-BQnbdw5z.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_lexicon-BKHJPstJ.js",
+      "src/lib/studio.ts",
+      "_pro-CbxwYCR7.js",
+      "src/production/kinds.ts"
+    ]
+  },
+  "src/components/ChannelModal.tsx": {
+    "file": "assets/ChannelModal-DQrQb1ya.js",
+    "name": "ChannelModal",
+    "src": "src/components/ChannelModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_render-D6DZwT6l.js",
+      "_react-KPuNr9iS.js",
+      "_media-NZmTmA5T.js",
+      "_util-CjQs9BdX.js",
+      "_layers-DEgugTwL.js",
+      "index.html",
+      "_understand-DW57h42p.js",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_pro-CbxwYCR7.js"
+    ]
+  },
+  "src/components/ExportModal.tsx": {
+    "file": "assets/ExportModal-BzqTAg5u.js",
+    "name": "ExportModal",
+    "src": "src/components/ExportModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_types-BQnbdw5z.js",
+      "_store-nK5nax8P.js",
+      "src/engine/export.ts",
+      "_Toast-D0VHeJJC.js",
+      "src/engine/qc.ts",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js",
+      "index.html",
+      "_util-CjQs9BdX.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/production/kinds.ts",
+      "src/production/orchestrator.ts",
+      "src/engine/export.ts",
+      "_render-D6DZwT6l.js",
+      "src/engine/report.ts",
+      "_audio-B_lA5U6L.js",
+      "_media-NZmTmA5T.js",
+      "src/engine/otio.ts"
+    ]
+  },
+  "src/components/LibraryModal.tsx": {
+    "file": "assets/LibraryModal-DHEMlBB4.js",
+    "name": "LibraryModal",
+    "src": "src/components/LibraryModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "src/engine/library.ts",
+      "_media-NZmTmA5T.js",
+      "_timeline-D28gxIDM.js",
+      "_util-CjQs9BdX.js",
+      "_Toast-D0VHeJJC.js"
+    ]
+  },
+  "src/components/LiveModal.tsx": {
+    "file": "assets/LiveModal-Clb0UYBR.js",
+    "name": "LiveModal",
+    "src": "src/components/LiveModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_media-NZmTmA5T.js",
+      "_timeline-D28gxIDM.js",
+      "_audio-B_lA5U6L.js",
+      "_effects-DZxHtjcQ.js",
+      "index.html"
+    ]
+  },
+  "src/components/MediaLibraryModal.tsx": {
+    "file": "assets/MediaLibraryModal-2Ahs_nx_.js",
+    "name": "MediaLibraryModal",
+    "src": "src/components/MediaLibraryModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_types-BQnbdw5z.js",
+      "_mediaLibrary-DdNbbVY5.js",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/lib/studio.ts",
+      "_mediaLibrary-DdNbbVY5.js",
+      "src/production/kinds.ts",
+      "src/engine/clip.ts",
+      "_actions-DbEKVtCr.js",
+      "_media-NZmTmA5T.js"
+    ]
+  },
+  "src/components/ProjectsModal.tsx": {
+    "file": "assets/ProjectsModal-DcmAHDWl.js",
+    "name": "ProjectsModal",
+    "src": "src/components/ProjectsModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_Toast-D0VHeJJC.js",
+      "src/lib/studio.ts",
+      "_util-CjQs9BdX.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/engine/versionDiff.ts"
+    ]
+  },
+  "src/components/ReviewModal.tsx": {
+    "file": "assets/ReviewModal-yx9F77n7.js",
+    "name": "ReviewModal",
+    "src": "src/components/ReviewModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_store-nK5nax8P.js",
+      "_timeline-D28gxIDM.js",
+      "_media-NZmTmA5T.js",
+      "index.html",
+      "_Toast-D0VHeJJC.js"
+    ]
+  },
+  "src/components/ScriptModal.tsx": {
+    "file": "assets/ScriptModal-CvJuPLNZ.js",
+    "name": "ScriptModal",
+    "src": "src/components/ScriptModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_render-D6DZwT6l.js",
+      "_actions-DbEKVtCr.js",
+      "_Toast-D0VHeJJC.js",
+      "src/ai/tasks.ts",
+      "_orchestrator-DKAeyY8A.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/production/kinds.ts"
+    ]
+  },
+  "src/components/SettingsModal.tsx": {
+    "file": "assets/SettingsModal-BTmgVHLm.js",
+    "name": "SettingsModal",
+    "src": "src/components/SettingsModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_google-DxatY0fp.js",
+      "_store-nK5nax8P.js",
+      "_orchestrator-DKAeyY8A.js",
+      "index.html",
+      "_Toast-D0VHeJJC.js",
+      "_util-CjQs9BdX.js",
+      "_schema-Snr__uvF.js",
+      "src/engine/bench.ts",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_hardware-DBvaZWCb.js",
+      "src/engine/bench.ts"
+    ]
+  },
+  "src/components/StoryboardModal.tsx": {
+    "file": "assets/StoryboardModal-D7gjHzDe.js",
+    "name": "StoryboardModal",
+    "src": "src/components/StoryboardModal.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "_storyboard-DU059GFq.js",
+      "_render-D6DZwT6l.js",
+      "index.html",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/production/kinds.ts",
+      "src/production/orchestrator.ts",
+      "_actions-DbEKVtCr.js"
+    ]
+  },
+  "src/components/TasksPanel.tsx": {
+    "file": "assets/TasksPanel-ClzkT4x0.js",
+    "name": "TasksPanel",
+    "src": "src/components/TasksPanel.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_react-KPuNr9iS.js",
+      "_icons-DpyJoycO.js",
+      "_store-nK5nax8P.js",
+      "src/engine/resources.ts",
+      "src/production/orchestrator.ts",
+      "src/production/kinds.ts",
+      "_util-CjQs9BdX.js",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/lib/studio.ts"
+    ]
+  },
+  "src/engine/bench.ts": {
+    "file": "assets/bench-zLyicHDC.js",
+    "name": "bench",
+    "src": "src/engine/bench.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_store-nK5nax8P.js",
+      "_media-NZmTmA5T.js",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_scene3d-Cj9NEQ4m.js",
+      "src/engine/export.ts"
+    ]
+  },
+  "src/engine/clip.ts": {
+    "file": "assets/clip-CCVmg2Rg.js",
+    "name": "clip",
+    "src": "src/engine/clip.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_jobs-13sp0Z_z.js",
+      "_hardware-DBvaZWCb.js"
+    ]
+  },
+  "src/engine/denoise.ts": {
+    "file": "assets/denoise-DkSet2oP.js",
+    "name": "denoise",
+    "src": "src/engine/denoise.ts",
+    "isDynamicEntry": true
+  },
+  "src/engine/export.ts": {
+    "file": "assets/export-8n1le3in.js",
+    "name": "export",
+    "src": "src/engine/export.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_types-BQnbdw5z.js",
+      "_mediabunny-CIi2SWw9.js",
+      "_audio-B_lA5U6L.js",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js",
+      "_media-NZmTmA5T.js",
+      "_speech-DkKSw2-0.js",
+      "_util-CjQs9BdX.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_layers-DEgugTwL.js",
+      "_scene3d-Cj9NEQ4m.js"
+    ]
+  },
+  "src/engine/library.ts": {
+    "file": "assets/library-B17JBGW8.js",
+    "name": "library",
+    "src": "src/engine/library.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_util-CjQs9BdX.js",
+      "_beats-BPS9JbnP.js",
+      "_loudness-DZNrxU7C.js"
+    ]
+  },
+  "src/engine/nameFocus.ts": {
+    "file": "assets/nameFocus-4a-4u63I.js",
+    "name": "nameFocus",
+    "src": "src/engine/nameFocus.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_media-NZmTmA5T.js",
+      "_lexicon-BKHJPstJ.js",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/engine/clip.ts"
+    ]
+  },
+  "src/engine/otio.ts": {
+    "file": "assets/otio-cX2ug__G.js",
+    "name": "otio",
+    "src": "src/engine/otio.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_fflate-B7eBzyA4.js",
+      "_timeline-D28gxIDM.js",
+      "_media-NZmTmA5T.js",
+      "_effects-DZxHtjcQ.js"
+    ]
+  },
+  "src/engine/proxy.ts": {
+    "file": "assets/proxy-BGzgCltm.js",
+    "name": "proxy",
+    "src": "src/engine/proxy.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_mediabunny-CIi2SWw9.js"
+    ]
+  },
+  "src/engine/publish.ts": {
+    "file": "assets/publish-Cb1jmTGK.js",
+    "name": "publish",
+    "src": "src/engine/publish.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_lexicon-BKHJPstJ.js",
+      "_delivery-C6P4YBXg.js"
+    ]
+  },
+  "src/engine/qc.ts": {
+    "file": "assets/qc-DT2soqBZ.js",
+    "name": "qc",
+    "src": "src/engine/qc.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_types-BQnbdw5z.js",
+      "_media-NZmTmA5T.js",
+      "_render-D6DZwT6l.js",
+      "_timeline-D28gxIDM.js",
+      "_pro-CbxwYCR7.js"
+    ]
+  },
+  "src/engine/report.ts": {
+    "file": "assets/report-BdLg1dBg.js",
+    "name": "report",
+    "src": "src/engine/report.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_types-BQnbdw5z.js",
+      "_timeline-D28gxIDM.js",
+      "src/engine/qc.ts",
+      "_audio-B_lA5U6L.js",
+      "_effects-DZxHtjcQ.js",
+      "_render-D6DZwT6l.js",
+      "_media-NZmTmA5T.js"
+    ]
+  },
+  "src/engine/resources.ts": {
+    "file": "assets/resources-DCBDAbjr.js",
+    "name": "resources",
+    "src": "src/engine/resources.ts",
+    "isDynamicEntry": true
+  },
+  "src/engine/versionDiff.ts": {
+    "file": "assets/versionDiff-Dhv2mFu-.js",
+    "name": "versionDiff",
+    "src": "src/engine/versionDiff.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_timeline-D28gxIDM.js"
+    ]
+  },
+  "src/engine/voicepro.ts": {
+    "file": "assets/voicepro-BLrLfiEq.js",
+    "name": "voicepro",
+    "src": "src/engine/voicepro.ts",
+    "isDynamicEntry": true
+  },
+  "src/lib/studio.ts": {
+    "file": "assets/studio-B1oEIIFi.js",
+    "name": "studio",
+    "src": "src/lib/studio.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_store-nK5nax8P.js",
+      "_db-DZhDqWKy.js",
+      "_media-NZmTmA5T.js",
+      "_workspace-Bj5auUKJ.js",
+      "_util-CjQs9BdX.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_actions-DbEKVtCr.js"
+    ]
+  },
+  "src/production/kinds.ts": {
+    "file": "assets/kinds-LVdv0ivY.js",
+    "name": "kinds",
+    "src": "src/production/kinds.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "_store-nK5nax8P.js",
+      "_media-NZmTmA5T.js",
+      "_panelAI-DVLjpTbm.js",
+      "src/production/orchestrator.ts",
+      "src/engine/resources.ts",
+      "_Toast-D0VHeJJC.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "_understand-DW57h42p.js",
+      "_classify-DCYEzeOp.js",
+      "_actions-DbEKVtCr.js",
+      "_rush-CRXDAwnA.js",
+      "_faces-DrMXrp02.js",
+      "_media-NZmTmA5T.js",
+      "src/engine/proxy.ts",
+      "_lexicon-BKHJPstJ.js",
+      "src/ai/tasks.ts",
+      "_render-D6DZwT6l.js",
+      "_story-CRZzCc6U.js",
+      "_storyboard-DU059GFq.js",
+      "_panelAI-DVLjpTbm.js",
+      "src/lib/studio.ts",
+      "_mediaLibrary-DdNbbVY5.js",
+      "src/engine/clip.ts",
+      "src/engine/nameFocus.ts",
+      "src/engine/export.ts",
+      "_delivery-C6P4YBXg.js",
+      "src/engine/publish.ts",
+      "_fflate-B7eBzyA4.js",
+      "src/engine/qc.ts"
+    ]
+  },
+  "src/production/orchestrator.ts": {
+    "file": "assets/orchestrator-DBYPk805.js",
+    "name": "orchestrator",
+    "src": "src/production/orchestrator.ts",
+    "isDynamicEntry": true,
+    "imports": [
+      "src/engine/resources.ts",
+      "_jobs-13sp0Z_z.js",
+      "_hardware-DBvaZWCb.js",
+      "_db-DZhDqWKy.js",
+      "_util-CjQs9BdX.js",
+      "_store-nK5nax8P.js",
+      "_preload-helper-DclECHGd.js"
+    ],
+    "dynamicImports": [
+      "src/production/kinds.ts"
+    ]
+  }
+}
