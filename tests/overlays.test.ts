@@ -47,3 +47,12 @@ describe('pistes de superposition', () => {
     expect(upgrade(old).project.overlays).toEqual([]);
   });
 });
+
+describe('calques : la case entière quand le cadrage la couperait trop', () => {
+  it('perte de cadrage : nulle si même forme, forte pour une case haute dans une moitié large', async () => {
+    const { fitLoss } = await import('../src/engine/overlays');
+    expect(fitLoss(100, 200, 50, 100)).toBeCloseTo(0);
+    expect(fitLoss(400, 1200, 1080, 960)).toBeGreaterThan(0.25); // tall text panel in the bottom half: shown whole
+    expect(fitLoss(1000, 900, 1080, 960)).toBeLessThan(0.25); // nearly the same shape: fills the box
+  });
+});

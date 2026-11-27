@@ -18,7 +18,7 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
   await p.waitForFunction(() => { const q = globalThis.__forgeQueue; const pr = window.__forge.getState().project; return pr.shots.length > 0 && q.active(pr.id).length === 0; }, null, { timeout: 180000, polling: 250 });
 
   // 1. the selected panel, from the command palette, at 1 s
-  await p.evaluate(async () => { const st = await import('/src/store.ts'); const pr = st.getState().project; st.setUI({ playhead: 1, selection: { kind: 'shot', id: pr.shots[pr.shots.length - 1].id } }); });
+  await p.evaluate(async () => { const st = await import('/src/store.ts'); const pr = st.getState().project; st.setUI({ playhead: 1, selection: { kind: 'shot', id: pr.shots.find((s) => s.pageId === pr.pages[1].id).id } }); });
   await p.keyboard.press('Control+k'); await p.keyboard.type('superposer la case'); await p.keyboard.press('Enter');
   await p.waitForFunction(() => (window.__forge.getState().project.overlays ?? []).length === 1, null, { timeout: 10000 });
   check(true, 'case superposée depuis la palette de commandes');
@@ -73,6 +73,22 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
   for (const [name, d] of Object.entries(r.out)) {
     check(d.vsRendu < 14 && d.sansSuperposition > 3 * d.vsRendu + 10, `${name} présente dans le MP4, identique à l’aperçu (écart ${d.vsRendu}/255, contre ${d.sansSuperposition} sans superposition)`);
   }
+
+  // 3b. the picture-in-picture shows THAT panel: its mean colour matches the panel's on the page
+  const col = await p.evaluate(async () => {
+    const st = await import('/src/store.ts'); const R = await import('/src/engine/render.ts'); const O = await import('/src/engine/overlays.ts'); const M = await import('/src/engine/media.ts');
+    const pr = st.getState().project; const o = pr.overlays.find((x) => x.source.kind === 'panel');
+    const pg = pr.pages.find((x) => x.id === o.source.pageId); const a = M.getImage(pg.mediaId); const r = o.source.rect;
+    const mean = (c, box) => { const d = c.getContext('2d').getImageData(box.x, box.y, box.w, box.h).data; const m = [0, 0, 0]; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map((x) => x / (d.length / 4)); };
+    const src = new OffscreenCanvas(a.width, a.height); src.getContext('2d').drawImage(a.img, 0, 0);
+    // the centre of the panel (cover-fit keeps the centre)
+    const panel = mean(src, { x: Math.round(r.x + r.w * 0.35), y: Math.round(r.y + r.h * 0.35), w: Math.max(1, Math.round(r.w * 0.3)), h: Math.max(1, Math.round(r.h * 0.3)) });
+    const W = 1080, H = 1920, c = new OffscreenCanvas(W, H); R.createRenderer(W, H).draw(c.getContext('2d'), pr, o.start + o.duration / 2);
+    const b = O.placeBox('pip', W, H);
+    const pip = mean(c, { x: Math.round(b.x + b.w * 0.35), y: Math.round(b.y + b.h * 0.35), w: Math.round(b.w * 0.3), h: Math.round(b.h * 0.3) });
+    return { panel: panel.map(Math.round), pip: pip.map(Math.round), d: Math.max(...panel.map((v, i) => Math.abs(v - pip[i]))) };
+  });
+  check(col.d < 40, `l’incrustation montre bien la case choisie (couleur ${col.pip} contre ${col.panel} sur la planche)`);
 
   // 4. undo, .forge, cleanup
   const z = await p.evaluate(async () => {

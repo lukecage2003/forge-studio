@@ -29,6 +29,12 @@ export function placeBox(place: OverlayPlace, W: number, H: number): Box {
   }
 }
 
+/** pure: share of the picture lost when it fills (cover) a box of another shape: 0 = nothing cut */
+export function fitLoss(sw: number, sh: number, bw: number, bh: number): number {
+  const k = Math.max(bw / sw, bh / sh);
+  return 1 - Math.min(1, (bw / k) / sw) * Math.min(1, (bh / k) / sh);
+}
+
 /** pure: the overlays visible at t, lower tracks first (drawn first, so higher tracks cover them) */
 export function activeOverlays(p: Project, t: number): Overlay[] {
   return (p.overlays ?? []).filter((o) => t >= o.start && t < o.start + o.duration).sort((a, b) => a.track - b.track || a.start - b.start);
@@ -57,8 +63,8 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
       const asset = page && getImage(page.mediaId);
       if (!asset) continue;
       img = asset.img;
-      sx = (src.rect.x / 100) * asset.width; sy = (src.rect.y / 100) * asset.height;
-      sw = Math.max(1, (src.rect.w / 100) * asset.width); sh = Math.max(1, (src.rect.h / 100) * asset.height);
+      // panel rects are in page pixels (as everywhere in the renderer)
+      sx = src.rect.x; sy = src.rect.y; sw = Math.max(1, src.rect.w); sh = Math.max(1, src.rect.h);
     } else if (o.source.kind === 'image') {
       const asset = getImage(o.source.mediaId);
       if (!asset) continue;
@@ -72,11 +78,14 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
       const k = iw / sw; sw *= k; sh *= k;
     }
     const box = placeBox(o.place, W, H);
-    // cover-fit the source in its box, centred; a slow push-in over the overlay's life
     const z = 1 + 0.08 * o.zoom * ((t - o.start) / Math.max(0.5, o.duration));
-    const k = Math.max(box.w / sw, box.h / sh) * z;
-    const cw = box.w / k, ch = box.h / k;
+    // a comic picture is shown whole when filling the box would cut more than a quarter of it
+    // (balloons and captions stay readable); a video always fills its box
+    const whole = o.source.kind !== 'video' && fitLoss(sw, sh, box.w, box.h) > 0.25;
+    const k = (whole ? Math.min(box.w / sw, box.h / sh) : Math.max(box.w / sw, box.h / sh)) * z;
+    const cw = Math.min(sw, box.w / k), ch = Math.min(sh, box.h / k);
     const cx = sx + (sw - cw) / 2, cy = sy + (sh - ch) / 2;
+    const dw = cw * k, dh = ch * k, dx = box.x + (box.w - dw) / 2, dy = box.y + (box.h - dh) / 2;
     ctx.save();
     ctx.globalAlpha = a;
     if (o.place === 'pip') {
@@ -87,7 +96,14 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
     }
     ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, cx, cy, cw, ch, box.x, box.y, box.w, box.h);
+    if (whole) {
+      // behind the whole picture: itself, filling the box, blurred and darkened (no invented pixels)
+      const kb = Math.max(box.w / sw, box.h / sh), bw = box.w / kb, bh = box.h / kb;
+      ctx.filter = 'blur(18px) brightness(0.45)';
+      ctx.drawImage(img, sx + (sw - bw) / 2, sy + (sh - bh) / 2, bw, bh, box.x - 20, box.y - 20, box.w + 40, box.h + 40);
+      ctx.filter = 'none';
+    }
+    ctx.drawImage(img, cx, cy, cw, ch, dx, dy, dw, dh);
     ctx.restore();
   }
 }
