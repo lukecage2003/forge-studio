@@ -1,6 +1,8 @@
 import { DIAGRAM_3D, FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { toneFilter } from './color';
-import { drawOverlays, type OverlayVideoSource } from './overlays';
+import { drawOverlays, otherHalf, splitAt, type OverlayVideoSource } from './overlays';
+/** split screen draws the main track through a second renderer: never recursively */
+let splitDepth = 0;
 import { personMask } from './segment';
 import { faceAt } from './faces';
 import { layersFor, type Layers } from './layers';
@@ -1695,6 +1697,8 @@ export function createRenderer(W: number, H: number): Renderer {
   const vertical = H > W;
   const noFace: FaceSource = () => null;
   let curOverlayVideo: OverlayVideoSource | undefined;
+  // split screen: one renderer per half size, reused (the main track drawn for that shape)
+  const splitBufs = new Map<string, { r: Renderer; c: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
 
   /** one comic shot, composed according to its layout */
   function renderShot(ctx: Ctx, project: Project, ts: TimedShot, t: number, face: FaceSource, segs: Seg[], motionStart = 0, override?: { view: View; clip: Rect }) {
@@ -1958,6 +1962,23 @@ export function createRenderer(W: number, H: number): Renderer {
         return overlay && segs.length ? { kind: 'face' } : { kind: 'empty' };
       };
       const cur = stateAt(t);
+      // split screen: a half overlay sends the main track into the other half, framed for it
+      const split = splitDepth === 0 ? splitAt(project, t) : null;
+      const half = split && otherHalf(split.place, W, H);
+      if (half) {
+        const bw = Math.round(half.w), bh = Math.round(half.h);
+        const key = `${bw}x${bh}`;
+        let sub = splitBufs.get(key);
+        if (!sub) { const c = makeBuf(bw, bh); sub = { r: createRenderer(bw, bh), c, ctx: c.getContext('2d')! }; splitBufs.set(key, sub); }
+        // drawn once on the whole frame afterwards: overlays, subtitles, look, callouts, progress bar
+        const inner: Project = { ...project, overlays: [], fx: (project.fx ?? []).filter((f) => f.kind !== 'callout'), subtitleStyle: { ...project.subtitleStyle, on: false }, progressBar: false, watermark: '', look: { ...project.look, vignette: 0, grain: 0 } };
+        splitDepth++;
+        try { sub.r.draw(sub.ctx, inner, t, face, overlayVideo); } finally { splitDepth--; }
+        ctx.fillStyle = '#0B0B0D'; ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(sub.c, half.x, half.y);
+        overlays(ctx, project, t, total, cur);
+        return;
+      }
       if (cur.kind !== 'shot') {
         renderState(ctx, project, cur, t, face, segs);
         overlays(ctx, project, t, total, cur);

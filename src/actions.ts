@@ -3,7 +3,8 @@ import type { AudioClip, AudioKind, Overlay, OverlaySource, Page, Project, Rect,
 import { FORMATS } from './types';
 import { getState, newShot, setUI, update } from './store';
 import { getAudio, getImage, importAudio, importImage, importVideo } from './engine/media';
-import { bestPlace } from './engine/overlays';
+import { bestPlace, chooseCorner, detailOf } from './engine/overlays';
+import { createRenderer } from './engine/render';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, trimBottomToArt, type PageText } from './engine/classify';
@@ -268,14 +269,29 @@ function defaultPlace(src: OverlaySource): Overlay['place'] {
   if (src.kind === 'image') { const a = getImage(src.mediaId); return a ? bestPlace(a.width, a.height, w, h) : 'full'; }
   return 'full';
 }
+/** the corner where a picture-in-picture hides the least of the frame at t (drawn small, without overlays) */
+export function quietCorner(p: Project, t: number): Overlay['corner'] {
+  if (typeof document === 'undefined') return 'tr';
+  try {
+    const { w, h } = FORMATS[p.format];
+    const k = 270 / w, W = Math.round(w * k), H = Math.round(h * k);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    createRenderer(W, H).draw(ctx, { ...p, overlays: [], subtitleStyle: { ...p.subtitleStyle, on: false } }, t);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    return chooseCorner(W, H, (b) => detailOf(data, W, b), !!p.subtitleStyle.on && p.subtitles.length > 0);
+  } catch { return 'tr'; }
+}
 /** place a picture on an overlay track at the playhead; undoable, selected for editing */
 export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
   const start = opts.start ?? getState().ui.playhead;
   const duration = opts.duration ?? (source.kind === 'video' ? Math.min(5, Math.max(0.5, source.sourceDuration - source.offset)) : 3);
+  const place = opts.place ?? defaultPlace(source);
   const o: Overlay = {
+    corner: place === 'pip' && !opts.corner ? quietCorner(getState().project, start + Math.min(0.5, duration / 2)) : opts.corner,
     id: uid('ov_'), start, duration, source,
     track: opts.track ?? freeTrack(getState().project, start, duration),
-    place: opts.place ?? defaultPlace(source),
+    place,
     zoom: opts.zoom ?? (source.kind === 'video' ? 0 : 1),
     fade: opts.fade ?? 0.25,
   };
@@ -285,7 +301,7 @@ export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
 }
 export function patchOverlay(id: string, patch: Partial<Overlay>, key?: string) {
   update((p) => {
-    const overlays = (p.overlays ?? []).map((o) => (o.id === id ? { ...o, ...patch } : o));
+    const overlays = (p.overlays ?? []).map((o) => (o.id === id ? { ...o, auto: false, ...patch } : o));
     const o = overlays.find((x) => x.id === id);
     // the video's own sound follows its picture (same start, length and place in the file)
     const audio = o?.soundClip && o.source.kind === 'video'
@@ -776,4 +792,25 @@ export function trimToPlayhead(side: 'start' | 'end'): boolean {
     return true;
   }
   return false;
+}
+
+
+/**
+ * Overlays the auto edit places from the script (comparison, « meanwhile », reminder),
+ * each explained. The ones the user placed or changed are kept; the previous automatic
+ * ones are replaced. A picture-in-picture goes where it hides the least drawing.
+ */
+export async function withAutoOverlays(p: Project): Promise<Project> {
+  const { suggestOverlays } = await import('./engine/overlaySuggest');
+  let cur: Project = { ...p, overlays: (p.overlays ?? []).filter((o) => !o.auto) };
+  for (const s of suggestOverlays(cur)) {
+    const o: Overlay = {
+      id: uid('ov_'), start: s.at, duration: s.duration, track: freeTrack(cur, s.at, s.duration),
+      source: { kind: 'panel', pageId: s.pageId, rect: s.rect }, place: s.place, zoom: 1, fade: 0.35,
+      enter: s.place === 'pip' ? 'pop' : 'slide', corner: s.place === 'pip' ? quietCorner(cur, s.at + 0.5) : undefined,
+      auto: true, why: s.raison,
+    };
+    cur = { ...cur, overlays: [...(cur.overlays ?? []), o] };
+  }
+  return cur;
 }

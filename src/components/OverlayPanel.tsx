@@ -27,6 +27,7 @@ export function OverlayPanel({ o }: { o: Overlay }) {
         <div><span className="eyebrow"><Layers size={12} /> Calque superposé · piste {o.track}</span><h2>{o.source.kind === 'panel' ? what : o.source.name ?? what}</h2></div>
         <button className="icon-btn ghost danger" title="Supprimer (Suppr)" onClick={deleteSelection}><Trash2 size={16} /></button>
       </div>
+      {o.auto && o.why && <p className="help why">Montage automatique : {o.why}</p>}
       <p className="help">Posée au-dessus de la piste principale, sans la modifier. La piste la plus haute passe devant.{o.source.kind === 'video' ? '' : ''}</p>
       <section className="insp-section">
         <div className="insp-head"><h3>Piste</h3></div>
@@ -37,6 +38,14 @@ export function OverlayPanel({ o }: { o: Overlay }) {
         <div className="seg full wrap" role="radiogroup" aria-label="Placement">
           {(Object.keys(PLACE_FR) as OverlayPlace[]).filter((p) => p !== 'free' || o.box).map((p) => <button key={p} role="radio" aria-checked={o.place === p} className={o.place === p ? 'on' : ''} onClick={() => patchOverlay(o.id, { place: p })}>{PLACE_FR[p]}</button>)}
         </div>
+        {o.place === 'pip' && (
+          <div className="seg full" role="radiogroup" aria-label="Coin de l’incrustation">
+            {([['tl', '↖ Haut gauche'], ['tr', 'Haut droite ↗'], ['bl', '↙ Bas gauche'], ['br', 'Bas droite ↘']] as const).map(([c, l]) => <button key={c} role="radio" aria-checked={(o.corner ?? 'tr') === c} className={(o.corner ?? 'tr') === c ? 'on' : ''} onClick={() => patchOverlay(o.id, { corner: c })}>{l}</button>)}
+          </div>
+        )}
+        {(o.place === 'top' || o.place === 'bottom' || o.place === 'left' || o.place === 'right') && (
+          <label className="check-row"><input type="checkbox" checked={o.split !== false} onChange={(e) => patchOverlay(o.id, { split: e.target.checked })} /> Écran partagé : la case principale se range dans l’autre moitié</label>
+        )}
         {o.place !== advised && o.source.kind !== 'video' && <button className="btn sm ghost wrap-btn" onClick={() => patchOverlay(o.id, { place: advised })}>Placement conseillé pour cette forme : {PLACE_FR[advised]}</button>}
         <p className="help">Dans l’aperçu, glisse le cadre pour le placer librement ; le coin en bas à droite change sa taille.</p>
         {o.place === 'free' && (

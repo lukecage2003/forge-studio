@@ -5,7 +5,7 @@ import { MODELS, type ProductionModel } from '../engine/auto';
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
-import { aiRecut, analyzeComics, prepareMotion, researchComics } from '../actions';
+import { aiRecut, analyzeComics, prepareMotion, researchComics, withAutoOverlays } from '../actions';
 import { narration } from '../engine/narration';
 import { sentenceKey } from '../engine/storyboard';
 import { toast } from './Toast';
@@ -55,6 +55,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const [story, setStory] = useState<boolean>(hasVoiceWords || !!script0.trim());
   const boardOk = useStore((s) => { const b = s.project.storyboard; return !!b && b.key === sentenceKey(narration(s.project).sentences); });
   const [useBoard, setUseBoard] = useState(true);
+  const [calques, setCalques] = useState(true);
   const [storyEngine, setStoryEngine] = useState<'local' | 'google'>(hasGoogle() ? 'google' : 'local');
   const google = hasGoogle();
 
@@ -92,7 +93,10 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       const { project, report } = await autoMontage(getState().project, { style: profile ? PROFILE[profile].base[hasFace ? 'face' : 'solo'] : style, profile: profile ?? undefined, model, length, hook, redetect, beatSync, captionStyle, subtitles, matches, story: story || (boardOk && useBoard) ? storyEngine : false, board: boardOk && useBoard ? getState().project.storyboard : undefined, director: dir, onProgress: (l, pr) => setBusy(`${l} ${Math.round(pr * 100)} %`) });
       // the state before the auto edit stays one click away in the project's versions
       try { const { takeVersion } = await import('../lib/studio'); await takeVersion('Avant le montage automatique', true); } catch { /* no workspace: undo still works */ }
-      update(() => project);
+      // overlays from the script (split screen, picture-in-picture), explained, the user's own kept
+      const withOv = calques ? await withAutoOverlays(project) : { ...project, overlays: (project.overlays ?? []).filter((o) => !o.auto) };
+      update(() => withOv);
+      { const n = (withOv.overlays ?? []).filter((o) => o.auto).length; if (n) toast(`${n} calque${n > 1 ? 's' : ''} placé${n > 1 ? 's' : ''} d’après le script (écran partagé, incrustation) : chacun dit pourquoi dans l’inspecteur.`); }
       { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
         if (doubt) toast(`${doubt} association(s) phrase → case à vérifier : ouvre la « Correction express » (inspecteur du projet), au clavier en quelques secondes.`); }
       setUI({ mode: 'preview', playhead: 0, selection: null });
@@ -216,6 +220,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="toggles">
+          <Toggle on={calques} set={setCalques} label="Calques d’après le script : écran partagé, incrustation" hint="Une comparaison met deux cases côte à côte, « pendant ce temps » montre l’autre lieu en vignette ; tes propres calques ne sont jamais touchés" />
           <Toggle on={dir.sequences} set={setD('sequences')} label="Directeur créatif : traiter le montage par séquences" hint="Introduction, contexte, révélation… chacune reçoit un traitement visuel adapté, jamais deux fois le même d’affilée" />
           <Toggle on={dir.camera} set={setD('camera')} label="Le directeur choisit les mouvements de caméra" hint="Désactivé : mouvements automatiques simples, à régler toi-même" />
           <Toggle on={dir.transitions} set={setD('transitions')} label="Le directeur choisit les transitions" hint="Pas de transition répétée de près, pas de zoom sur zoom, coupe franche quand un effet n’apporte rien" />

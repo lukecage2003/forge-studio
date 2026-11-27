@@ -100,3 +100,27 @@ describe('calques proposés d’après le script', () => {
     expect(suggestOverlays({ ...p, overlays: [ov({ start: 0, duration: 60 })] })).toEqual([]);
   });
 });
+
+describe('écran partagé et coin de l’incrustation', () => {
+  it('une moitié envoie la piste principale dans l’autre moitié ; « écran partagé » décoché la laisse dessous', async () => {
+    const { splitAt, otherHalf } = await import('../src/engine/overlays');
+    const p: Project = { ...newProject(), overlays: [ov({ id: 'b', place: 'bottom', start: 0, duration: 3 }), ov({ id: 'pip', place: 'pip', start: 0, duration: 3, track: 2 })] };
+    expect(splitAt(p, 1)?.id).toBe('b');
+    expect(otherHalf('bottom', 1080, 1920)).toEqual({ x: 0, y: 0, w: 1080, h: 960 });
+    expect(otherHalf('left', 1080, 1920)).toEqual({ x: 540, y: 0, w: 540, h: 1920 });
+    expect(splitAt({ ...p, overlays: [{ ...p.overlays![0], split: false }] }, 1)).toBeNull();
+    expect(splitAt(p, 5)).toBeNull();
+  });
+  it('le coin choisi est celui qui cache le moins de dessin ; en bas, les sous-titres comptent', async () => {
+    const { chooseCorner, placeBox } = await import('../src/engine/overlays');
+    const W = 1080, H = 1920;
+    // drawing everywhere except the bottom-left corner
+    const busyBut = (quiet: string) => (b: { x: number; y: number; w: number; h: number }) => { const c = `${b.y + b.h / 2 > H * 0.35 ? 'b' : 't'}${b.x + b.w / 2 < W / 2 ? 'l' : 'r'}`; return c === quiet ? 1 : 10; };
+    expect(chooseCorner(W, H, busyBut('bl'), false)).toBe('bl');
+    expect(chooseCorner(W, H, busyBut('tl'), true)).toBe('tl');
+    // equal everywhere: the top corners win when subtitles are on
+    expect(['tl', 'tr']).toContain(chooseCorner(W, H, () => 5, true));
+    const br = placeBox('pip', W, H, 'br');
+    expect(br.y + br.h).toBeLessThanOrEqual(H * 0.62 + 1); // above the subtitles
+  });
+});

@@ -29,7 +29,7 @@ export function bestPlace(sw: number, sh: number, W: number, H: number): Overlay
 
 /** pure: the box of an overlay at t (a free overlay moves from its box to its end box) */
 export function overlayBox(o: Overlay, t: number, W: number, H: number) {
-  if (o.place !== 'free' || !o.box) return placeBox(o.place === 'free' ? 'pip' : o.place, W, H);
+  if (o.place !== 'free' || !o.box) return placeBox(o.place === 'free' ? 'pip' : o.place, W, H, o.corner);
   const a = o.box, b = o.boxEnd ?? o.box, k = ease(Math.min(1, Math.max(0, (t - o.start) / Math.max(0.01, o.duration))));
   const m = (u: number, v: number) => u + (v - u) * k;
   return { x: m(a.x, b.x) * W, y: m(a.y, b.y) * H, w: m(a.w, b.w) * W, h: m(a.h, b.h) * H };
@@ -38,7 +38,7 @@ export function overlayBox(o: Overlay, t: number, W: number, H: number) {
 export const toNBox = (b: { x: number; y: number; w: number; h: number }, W: number, H: number): NBox => ({ x: b.x / W, y: b.y / H, w: b.w / W, h: b.h / H });
 
 /** pure: where an overlay sits in a W×H frame */
-export function placeBox(place: OverlayPlace, W: number, H: number): Box {
+export function placeBox(place: OverlayPlace, W: number, H: number, corner: Overlay['corner'] = 'tr'): Box {
   const m = Math.round(Math.min(W, H) * 0.04);
   switch (place) {
     case 'full': return { x: 0, y: 0, w: W, h: H };
@@ -47,7 +47,12 @@ export function placeBox(place: OverlayPlace, W: number, H: number): Box {
     case 'left': return { x: 0, y: 0, w: W / 2, h: H };
     case 'right': return { x: W / 2, y: 0, w: W / 2, h: H };
     case 'free': return placeBox('pip', W, H);
-    case 'pip': { const w = Math.round(W * 0.42), h = Math.round(w * (H > W ? 1.25 : 0.62)); return { x: W - w - m, y: Math.round(H * 0.16), w, h }; }
+    case 'pip': {
+      const w = Math.round(W * 0.42), h = Math.round(w * (H > W ? 1.25 : 0.62));
+      const left = corner === 'tl' || corner === 'bl', bottom = corner === 'bl' || corner === 'br';
+      // below the platform's top bar, and above the subtitles when at the bottom
+      return { x: left ? m : W - w - m, y: bottom ? Math.round(H * 0.62) - h : Math.round(H * 0.16), w, h };
+    }
   }
 }
 
@@ -143,4 +148,43 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
     if (en === 'wipe' && pin < 1) { ctx.restore(); ctx.save(); const xe = box.x + box.w * e; ctx.fillStyle = '#111'; ctx.fillRect(xe - 6, box.y, 12, box.h); }
     ctx.restore();
   }
+}
+
+/** pure: the half a split overlay leaves to the main track */
+export function otherHalf(place: OverlayPlace, W: number, H: number): Box | null {
+  switch (place) {
+    case 'top': return { x: 0, y: H / 2, w: W, h: H / 2 };
+    case 'bottom': return { x: 0, y: 0, w: W, h: H / 2 };
+    case 'left': return { x: W / 2, y: 0, w: W / 2, h: H };
+    case 'right': return { x: 0, y: 0, w: W / 2, h: H };
+    default: return null;
+  }
+}
+/** pure: the half overlay that splits the screen at t (the highest track wins) */
+export function splitAt(p: Project, t: number): Overlay | null {
+  const halves = activeOverlays(p, t).filter((o) => o.split !== false && otherHalf(o.place, 1, 1));
+  return halves.length ? halves[halves.length - 1] : null;
+}
+
+/**
+ * pure: the corner of a picture-in-picture that hides the least of the frame under it.
+ * `detail(box)` measures how much drawing a box holds (edges, contrast); the bottom
+ * corners also count the subtitles when they are on, so text never lands on text.
+ */
+export function chooseCorner(W: number, H: number, detail: (b: Box) => number, subtitles: boolean): NonNullable<Overlay['corner']> {
+  let best: NonNullable<Overlay['corner']> = 'tr', score = Infinity;
+  for (const c of ['tr', 'tl', 'br', 'bl'] as const) {
+    const b = placeBox('pip', W, H, c);
+    const s = detail(b) * ((c === 'br' || c === 'bl') && subtitles ? 1.6 : 1) * (c === 'tr' ? 0.95 : 1);
+    if (s < score) { score = s; best = c; }
+  }
+  return best;
+}
+/** how much drawing a region of a frame holds: mean luminance gradient, sampled */
+export function detailOf(data: Uint8ClampedArray, W: number, b: Box): number {
+  let sum = 0, n = 0;
+  const x0 = Math.max(1, Math.floor(b.x)), y0 = Math.max(1, Math.floor(b.y)), x1 = Math.floor(b.x + b.w) - 1, y1 = Math.floor(b.y + b.h) - 1;
+  const L = (x: number, y: number) => { const i = (y * W + x) * 4; return data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11; };
+  for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { sum += Math.abs(L(x + 1, y) - L(x - 1, y)) + Math.abs(L(x, y + 1) - L(x, y - 1)); n++; }
+  return n ? sum / n : 0;
 }

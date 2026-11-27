@@ -200,6 +200,13 @@ export interface Overlay {
   boxEnd?: NBox;
   /** id of the audio clip that carries the video's own sound (kept in step with the overlay) */
   soundClip?: string;
+  /** picture-in-picture corner (top-right when absent), chosen where it hides the least drawing */
+  corner?: 'tl' | 'tr' | 'bl' | 'br';
+  /** a half: the main track moves into the other half (true when absent) instead of being covered */
+  split?: boolean;
+  /** placed by the auto edit (replaced by the next one), and why; any manual change makes it the user's */
+  auto?: boolean;
+  why?: string;
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
