@@ -246,7 +246,7 @@ export function ThumbnailStudio() {
   const save = () => render().toBlob((bl) => bl && download(bl, `miniature-${(title || 'forge').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`), 'image/png');
 
   return (
-    <div className="ts">
+    <div className={`ts ${fmt === 'tiktok' ? 'vertical' : ''}`}>
       <div className="ts-preview" onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const f = [...e.dataTransfer.files].find((x) => x.type.startsWith('image/')); if (f) void fromBlob(f, f.name); }}>
         <canvas ref={preview} width={fmt === "tiktok" ? 270 : 640} height={fmt === "tiktok" ? 480 : 360} key={fmt} />

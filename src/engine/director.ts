@@ -287,7 +287,9 @@ export function directSequences(shots: Shot[], aspect: number, opt: DirectorOpti
         }
       }
       // the reason shown is the final decision; the first idea stays in brackets when it was overruled
-      if (s.auto) s.why = `${tag}${decided ? ' · ' + decided + (s.why ? ` (idée de départ : ${s.why.replace(/^.*?→\s*/, '')})` : '') : s.why ? ' — ' + s.why : ''}`;
+      // the director may run more than once on an edit: its own earlier tag is not repeated
+      const prev = s.why?.split(' — ').map((x) => (x.startsWith(tag + ' · ') ? x.slice(tag.length + 3) : x)).filter((x) => x && x !== tag).join(' — ') || undefined;
+      if (s.auto) s.why = `${tag}${decided ? ' · ' + decided + (prev ? ` (idée de départ : ${prev.replace(/^.*?→\s*/, '')})` : '') : prev ? ' — ' + prev : ''}`;
       prevMotion = s.motion;
       if (visible(s.transition)) window.push(s.transition);
     }

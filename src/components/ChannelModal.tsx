@@ -32,7 +32,7 @@ export function ChannelModal() {
         </header>
 
         <section className="set-section">
-          <h3><Wand2 size={15} /> Miniature YouTube</h3>
+          <h3><Wand2 size={15} /> Miniature et couverture</h3>
           <ThumbnailStudio />
         </section>
 

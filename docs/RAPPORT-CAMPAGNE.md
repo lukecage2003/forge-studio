@@ -111,6 +111,15 @@ Toutes vérifiées sur de vraies planches Watchmen.
   - les instructions système sont mises en cache chez Anthropic.
 - **Non testé** : l'économie réelle sur une vraie clé API (pas de clé ici), et le rendu de la musique variable à l'oreille.
 
+## Suite : tournée complète de l'application
+- **Tournée automatique** à la taille de ton écran (1896×870) : les 8 studios, les 15 fenêtres, les modes Découpe et Aperçu, plus un écran de 1366×700. On y cherche les erreurs, les débordements, les textes en anglais et « undefined » ou « NaN ». Résultat : rien dans l'application.
+- **Défauts trouvés et corrigés** :
+  - Dans « Ma chaîne », l'aperçu TikTok était étiré dans un cadre 16:9 et le titre disait « Miniature YouTube ». L'aperçu est maintenant vertical, à côté des réglages, et la fenêtre tient dans l'écran.
+  - Le directeur créatif répétait son explication à chaque passage (« Introduction · … — Introduction · … »).
+  - Les chapitres affichaient des noms techniques (« IMPACTS ») au lieu de vrais titres (« L'affrontement »).
+  - En vertical, les cases très larges étaient de minces bandes perdues dans le fond flou. Elles sont maintenant filmées en panoramique, sur environ la moitié de leur largeur, deux fois plus grandes et sans perte de netteté.
+- **Rendu réel** : montage automatique de 4 pages de Watchmen avec un script, finition pro, contrôle qualité corrigé, puis export MP4 1080×1920 à 30 i/s en H.264. Le fichier fait 38 s, est relu sans erreur et montre 3 chapitres, le bandeau « Le Comédien » et la fin en boucle.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`

@@ -663,6 +663,12 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .ts { display: flex; flex-direction: column; gap: 10px; }
 .ts-preview { position: relative; border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
 .ts-preview canvas { width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; }
+/* TikTok cover: the 9:16 preview beside the controls (never stretched, fits a laptop screen) */
+.ts.vertical { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; column-gap: 14px; align-items: start; }
+.ts.vertical > * { grid-column: 2; }
+.ts.vertical > .ts-preview { grid-column: 1; grid-row: 1 / span 12; position: sticky; top: 0; }
+.ts.vertical .ts-preview canvas { aspect-ratio: 9 / 16; }
+.ts.vertical .ts-slot { height: 76px; }
 .ts-busy { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); color: #fff; font-weight: 600; }
 .ts-busy svg { margin-right: 6px; }
 .ts-title { font: 700 18px "Anton", Impact, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }

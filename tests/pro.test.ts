@@ -48,7 +48,7 @@ describe('finition pro', () => {
       { type: 'explication', treatment: '', label: 'Le contexte', from: 1, to: 1, start: 2 },
       { type: 'revelation', treatment: '', label: 'La révélation', from: 2, to: 3, start: 4 },
     ] } });
-    expect(chapterCards(p).map((f) => f.text)).toEqual(['2. LE CONTEXTE', '3. LA RÉVÉLATION']);
+    expect(chapterCards(p).map((f) => f.text)).toEqual(['2. COMMENT ÇA MARCHE', '3. LA RÉVÉLATION']);
     const c = musicCurve(p);
     expect(c.find(([t]) => t === 4)?.[1]).toBeGreaterThan(c.find(([t]) => t === 2)![1]);
     const f = withProFinish(p);
@@ -68,5 +68,16 @@ describe('finition pro', () => {
   });
   it('requêtes IA plus courtes : espaces et lignes vides en trop retirés', () => {
     expect(compact('a  b \n\n\n\nc   ')).toBe('a b\n\nc');
+  });
+});
+describe('cases larges en vertical', () => {
+  it('une case en bandeau est filmée en panoramique sur environ la moitié de sa largeur', () => {
+    const p = proj();
+    const wide = { ...p, shots: [{ ...p.shots[0], rect: { x: 0, y: 0, w: 2000, h: 450 } }] };
+    const s = withProFinish(wide).shots[0];
+    expect(s.path).toHaveLength(2);
+    expect(s.path![0].vw).toBeGreaterThanOrEqual(1000);
+    expect(s.path![0].cx).toBeLessThan(s.path![1].cx);
+    expect(withProFinish({ ...wide, format: '16:9' }).shots[0].path).toBeUndefined();
   });
 });

@@ -86,9 +86,11 @@ export function withNameBanners(p: Project): Project {
 }
 
 /* ---------------------------------------------------------------- 4. chapter cards */
+/** chapter titles a viewer reads (the sequence's story role, not the director's camera treatment) */
+const CHAPTER_FR: Record<string, string> = { introduction: 'Le début', personnage: 'Les personnages', contexte: 'Le contexte', explication: 'Comment ça marche', demonstration: 'La preuve', comparaison: 'Face à face', confrontation: 'L’affrontement', revelation: 'La révélation', conclusion: 'Ce qu’il faut retenir' };
 export function chapterCards(p: Project): FxItem[] {
   const seq = (p.direction?.sequences ?? []).filter((q, i, a) => i > 0 && q.type !== a[i - 1].type).slice(0, 6);
-  return seq.map((q, i) => ({ id: `chap_${i}`, kind: 'chapter' as const, start: q.start, duration: 1.6, text: `${i + 2}. ${(q.label || q.type).toUpperCase()}` }));
+  return seq.map((q, i) => ({ id: `chap_${i}`, kind: 'chapter' as const, start: q.start, duration: 1.6, text: `${i + 2}. ${(CHAPTER_FR[q.type] ?? q.type).toUpperCase()}` }));
 }
 
 /* ---------------------------------------------------------------- 7. framing variety */
@@ -104,6 +106,25 @@ export function withFramingVariety(p: Project): Project {
     }
   }
   return { ...p, shots };
+}
+
+/* ---------------------------------------------------------------- wide panels in a vertical video */
+/**
+ * a long horizontal panel in 9:16 is a thin strip lost in the blurred background; filled
+ * whole it would be blown up and soft. Middle way: about half its width, panned across
+ * in reading order: twice bigger on screen, never enlarged past ~1.3× its own pixels.
+ */
+export function withWidePans(p: Project): Project {
+  if (p.format !== '9:16' && p.format !== '4:5') return p;
+  const W = p.format === '9:16' ? 1080 : 1080;
+  const rtl = p.readingOrder === 'rtl';
+  return { ...p, shots: p.shots.map((s) => {
+    if (!s.pageId || s.diagram || s.path?.length || !untouched(s) || s.layout !== 'full' || s.rect.w / s.rect.h < 2.2) return s;
+    const vw = Math.max(s.rect.w * 0.5, W / 1.3, s.rect.h * 1.2);
+    if (vw >= s.rect.w * 0.9) return s;
+    const cy = s.rect.y + s.rect.h / 2, a = s.rect.x + vw / 2, b = s.rect.x + s.rect.w - vw / 2;
+    return { ...s, path: [{ t: 0, cx: rtl ? b : a, cy, vw, ease: 'smooth' as const }, { t: 1, cx: rtl ? a : b, cy, vw, ease: 'smooth' as const }], why: why(s, 'case large : panoramique pour la lire en grand') };
+  }) };
 }
 
 /* ---------------------------------------------------------------- 8. music by sequence */
@@ -168,6 +189,7 @@ export function withProFinish(p: Project, o: ProOptions = PRO_ALL): Project {
   if (o.impacts) x = withImpacts(x);
   if (o.emotion) x = withEmotionRhythm(x);
   if (o.variety) x = withFramingVariety(x);
+  x = withWidePans(x);
   if (o.names) x = withNameBanners(x);
   const fx = (x.fx ?? []).filter((f) => !f.id.startsWith('chap_'));
   x = { ...x, fx: o.chapters ? [...fx, ...chapterCards(x)] : fx };
