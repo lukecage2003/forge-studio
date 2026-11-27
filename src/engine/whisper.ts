@@ -32,10 +32,20 @@ self.onmessage = async (ev) => {
       loaded = model;
     }
     self.postMessage({ type: 'stage', stage: 'transcribe' });
-    const out = await asr(pcm, {
-      language, task: 'transcribe', return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5,
-    });
-    self.postMessage({ type: 'done', chunks: out.chunks || [] });
+    // the library's own 30 s chunking loses the first chunk when timestamps are per word:
+    // windows are cut here (25 s, 4 s overlap) and merged on the main thread (mergeWindows)
+    // 25 s, not 30: a window of exactly 30 s (the model's maximum) stops after a few words
+    const SR = 16000, WIN = 25 * SR, HOP = 21 * SR;
+    const windows = [];
+    for (let o = 0; o < pcm.length; o += HOP) {
+      const part = pcm.subarray(o, Math.min(pcm.length, o + WIN));
+      if (part.length < SR * 0.3) break;
+      const out = await asr(part, { language, task: 'transcribe', return_timestamps: 'word' });
+      windows.push({ offset: o / SR, length: part.length / SR, chunks: out.chunks || [] });
+      self.postMessage({ type: 'step', p: Math.min(1, (o + WIN) / pcm.length) });
+      if (o + WIN >= pcm.length) break;
+    }
+    self.postMessage({ type: 'done', windows });
   } catch (e) {
     self.postMessage({ type: 'error', message: String(e && e.message || e) });
   }
@@ -67,16 +77,34 @@ function whisperNow(
       const d = ev.data;
       if (d.type === 'load') onProgress('Téléchargement du modèle…', d.p);
       if (d.type === 'stage') onProgress('Transcription en cours…', -1);
+      if (d.type === 'step') onProgress('Transcription en cours…', d.p);
       if (d.type === 'error') rej(new Error('Whisper : ' + d.message));
-      if (d.type === 'done') {
-        const words: Word[] = (d.chunks as { text: string; timestamp: [number, number | null] }[])
-          .map((c) => ({ w: c.text.trim(), s: c.timestamp[0], e: c.timestamp[1] ?? c.timestamp[0] + 0.3 }))
-          .filter((x) => x.w);
-        res(words);
-      }
+      if (d.type === 'done') res(mergeWindows(d.windows));
     };
     w.onerror = (e) => rej(new Error('Whisper : ' + (e.message || 'le module n’a pas pu se charger (connexion ?)')));
     const copy = new Float32Array(pcm);
     w.postMessage({ pcm: copy, model: WHISPER_MODELS[model].id, language: language === 'en' ? 'english' : 'french' }, [copy.buffer]);
   });
+}
+
+export interface WhisperWindow { offset: number; length: number; chunks: { text: string; timestamp: [number, number | null] }[] }
+/**
+ * Words of overlapping 30 s windows, back on one timeline: each window keeps
+ * the words that start in its own part (the middle of each overlap is the
+ * border), so nothing is lost and nothing appears twice.
+ */
+export function mergeWindows(windows: WhisperWindow[]): Word[] {
+  const out: Word[] = [];
+  windows.forEach((win, i) => {
+    const prev = windows[i - 1], next = windows[i + 1];
+    const from = prev ? (prev.offset + prev.length + win.offset) / 2 : -Infinity;
+    const to = next ? (win.offset + win.length + next.offset) / 2 : Infinity;
+    for (const c of win.chunks) {
+      const w = c.text.trim();
+      if (!w) continue;
+      const s = win.offset + c.timestamp[0], e = win.offset + (c.timestamp[1] ?? c.timestamp[0] + 0.3);
+      if (s >= from && s < to) out.push({ w, s: +s.toFixed(3), e: +Math.max(s + 0.05, e).toFixed(3) });
+    }
+  });
+  return out;
 }

@@ -58,3 +58,18 @@ describe('bibliothèque musicale et mixage', () => {
     expect(pickTrack(tracks, 'premium', 40)!.id).toBe('a');
   });
 });
+
+describe('transcription par fenêtres', () => {
+  it('recolle les fenêtres de 30 s qui se chevauchent, sans perte ni doublon', async () => {
+    const { mergeWindows } = await import('../src/engine/whisper');
+    const w = (t: string, s: number) => ({ text: ` ${t}`, timestamp: [s, s + 0.4] as [number, number] });
+    const words = mergeWindows([
+      { offset: 0, length: 30, chunks: [w('un', 0.5), w('deux', 12), w('trois', 27), w('quatre', 28.5)] },
+      // the overlap 26–30 s is heard twice: « trois » (27 s) once on each side, « quatre » too
+      { offset: 26, length: 30, chunks: [w('trois', 1), w('quatre', 2.5), w('cinq', 20), w('six', 29)] },
+      { offset: 52, length: 10, chunks: [w('six', 3), w('sept', 8)] },
+    ]);
+    expect(words.map((x) => x.w)).toEqual(['un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept']);
+    expect(words.map((x) => x.s)).toEqual([0.5, 12, 27, 28.5, 46, 55, 60]);
+  });
+});
