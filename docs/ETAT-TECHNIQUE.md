@@ -56,3 +56,21 @@ Aucun trouvé. La recherche de « TODO », « bientôt », « simulé » et « m
 - **Dépendance au CDN** : les modèles transformers.js viennent de jsdelivr et de Hugging Face au premier usage. Hors ligne, ils ne fonctionnent qu'une fois en cache.
 - **Projets futurs** : un projet enregistré par une version plus récente puis rouvert par une plus ancienne peut perdre des réglages inconnus sans prévenir. C'est corrigé dans cette campagne.
 - **Place disque** : les médias d'un projet supprimé restent dans le dossier sans que ce soit visible.
+
+## Licences (vérifiées le 27 novembre 2026)
+| Élément | Licence | Remarque |
+|---|---|---|
+| React, fflate, three.js | MIT | |
+| lucide-react | ISC | |
+| pdf.js, WebLLM | Apache-2.0 | |
+| mediabunny | MPL-2.0 | copyleft par fichier, sans effet tant que ses fichiers ne sont pas modifiés |
+| Polices (Inter, Space Grotesk, Anton, Bangers, Comic Neue) | OFL-1.1 | |
+| Whisper, CLIP | MIT | modèles chargés au premier usage |
+| MiniLM multilingue, depth-anything-v2-small, PaddleOCR, Tesseract | Apache-2.0 | |
+| BiRefNet lite | MIT | |
+| YOLOv13n cases et bulles | Apache-2.0 déclarée | Ultralytics est sous AGPL : à revérifier avant un usage commercial |
+| IA locale WebLLM : Qwen2.5 0,5 / 1,5 / 7 B, SmolLM2 | Apache-2.0 | |
+| IA locale WebLLM : Qwen2.5-3B | Qwen Research License | **non commercial** |
+| IA locale WebLLM : Llama 3.1 / 3.2 | Llama Community License | commercial autorisé sous conditions, mention requise |
+
+`npm audit --omit=dev` : 0 vulnérabilité. Aucune clé d'API dans le code ni dans le dépôt : les tests utilisent des clés factices.

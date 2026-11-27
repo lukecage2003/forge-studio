@@ -209,11 +209,51 @@ npm install
 npm run dev
 ```
 
-Puis ouvrir l'adresse affichée. Navigateur recommandé : **Chrome** ou **Edge** (encodage AAC natif). Firefox fonctionne, avec l'audio en Opus.
+Puis ouvrir l'adresse affichée. Navigateur recommandé : **Chrome** ou **Edge** sur Windows (encodage AAC natif, choix d'un dossier de projets sur le disque). Firefox fonctionne, avec l'audio en Opus et les projets gardés dans le navigateur.
+
+## Compiler et vérifier
+
+```bash
+npm run build
+```
+
+Le site prêt à publier est dans `dist/`. Avant toute publication, la CI (Linux et Windows) lance :
+
+```bash
+npx tsc -p tsconfig.app.json --noEmit
+```
+
+```bash
+npm test
+```
+
+```bash
+npm run test:visual
+```
+
+```bash
+node scripts/check-build.mjs dist
+```
+
+puis les scénarios de bout en bout de `tests/e2e/` contre `npx vite --port 5199`, dont `production.e2e.cjs` : une production complète, du projet vide à l'export, jusqu'à la réouverture du projet dans un autre navigateur. Une version qui échoue à un de ces contrôles n'est pas publiée.
 
 ## Mettre en ligne
 
-Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages` à chaque push sur `main`. Adresse : https://lukecage2003.github.io/forge-studio/ (si elle ne répond pas : *Settings → Pages → Source : Deploy from a branch → gh-pages / root*). Le dossier `dist/` produit par `npm run build` peut aussi être déposé tel quel sur Netlify, Vercel ou tout hébergeur statique.
+Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages` à chaque push sur `main`. Adresse : https://lukecage2003.github.io/forge-studio/ (si elle ne répond pas : *Settings → Pages → Source : Deploy from a branch → gh-pages / root*). Chaque publication garde 30 jours les fichiers de la précédente, pour qu'un onglet déjà ouvert continue de fonctionner, puis le site en ligne est vérifié. Le dossier `dist/` peut aussi être déposé tel quel sur Netlify, Vercel ou tout hébergeur statique.
+
+## Sauvegarder et récupérer son travail
+
+- **Où sont les projets.** *Projets → Stockage* : soit un dossier de ton disque (Chrome, Edge), soit l'espace privé du navigateur. Avec un dossier, chaque projet, ses versions et ses médias sont de vrais fichiers : sauvegarde ce dossier comme n'importe quel autre (disque externe, synchronisation).
+- **Enregistrement automatique.** Chaque modification est écrite 2 secondes après, et une version automatique est prise toutes les 10 minutes de travail (les 30 dernières sont gardées).
+- **Après une fermeture brutale.** Au redémarrage, Forge compare le journal du navigateur et le dossier et rouvre l'état le plus récent ; un message le signale.
+- **Versions.** *Projets → Versions* : prendre une version nommée, comparer, restaurer. Restaurer garde d'abord l'état actuel dans une version, donc tout se défait.
+- **Fichier .forge.** Le bouton *Enregistrer le projet* produit un fichier unique avec le projet, tous ses médias (rush compris), ses versions et un manifeste (version du format, de Forge et des moteurs). Ouvrir un .forge sur un autre ordinateur rend le projet complet ; s'il remplace un projet existant, l'état précédent est gardé dans les versions.
+- **Projets d'une autre version de Forge.** Un projet ancien est mis à jour à l'ouverture. Un projet enregistré par une version plus récente s'ouvre sans rien perdre de ce que cette version ne connaît pas, avec un avertissement.
+- **Faire de la place.** *Projets → Stockage → Libérer de la place* met à la corbeille les médias que plus aucun projet ni aucune version n'utilise (restaurable) et retire les copies en double du cache. Un média utilisé n'est jamais touché. Seul *Vider la corbeille*, après confirmation, supprime des fichiers.
+
+## Studios
+
+La barre sous le menu regroupe les outils par étape : Production, Recherche et script, Visuel, Montage, Son, Animation et sous-titres, Finition, Publication. Ce ne sont pas des applications séparées : les huit travaillent sur le même projet. Chaque studio dit ce qu'il reste à faire, lu dans le projet (un point vert quand l'étape est faite), et propose ses vraies commandes, les mêmes que la palette *Ctrl K*.
 
 ## Architecture
 
