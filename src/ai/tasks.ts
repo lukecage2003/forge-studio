@@ -130,6 +130,62 @@ Script :
 ${(p.script ?? '').slice(0, 6000) || '(aucun)'}`;
 }
 
+/**
+ * CONTEXT ENGINE — what the assistant needs for THIS request, not the whole
+ * project: the time window the request names (« entre 10 et 20 s », « au
+ * début », « à la fin ») and the parts it is about (plans, sous-titres, rush,
+ * script). A request that names nothing gets everything, as before. The
+ * result says what was kept, so the interface can show it.
+ */
+export interface TaskContext { text: string; kept: string[]; window: [number, number] | null; chars: number; fullChars: number }
+const num = (s: string) => parseFloat(s.replace(',', '.'));
+export function requestWindow(command: string, total: number): [number, number] | null {
+  const c = command.toLowerCase();
+  const range = c.match(/(?:entre|de)\s+(\d+(?:[.,]\d+)?)\s*(?:s|sec\w*)?\s+(?:et|à|a)\s+(\d+(?:[.,]\d+)?)\s*(?:s|sec)/);
+  if (range) { const a = num(range[1]), b = num(range[2]); return [Math.max(0, Math.min(a, b)), Math.min(total, Math.max(a, b))]; }
+  const at = c.match(/(?:à|a|vers)\s+(\d+(?:[.,]\d+)?)\s*(?:s\b|sec)/);
+  if (at) { const t = num(at[1]); return [Math.max(0, t - 8), Math.min(total, t + 8)]; }
+  if (/\b(début|debut|accroche|intro|premières secondes|hook)\b/.test(c)) return [0, Math.min(total, 15)];
+  if (/\b(fin|conclusion|outro|dernières secondes)\b/.test(c)) return [Math.max(0, total - 15), total];
+  return null;
+}
+export function contextFor(command: string, p: Project): TaskContext {
+  const c = command.toLowerCase();
+  const total = videoDuration(p);
+  const win = requestWindow(command, total);
+  const inWin = (s: number, e: number) => !win || (e >= win[0] && s <= win[1]);
+  const wants = {
+    shots: /plan|transition|image|case|carton|(?<!sous-|sous )titre|visuel|illustr|montrer|schéma|chapitre/.test(c)
+      // vague pace words are about shots unless the request names another part
+      || (/durée|duree|rythme|long|lent|dynamique/.test(c) && !/sous-titre|sous titre|rush|coupe|silence/.test(c)),
+    subs: /sous-titre|sous titre|texte à l|lisib|mot/.test(c),
+    rush: /rush|coupe|silence|hésit|hesit|euh|blanc|visage|face/.test(c),
+    script: /script|accroche|phrase|intro|début|illustr|image|visuel|montrer|schéma|explication|chapitre|fin/.test(c),
+  };
+  if (!Object.values(wants).some(Boolean)) Object.keys(wants).forEach((k) => (wants[k as keyof typeof wants] = true));
+  const kept: string[] = [];
+  const parts = [`Durée ${total.toFixed(1)} s, format ${p.format}.${win ? ` Passage concerné : ${win[0].toFixed(0)}–${win[1].toFixed(0)} s.` : ''}`];
+  if (wants.shots) {
+    const shots = layoutShots(p).filter((t) => inWin(t.start, t.end)).slice(0, 120).map((t) => `${t.shot.id} | ${t.start.toFixed(1)}-${t.end.toFixed(1)} s | ${t.shot.pageId ? 'case' : t.shot.diagram ? 'schéma ' + t.shot.diagram.kind : 'carton'} | transition ${t.shot.transition}${t.shot.caption.text ? ' | texte « ' + t.shot.caption.text.slice(0, 60) + ' »' : ''}`);
+    parts.push(`Plans :\n${shots.join('\n') || '(aucun)'}`); kept.push(`plans (${shots.length})`);
+  }
+  if (wants.subs) {
+    const subs = p.subtitles.filter((s) => inWin(s.s, s.e ?? s.s)).slice(0, 200).map((s) => `${s.s.toFixed(1)} ${s.text}`);
+    parts.push(`Sous-titres :\n${subs.join('\n') || '(aucun)'}`); kept.push(`sous-titres (${subs.length})`);
+  }
+  if (wants.rush) {
+    parts.push(p.aroll ? `Rush ${p.aroll.duration.toFixed(1)} s, coupes actives : ${p.aroll.cuts.filter((x) => x.on).length}` : 'Pas de rush face caméra'); kept.push('rush');
+  }
+  if (wants.script && p.script) {
+    // a window keeps only the matching share of the script (its timing follows the voice roughly linearly)
+    let text = p.script;
+    if (win && total > 0) { const a = Math.floor((win[0] / total) * text.length), b = Math.ceil((win[1] / total) * text.length); text = text.slice(Math.max(0, a - 200), Math.min(text.length, b + 200)); }
+    parts.push(`Script${win ? ' (extrait)' : ''} :\n${text.slice(0, 6000)}`); kept.push(win ? 'extrait du script' : 'script');
+  }
+  const out = parts.join('\n');
+  return { text: out, kept, window: win, chars: out.length, fullChars: editContext(p).length };
+}
+
 /** checks every proposal against the real project: unknown ids, impossible times and unknown actions are dropped */
 export function validProposals(raw: unknown, p: Project): Proposal[] {
   const ids = new Set(p.shots.map((s) => s.id));
@@ -171,12 +227,13 @@ export function localAssistant(command: string, p: Project): { resume: string; p
   return { resume: `${out.length} proposition(s) de l’assistant hors ligne.`, propositions: out };
 }
 
-export async function aiAssistant(command: string, p: Project): Promise<{ resume: string; proposals: Proposal[]; via: RunResult }> {
+export async function aiAssistant(command: string, p: Project): Promise<{ resume: string; proposals: Proposal[]; via: RunResult; context: TaskContext }> {
+  const context = contextFor(command, p);
   const via = await run({
-    kind: 'assistant', system: SYSTEM.assistant, prompt: assistantPrompt(command, editContext(p)), json: true, needs: ['text', 'json'], data: ['texte'], fresh: true,
+    kind: 'assistant', system: SYSTEM.assistant, prompt: assistantPrompt(command, context.text), json: true, needs: ['text', 'json'], data: ['texte'], fresh: true,
     local: async () => ({ text: JSON.stringify(localAssistant(command, p)) }),
   });
   const raw = JSON.parse(extractJson(via.answer.text));
-  return { resume: String(raw.resume ?? ''), proposals: validProposals(raw.propositions, p), via };
+  return { resume: String(raw.resume ?? ''), proposals: validProposals(raw.propositions, p), via, context };
 }
 export const roleLabel = (r: string) => ROLE_FR[r as Role] ?? r;

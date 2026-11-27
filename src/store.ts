@@ -2,7 +2,7 @@ import { useRef, useSyncExternalStore } from 'react';
 import { ENGINE_VERSION } from './engine/rng';
 import { newerMessage, schemaNotice, SCHEMA_VERSION, upgrade } from './lib/schema';
 import type { Caption, Project, Selection, Shot } from './types';
-import { observeShotDeleted, observeShotEdit } from './engine/brain';
+import { observeShotDeleted, observeShotEdit, setBrainScope } from './engine/brain';
 import { uid } from './lib/util';
 import { idb } from './lib/db';
 
@@ -134,7 +134,8 @@ let state: State = {
   future: [],
 };
 const subs = new Set<() => void>();
-const emit = () => subs.forEach((f) => f());
+// the learned preferences follow the open project and its format (engine/brain scopes)
+const emit = () => { setBrainScope(state.project.id, state.project.format); subs.forEach((f) => f()); };
 const subscribe = (f: () => void) => (subs.add(f), () => subs.delete(f));
 
 let lastKey = '';

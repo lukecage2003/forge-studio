@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Brain, KeyRound, Loader2, Settings2, X, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { DEFAULT_MODEL, getGoogle, setGoogle, testGoogle } from '../engine/google';
-import { brain, brainSummary, onBrain, resetBrain } from '../engine/brain';
+import { activeScope, brainAt, brainSummary, canUndoReset, currentScope, onBrain, resetBrain, undoReset, type BrainScope } from '../engine/brain';
 import { setUI } from '../store';
 import { hasKey, keyOf, masked, removeKey } from '../ai/vault';
 import { clearJournal, journal } from '../lib/errors';
@@ -14,7 +14,7 @@ export function SettingsModal() {
   const [show, setShow] = useState(false);
   const [test, setTest] = useState<'idle' | 'busy' | 'ok' | string>('idle');
   const [, bump] = useState(0);
-  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmReset, setConfirmReset] = useState<BrainScope | null>(null);
   useEffect(() => onBrain(() => bump((x) => x + 1)), []);
   const close = () => setUI({ settingsOpen: false });
   const clean = () => ({ ...g, apiKey: g.apiKey.startsWith('new:') ? g.apiKey.slice(4) : keyOf('gemini') ?? '' });
@@ -29,8 +29,12 @@ export function SettingsModal() {
       setTest((e as Error).message);
     }
   };
-  const b = brain();
-  const learned = brainSummary();
+  const scopes: { id: BrainScope; label: string }[] = [
+    { id: 'project', label: 'Ce projet' },
+    { id: 'format', label: `Format ${currentScope().format}` },
+    { id: 'general', label: 'Général' },
+  ];
+  const active = activeScope();
 
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
@@ -113,24 +117,25 @@ export function SettingsModal() {
             Chaque fois que tu corriges une décision du montage auto (durée d’un plan, mise en page, mouvement, une coupe rétablie
             ou ajoutée), Forge ajuste ses préférences. Le montage suivant part de ce qu’il a appris. Tout reste sur cet ordinateur.
           </p>
-          <div className="brain-stats">
-            <div><b>{b.montages}</b><span>montages auto</span></div>
-            <div><b>{b.edits}</b><span>corrections apprises</span></div>
-          </div>
-          {learned.length ? (
-            <ul className="learned">{learned.map((l) => <li key={l}>{l}</li>)}</ul>
-          ) : (
-            <p className="muted">Rien d’appris pour l’instant : lance un montage auto puis corrige ce qui ne te plaît pas.</p>
-          )}
-          {confirmReset ? (
-            <div className="row-btns gap">
-              <span className="muted">Effacer tout ce que Forge a appris ?</span>
-              <button className="btn sm" onClick={() => { resetBrain(); setConfirmReset(false); toast('Apprentissage remis à zéro'); }}>Oui, effacer</button>
-              <button className="btn sm ghost" onClick={() => setConfirmReset(false)}>Annuler</button>
-            </div>
-          ) : (
-            <button className="btn sm ghost" onClick={() => setConfirmReset(true)}>Remettre à zéro</button>
-          )}
+          <p className="help">Trois niveaux : ce projet, le format de la vidéo, et en général. Le montage auto utilise le plus précis qui a vu au moins 5 corrections.</p>
+          {scopes.map((sc) => {
+            const b = brainAt(sc.id);
+            const learned = brainSummary(sc.id);
+            return (
+              <div key={sc.id} className={`brain-scope${active === sc.id ? ' on' : ''}`} aria-label={`Préférences : ${sc.label}`}>
+                <div className="brain-scope-head">
+                  <b>{sc.label}</b>
+                  {active === sc.id && <span className="pill">utilisé maintenant</span>}
+                  <span className="muted">{b.edits} correction{b.edits > 1 ? 's' : ''} · {b.montages} montage{b.montages > 1 ? 's' : ''} auto</span>
+                  {b.edits > 0 && (confirmReset === sc.id
+                    ? <><button className="btn sm" onClick={() => { resetBrain(sc.id); setConfirmReset(null); toast(`Préférences « ${sc.label} » effacées — tu peux annuler`); }}>Oui, effacer</button><button className="btn sm ghost" onClick={() => setConfirmReset(null)}>Non</button></>
+                    : <button className="btn sm ghost" onClick={() => setConfirmReset(sc.id)}>Effacer</button>)}
+                </div>
+                {learned.length ? <ul className="learned">{learned.map((l) => <li key={l}>{l}</li>)}</ul> : <p className="muted">Rien d’appris à ce niveau.</p>}
+              </div>
+            );
+          })}
+          {canUndoReset() && <button className="btn sm ghost" onClick={() => toast(undoReset() ? 'Effacement annulé : préférences rétablies' : 'Rien à rétablir', 'info')}>Annuler le dernier effacement</button>}
         </section>
       </div>
     </div>

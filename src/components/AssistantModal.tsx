@@ -40,7 +40,7 @@ function apply(p: Proposal) {
 export function AssistantModal() {
   const [cmd, setCmd] = useState('');
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ resume: string; proposals: Proposal[]; by: string } | null>(null);
+  const [res, setRes] = useState<{ resume: string; proposals: Proposal[]; by: string; sent?: string } | null>(null);
   const [done, setDone] = useState<Record<number, 'ok' | 'no'>>({});
   const close = () => setUI({ assistantOpen: false });
   const ask = async (c: string) => {
@@ -48,7 +48,8 @@ export function AssistantModal() {
     setBusy(true); setRes(null); setDone({});
     try {
       const r = await aiAssistant(c, getState().project);
-      setRes({ resume: r.resume, proposals: r.proposals, by: r.via.provider === 'local' ? 'assistant hors ligne de Forge' : `${INFO[r.via.provider].label} · ${r.via.model}` });
+      setRes({ resume: r.resume, proposals: r.proposals, by: r.via.provider === 'local' ? 'assistant hors ligne de Forge' : `${INFO[r.via.provider].label} · ${r.via.model}`,
+        sent: r.via.provider === 'local' ? undefined : `Envoyé à l’IA : ${r.context.kept.join(', ') || 'durée et format'} — ${r.context.chars.toLocaleString('fr-FR')} caractères${r.context.chars < r.context.fullChars ? ` au lieu de ${r.context.fullChars.toLocaleString('fr-FR')}` : ''}.` });
     } catch (e) { toast((e as Error).message, 'error'); }
     setBusy(false);
   };
@@ -70,6 +71,7 @@ export function AssistantModal() {
         {res && (
           <div className="sg-list">
             <p className="muted">{res.resume || `${res.proposals.length} proposition(s)`} · par {res.by}</p>
+            {res.sent && <p className="help">{res.sent}</p>}
             {!res.proposals.length && <p className="muted">Aucune proposition applicable.</p>}
             {res.proposals.map((p, i) => (
               <div key={i} className={`sg ${done[i] ?? ''}`}>
