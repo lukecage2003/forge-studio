@@ -48,3 +48,16 @@ describe('finitions du montage', () => {
     expect(sliderX(o, 4, 1000)).toBeCloseTo(80);
   });
 });
+
+describe('zoom sur le personnage nommé (décision)', () => {
+  it('9 fenêtres qui se chevauchent dans la case ; on ne zoome que si une fenêtre ressort nettement', async () => {
+    const { windowsOf, pickWindow, focusPath } = await import('../src/engine/nameFocus');
+    const w = windowsOf({ x: 0, y: 0, w: 400, h: 200 });
+    expect(w).toHaveLength(9);
+    expect(w[8]).toEqual({ x: 200, y: 100, w: 200, h: 100 });
+    expect(pickWindow([0.01, 0.012, 0.011, 0.05, 0.01, 0.012, 0.011, 0.013, 0.01])).toBe(3);
+    expect(pickWindow([0.01, 0.012, 0.011, 0.015, 0.01, 0.012, 0.011, 0.013, 0.01])).toBeNull();
+    const path = focusPath({ rect: { x: 0, y: 0, w: 400, h: 200 } } as never, w[8]);
+    expect(path![1]).toMatchObject({ cx: 300, cy: 150 });
+  });
+});

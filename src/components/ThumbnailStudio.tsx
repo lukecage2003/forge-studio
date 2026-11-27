@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, ImagePlus, Loader2, Search, X, Clipboard } from 'lucide-react';
 import { getState } from '../store';
-import { brandOf, drawThumbnail, sticker, trimAlpha, type ThumbLayout } from '../engine/brand';
+import { brandOf, drawThumbnail, sticker, trimAlpha, THUMB_PALETTES, type ThumbLayout, type ThumbPalette } from '../engine/brand';
 import { getImage, onMediaChange } from '../engine/media';
 import { download } from '../lib/util';
 import { magicTouchCutout } from '../engine/segment';
@@ -13,7 +13,7 @@ import type { Rect } from '../types';
 
 /**
  * Thumbnail in three gestures: a title, one or two characters (pasted from the
- * web, dropped, or taken from a panel), done. Always on the channel's yellow,
+ * web, dropped, or taken from a panel), done. In the channel's black and yellow, TikTok cover or YouTube thumbnail, no logo unless asked,
  * live preview, one click to save.
  */
 type Slot = { sticker: HTMLCanvasElement; label: string } | null;
@@ -51,6 +51,10 @@ export function ThumbnailStudio() {
   const [slots, setSlots] = useState<Slot[]>([null, null]);
   const [target, setTarget] = useState(0);
   const [layout, setLayout] = useState<'auto' | ThumbLayout>('auto');
+  // TikTok cover by default, the channel's black and yellow, no logo
+  const [fmt, setFmt] = useState<'tiktok' | 'youtube'>('tiktok');
+  const [palette, setPalette] = useState<ThumbPalette>('noir-jaune');
+  const [logo, setLogo] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [query, setQuery] = useState('');
@@ -60,7 +64,8 @@ export function ThumbnailStudio() {
 
   const chars = slots.filter(Boolean) as NonNullable<Slot>[];
   const lay: ThumbLayout = layout !== 'auto' ? layout : chars.length >= 2 ? 'duo' : 'right';
-  const render = () => drawThumbnail(b, title || ' ', lay, chars[0]?.sticker ?? null, chars[1]?.sticker ?? null);
+  const pal = THUMB_PALETTES[palette];
+  const render = () => drawThumbnail({ ...b, bg: pal.bg, ink: pal.ink }, title || ' ', lay, chars[0]?.sticker ?? null, chars[1]?.sticker ?? null, { vertical: fmt === 'tiktok', logo });
 
   useEffect(() => {
     const c = preview.current;
@@ -126,10 +131,18 @@ export function ThumbnailStudio() {
     <div className="ts">
       <div className="ts-preview" onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const f = [...e.dataTransfer.files].find((x) => x.type.startsWith('image/')); if (f) void fromBlob(f, f.name); }}>
-        <canvas ref={preview} width={640} height={360} />
+        <canvas ref={preview} width={fmt === "tiktok" ? 270 : 640} height={fmt === "tiktok" ? 480 : 360} key={fmt} />
         {busy && <div className="ts-busy"><Loader2 size={18} className="spin" /> {busy}</div>}
       </div>
 
+      <div className="seg full" role="radiogroup" aria-label="Format de la miniature">
+        <button role="radio" aria-checked={fmt === 'tiktok'} className={fmt === 'tiktok' ? 'on' : ''} onClick={() => setFmt('tiktok')}>TikTok · 9:16</button>
+        <button role="radio" aria-checked={fmt === 'youtube'} className={fmt === 'youtube' ? 'on' : ''} onClick={() => setFmt('youtube')}>YouTube · 16:9</button>
+      </div>
+      <div className="seg full" role="radiogroup" aria-label="Couleurs">
+        {(Object.keys(THUMB_PALETTES) as ThumbPalette[]).map((k) => <button key={k} role="radio" aria-checked={palette === k} className={palette === k ? 'on' : ''} onClick={() => setPalette(k)}>{THUMB_PALETTES[k].label}</button>)}
+      </div>
+      <label className="check-row"><input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} /> Ajouter le logo de la chaîne</label>
       <input className="input ts-title" value={title} maxLength={22} placeholder="Titre (1 ou 2 mots)" onChange={(e) => setTitle(e.target.value)} aria-label="Titre de la miniature" />
 
       <div className="ts-slots">

@@ -177,8 +177,17 @@ export function sticker(cut: HTMLCanvasElement, outline: number): HTMLCanvasElem
 
 export type ThumbLayout = 'duo' | 'solo' | 'face' | 'right';
 
-/** 1280×720 thumbnail in the channel style */
-export function drawThumbnail(b: Brand, title: string, layout: ThumbLayout, a: HTMLCanvasElement | null, c2: HTMLCanvasElement | null): HTMLCanvasElement {
+/** the channel's colours: yellow on black (default) or black on yellow */
+export const THUMB_PALETTES = { 'noir-jaune': { bg: '#0B0B0B', ink: '#FFD400', label: 'Jaune sur noir' }, 'jaune-noir': { bg: '#FFD400', ink: '#111111', label: 'Noir sur jaune' } } as const;
+export type ThumbPalette = keyof typeof THUMB_PALETTES;
+
+/**
+ * thumbnail in the channel style: 1280×720 for YouTube, or 1080×1920 for a TikTok
+ * cover (title in the upper third, below the app's top bar; characters large and low,
+ * clear of the caption and buttons at the bottom). No logo unless asked.
+ */
+export function drawThumbnail(b: Brand, title: string, layout: ThumbLayout, a: HTMLCanvasElement | null, c2: HTMLCanvasElement | null, opts: { vertical?: boolean; logo?: boolean } = {}): HTMLCanvasElement {
+  if (opts.vertical) return drawVerticalThumb(b, title, layout, a, c2, !!opts.logo);
   const W = 1280, H = 720;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
@@ -196,6 +205,23 @@ export function drawThumbnail(b: Brand, title: string, layout: ThumbLayout, a: H
   else if (layout === 'right' && a) place(a, W * 0.68, H + 40, H * 0.86);
   else if (a && c2) { place(a, W * 0.25, H + 30, H * 0.72); place(c2, W * 0.7, H + 40, H * 0.86); }
   else if (a) place(a, W * 0.62, H + 30, H * 0.74);
-  drawLogo(x, b, 28, H - 148, 120);
+  if (opts.logo) drawLogo(x, b, 28, H - 148, 120);
+  return cv;
+}
+
+function drawVerticalThumb(b: Brand, title: string, layout: ThumbLayout, a: HTMLCanvasElement | null, c2: HTMLCanvasElement | null, logo: boolean): HTMLCanvasElement {
+  const W = 1080, H = 1920;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d')!;
+  x.fillStyle = b.bg;
+  x.fillRect(0, 0, W, H);
+  // the title in the upper third: below TikTok's top bar, readable in the grid of the profile
+  spacedTitle(x, title, W / 2, H * 0.24, W * 0.9, 240, b.ink);
+  const place = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.95) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
+  // characters big, bottom at 84 % (the caption and the buttons cover the last part of the screen)
+  if (a && c2 && layout !== 'solo') { place(a, W * 0.3, H * 0.84, H * 0.5); place(c2, W * 0.7, H * 0.86, H * 0.56); }
+  else if (a) place(a, W / 2, H * 0.86, H * 0.58);
+  if (logo) drawLogo(x, b, 40, H * 0.06, 140);
   return cv;
 }

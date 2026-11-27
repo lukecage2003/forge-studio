@@ -297,6 +297,25 @@ export function registerKinds(q: TaskQueue) {
     },
   });
 
+  q.register<{ shots: number }, import('../engine/nameFocus').FocusPlan[]>({
+    kind: 'camera.names', lane: 'heavy', family: 'clip', keepResult: true, priority: 25,
+    label: () => 'Zoom sur les personnages nommés (CLIP, expérimental)',
+    key: (p) => `${pid()}|${p.shots}`,
+    // a camera the user set meanwhile is never replaced
+    guard: () => { const pr = getState().project; return `${pr.id}|${pr.shots.map((s) => (s.path ? 'p' : '') + s.id).join(',')}`; },
+    run: async (ctx) => {
+      const { planNameFocus } = await import('../engine/nameFocus');
+      return planNameFocus(getState().project, async (i, n) => { ctx.progress(i / Math.max(1, n), `Plan ${i} / ${n}`); await ctx.checkpoint(); });
+    },
+    commit: (plans) => {
+      if (!plans.length) { toast('Zoom sur les personnages : aucun personnage reconnu nettement (rien n’a changé).'); return; }
+      void import('../engine/nameFocus').then((F) => {
+        update((pr) => ({ ...pr, shots: pr.shots.map((s) => { const f = plans.find((x) => x.shotId === s.id); return f && !s.path?.length ? { ...s, path: F.focusPath(s, f.crop), why: `${s.why ? s.why + ' · ' : ''}zoom sur ${f.name} (IA locale, à vérifier)` } : s; }) }));
+        toast(`Zoom sur ${plans.length} personnage${plans.length > 1 ? 's' : ''} nommé${plans.length > 1 ? 's' : ''} : vérifie-les (raison dans l’inspecteur, Ctrl+Z pour annuler).`);
+      });
+    },
+  });
+
   /* ---------------------------------------------------- render */
   q.register<{ name: string; quality: 'high' | 'max'; fps: number; scale: 1 | 2; burn: boolean; format: Project['format'] }, { file: string; size: number; sec: number; saved: boolean; report: import('../engine/delivery').FileReport | null }>({
     kind: 'render', lane: 'render', keepResult: true, priority: 45, maxAttempts: 1,

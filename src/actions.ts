@@ -949,3 +949,18 @@ export async function makeShortVersion(target = 45): Promise<boolean> {
   toast(`Version courte : ${at.toFixed(0)} s, ${ranges.length} passages (${[...new Set(ranges.map((r) => r.why))].join(', ')}). La version longue n’est pas modifiée.`);
   return true;
 }
+
+
+/* ---------------------------------------------------------------- the channel's look: black and yellow */
+/** the channel's art direction applied to a project: yellow accent (keywords, progress bar, titles), white
+ * subtitles outlined in black with yellow keywords, ink diagrams with yellow captions, black and yellow brand */
+export function withMyDA(p: Project): Project {
+  return {
+    ...p, accent: '#FFD400', diagramStyle: 'encre',
+    subtitleStyle: { ...p.subtitleStyle, preset: 'tiktok', keywords: true },
+    brand: { ...(p.brand ?? {}), bg: '#0B0B0B', ink: '#FFD400' },
+  };
+}
+export const myDAForNewProjects = () => { try { return localStorage.getItem('forge.myDA') !== 'off'; } catch { return true; } };
+export function setMyDAForNewProjects(on: boolean) { try { localStorage.setItem('forge.myDA', on ? 'on' : 'off'); } catch { /* storage blocked */ } }
+export function applyMyDA() { update((x) => withMyDA(x)); toast('DA noir et jaune appliquée (accent, sous-titres, schémas, couleurs de la chaîne) — annulable avec Ctrl+Z.'); }

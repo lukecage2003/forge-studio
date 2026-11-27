@@ -101,6 +101,8 @@ export function commands(): Cmd[] {
     { id: 'series-apply', studios: ['finishing'], label: 'Appliquer le thème de la série', group: 'Série', run: () => void import('../actions').then((m) => m.applySeriesTheme()) },
     { id: 'next-episode', studios: ['production'], label: 'Créer l’épisode suivant (même style, numéroté)', group: 'Série', run: () => void import('../actions').then((m) => m.nextEpisode()) },
     { id: 'short', studios: ['publishing', 'editing'], label: 'Créer une version courte (≤ 45 s) des meilleurs passages', group: 'Publication', run: () => void import('../actions').then((m) => m.makeShortVersion()) },
+    { id: 'my-da', studios: ['finishing', 'publishing'], label: 'Appliquer ma DA noir et jaune', group: 'Charte', run: () => void import('../actions').then((m) => m.applyMyDA()) },
+    { id: 'name-focus', studios: ['motion', 'editing'], label: 'Zoomer sur les personnages nommés par la voix (IA locale, expérimental)', group: 'Animation', run: () => void import('../production/kinds').then((K) => K.runTask('camera.names', { shots: getState().project.shots.length }, true)) },
     { id: 'install', studios: ['production'], label: 'Installer Forge comme application (fenêtre à part, plus de place)', group: 'Production', run: () => void installApp(), when: canInstall },
     { id: 'ov-file', studios: ['editing', 'motion'], label: 'Superposer une image ou une vidéo (au curseur)', group: 'Superposition', run: () => pick('image/*,video/*', true, (f) => void import('../actions').then((m) => m.importOverlayFiles(f))) },
     { id: 'ov-panel', studios: ['editing', 'motion'], label: 'Superposer la case sélectionnée (au curseur)', group: 'Superposition', run: () => void import('../actions').then((m) => m.overlaySelectedPanel()) },

@@ -4,6 +4,7 @@
  * are proposals; nothing is applied without the user.
  */
 import { suggestOverlays } from '../engine/overlaySuggest';
+import { parsePrecise } from '../engine/precise';
 import type { Project, Word } from '../types';
 import { run, extractJson, type RunResult } from './orchestrator';
 import { SYSTEM, analysePrompt, assistantPrompt, punctuatePrompt, reviewPrompt } from './prompts';
@@ -115,7 +116,8 @@ export type Proposal =
   | { type: 'visual.suggest'; at: number; kind: string; title: string; items: { label: string; sub?: string }[]; raison?: string }
   | { type: 'rush.cut'; s: number; e: number; raison?: string }
   | { type: 'note'; text: string }
-  | import('../engine/overlaySuggest').OverlayProposal;
+  | import('../engine/overlaySuggest').OverlayProposal
+  | import('../engine/precise').PreciseProposal;
 
 /** what the assistant sees of the edit: compact, no media */
 export function editContext(p: Project): string {
@@ -230,8 +232,11 @@ export function localAssistant(command: string, p: Project): { resume: string; p
   return { resume: `${out.length} proposition(s) de l’assistant hors ligne.`, propositions: out };
 }
 
-export async function aiAssistant(command: string, p: Project): Promise<{ resume: string; proposals: Proposal[]; via: RunResult; context: TaskContext }> {
+export async function aiAssistant(command: string, p: Project, selected?: string | null): Promise<{ resume: string; proposals: Proposal[]; via: RunResult; context: TaskContext }> {
   const context = contextFor(command, p);
+  // an exact request is read locally, without any AI: free, and always the same answer
+  const exact = parsePrecise(command, p, selected);
+  if (exact?.length) return { resume: `${exact.length} changement${exact.length > 1 ? 's' : ''} précis, lu${exact.length > 1 ? 's' : ''} sans IA.`, proposals: exact, via: { answer: { text: '' }, provider: 'local', model: 'forge-precise', attempts: [], cached: false } as unknown as RunResult, context };
   const via = await run({
     kind: 'assistant', system: SYSTEM.assistant, prompt: assistantPrompt(command, context.text), json: true, needs: ['text', 'json'], data: ['texte'], fresh: true,
     local: async () => ({ text: JSON.stringify(localAssistant(command, p)) }),

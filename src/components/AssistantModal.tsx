@@ -1,4 +1,5 @@
 import { PLACE_FR } from '../engine/overlays';
+import { LAYOUT_FR } from '../engine/brain';
 import { addOverlay } from '../actions';
 import { useEffect, useState } from 'react';
 import { MessageSquareText, X, Loader2, Check, Lightbulb, Send } from 'lucide-react';
@@ -24,6 +25,12 @@ function describe(p: Proposal): string {
     case 'visual.suggest': return `${p.kind === 'chronologie' ? 'Frise' : p.kind === 'reseau' ? 'Carte des relations' : p.kind === 'versus' ? 'Duel' : p.kind === 'echelle' ? 'Échelle' : 'Citation'} « ${p.title} » à ${p.at.toFixed(1)} s (${p.items.map((i) => i.label).join(', ')})`;
     case 'rush.cut': return `Couper le rush de ${p.s.toFixed(2)} à ${p.e.toFixed(2)} s`;
     case 'note': return p.text;
+    case 'shot.delete': return `Supprimer ${where}`;
+    case 'shot.layout': return `${where} en ${LAYOUT_FR[p.layout].toLowerCase()}`;
+    case 'shot.motion': return `Mouvement de ${where} : ${p.motion}`;
+    case 'subtitle.replace': return `Sous-titres : « ${p.from} » → « ${p.to} » (${p.count} fois)`;
+    case 'music.volume': return `Musique ${p.factor > 1 ? 'plus forte' : 'moins forte'} (×${p.factor})`;
+    case 'subs.size': return `Sous-titres ${p.factor > 1 ? 'plus gros' : 'plus petits'} (×${p.factor})`;
     case 'overlay.add': return `Calque ${PLACE_FR[p.place].toLowerCase()} à ${p.at.toFixed(1)} s pendant ${p.duration.toFixed(1)} s`;
   }
 }
@@ -37,6 +44,12 @@ function apply(p: Proposal) {
     case 'visual.suggest': acceptSuggestion({ id: 'as' + Date.now(), kind: p.kind as 'chronologie', passages: [], title: p.title, detail: p.raison ?? '', items: p.items, at: p.at }); break;
     case 'rush.cut': addManualCut(p.s, p.e, 'assistant'); break;
     case 'note': break;
+    case 'shot.delete': update((x) => ({ ...x, shots: x.shots.filter((s) => s.id !== p.shotId) })); break;
+    case 'shot.layout': update((x) => ({ ...x, shots: x.shots.map((s) => (s.id === p.shotId ? { ...s, layout: p.layout } : s)) })); break;
+    case 'shot.motion': update((x) => ({ ...x, shots: x.shots.map((s) => (s.id === p.shotId ? { ...s, motion: p.motion, path: undefined } : s)) })); break;
+    case 'subtitle.replace': update((x) => ({ ...x, subtitles: x.subtitles.map((s) => ({ ...s, text: s.text.split(p.from).join(p.to), words: s.words.map((w) => ({ ...w, w: w.w.split(p.from).join(p.to) })) })) })); break;
+    case 'music.volume': update((x) => ({ ...x, audio: x.audio.map((a) => (a.kind === 'music' ? { ...a, volume: Math.min(1.5, Math.max(0.05, a.volume * p.factor)) } : a)) })); break;
+    case 'subs.size': update((x) => ({ ...x, subtitleStyle: { ...x.subtitleStyle, size: Math.min(2, Math.max(0.5, (x.subtitleStyle.size ?? 1) * p.factor)) } })); break;
     case 'overlay.add': addOverlay({ kind: 'panel', pageId: p.pageId, rect: p.rect }, { start: p.at, duration: p.duration, place: p.place, enter: p.place === 'pip' ? 'pop' : 'slide', fade: 0.35 }); break;
   }
 }
@@ -51,7 +64,7 @@ export function AssistantModal() {
     if (!c.trim()) return;
     setBusy(true); setRes(null); setDone({});
     try {
-      const r = await aiAssistant(c, getState().project);
+      const sel = getState().ui.selection; const r = await aiAssistant(c, getState().project, sel?.kind === 'shot' ? sel.id : null);
       setRes({ resume: r.resume, proposals: r.proposals, by: r.via.provider === 'local' ? 'assistant hors ligne de Forge' : `${INFO[r.via.provider].label} · ${r.via.model}`,
         sent: r.via.provider === 'local' ? undefined : `Envoyé à l’IA : ${r.context.kept.join(', ') || 'durée et format'} — ${r.context.chars.toLocaleString('fr-FR')} caractères${r.context.chars < r.context.fullChars ? ` au lieu de ${r.context.fullChars.toLocaleString('fr-FR')}` : ''}.` });
     } catch (e) { toast((e as Error).message, 'error'); }

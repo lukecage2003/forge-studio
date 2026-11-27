@@ -177,7 +177,10 @@ export function freshProject(name = 'Nouveau projet', template?: Template): Proj
 
 export async function createProject(name: string, template?: Template) {
   await saveCurrent();
-  const p = freshProject(name, template);
+  // the channel's black and yellow on every new project (unless switched off), a template's own look wins
+  const { myDAForNewProjects, withMyDA } = await import('../actions');
+  const base = freshProject(name, template);
+  const p = !template && myDAForNewProjects() ? withMyDA(base) : base;
   loadProject(p);
   await flushSave();
   await writeNow(p);
