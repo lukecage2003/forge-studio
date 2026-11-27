@@ -1,6 +1,7 @@
 import { DIAGRAM_3D, FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { toneFilter } from './color';
 import { drawOverlays, otherHalf, splitAt, type OverlayVideoSource } from './overlays';
+import { balloonTimes } from './polish';
 /** split screen draws the main track through a second renderer: never recursively */
 let splitDepth = 0;
 import { personMask } from './segment';
@@ -379,7 +380,7 @@ function drawPanelIn(ctx: Ctx, project: Project, pageId: string, box: Box, view:
 
 /* -------------------------------------------- balloons popping in order */
 
-interface BalloonAnim { rects: Rect[]; local: number; dur: number; /** the camera reads them: each pops as the camera arrives */ follow?: boolean }
+interface BalloonAnim { rects: Rect[]; local: number; dur: number; /** the camera reads them: each pops as the camera arrives */ follow?: boolean; /** when the voice says it: seconds into the shot, one per balloon */ times?: number[] | null }
 
 /** before its turn a balloon is hidden under a soft patch of its surroundings, then it pops in */
 function drawBalloons(ctx: Ctx, asset: { img: CanvasImageSource; blur: HTMLCanvasElement; width: number; height: number }, b: BalloonAnim) {
@@ -389,7 +390,7 @@ function drawBalloons(ctx: Ctx, asset: { img: CanvasImageSource; blur: HTMLCanva
   const span = Math.min(b.dur * 0.42, 0.3 * n + 0.2);
   b.rects.forEach((r, i) => {
     // following camera: it reaches balloon i at i/(n-1) of the shot; pop a beat before
-    const t0 = b.follow && n > 1 ? Math.max(0.08, (i / (n - 1)) * b.dur - (b.dur / (n - 1)) * 0.3) : 0.12 + (i * span) / n;
+    const t0 = !b.follow && b.times ? b.times[i] : b.follow && n > 1 ? Math.max(0.08, (i / (n - 1)) * b.dur - (b.dur / (n - 1)) * 0.3) : 0.12 + (i * span) / n;
     const a = clamp((b.local - t0) / 0.28, 0, 1);
     if (a >= 1) return; // fully shown: it's already in the art
     const pad = Math.max(r.w, r.h) * 0.06;
@@ -1754,7 +1755,8 @@ export function createRenderer(W: number, H: number): Renderer {
           const sc = m === 'zoom-in' ? 1 + 0.045 * e : m === 'zoom-out' ? 1.045 - 0.045 * e : 1.015;
           layers = { L, dx, dy, s: sc };
         }
-        const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration, follow: resolveMotion(shot, W / H, rtl).motion === 'read' } : undefined;
+        // balloons pop on the words the voice says over the shot (engine/polish), else at a fixed rhythm
+        const balloons = !override && project.look?.balloonPop && shot.balloons?.length ? { rects: shot.balloons, local, dur: shot.duration, follow: resolveMotion(shot, W / H, rtl).motion === 'read', times: balloonTimes(project, shot.id, ts.start, shot.duration, shot.balloons.length) } : undefined;
         // shared composition: filmed inside the whole page, the neighbouring art stays
         const pg = shot.shared ? project.pages.find((x) => x.id === shot.pageId) : null;
         const clipR = override?.clip ?? (pg ? { x: 0, y: 0, w: pg.width, h: pg.height } : shot.rect);

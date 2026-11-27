@@ -10,6 +10,7 @@ import { holdFor, HOLD_KIND_FR } from './hold';
 import type { SeqType } from './director';
 import { narration } from './narration';
 import { buildSubtitles, timelineWords } from './auto';
+import { applyNameFixes, hookCandidate, nameFixes, openWith, repeatedPanels } from './polish';
 
 /**
  * Pre-export check: everything that would look or sound wrong once on
@@ -237,6 +238,12 @@ export function checkProject(p: Project): Issue[] {
   const review = p.shots.filter((s) => s.match && s.match.conf < 0.5).length;
   if (review) out.push({ level: 'warn', text: `${review} case(s) associée(s) avec peu de certitude : vérifie-les (inspecteur du projet → « À vérifier »).` });
 
+  // editorial polish (engine/polish): the opening, panels shown again and again, names in the subtitles
+  const hook = hookCandidate(p);
+  if (hook && p.shots[0]?.auto && hook.auto) out.push({ level: 'warn', text: 'Accroche : une case plus forte existe pour les 3 premières secondes (pleine page ou grande case d’action).', at: 0, fix: { label: 'Ouvrir sur la case la plus forte', apply: (x) => openWith(x, hook.id) } });
+  for (const r of repeatedPanels(p).slice(0, 3)) out.push({ level: 'warn', text: `La même case revient ${r.shots.length} fois (${r.times.map((t) => t.toFixed(0) + ' s').join(', ')}) : le public la reconnaît, varie avec une autre case.`, at: r.times[1] ?? r.times[0] });
+  const names = nameFixes(p);
+  if (names.length) out.push({ level: 'warn', text: `Noms mal orthographiés dans les sous-titres : ${names.slice(0, 4).map((f) => `« ${f.from} » → « ${f.to} »`).join(', ')}.`, fix: { label: 'Corriger les noms', apply: (x) => ({ ...x, subtitles: applyNameFixes(x.subtitles, nameFixes(x)) }) } });
   return out;
 }
 

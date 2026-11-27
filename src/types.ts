@@ -177,7 +177,7 @@ export interface FxItem {
  * a panel, an image or a video, at any time, on track 1..3 (higher on top).
  * Video overlays are silent (the voice and music lanes carry the sound).
  */
-export type OverlayPlace = 'full' | 'pip' | 'top' | 'bottom' | 'left' | 'right' | 'free';
+export type OverlayPlace = 'full' | 'pip' | 'top' | 'bottom' | 'left' | 'right' | 'free' | 'slider';
 /** how an overlay comes in and goes out */
 export type OverlayEnter = 'fade' | 'slide' | 'pop' | 'wipe';
 /** a box in the frame, as shares of its width and height (0..1) */
@@ -313,6 +313,8 @@ export interface Project {
   /** look of diagrams and maps: 'encre' = printed comic (ink, halftone, captions), 'neon' = the earlier dark cards */
   diagramStyle?: 'encre' | 'neon';
   fx: FxItem[];
+  /** episode number in a series (series mode): numbered titles and publication text */
+  episode?: number;
   /** overlay tracks above the main track (absent in projects before schema 3) */
   overlays?: Overlay[];
   look: Look;

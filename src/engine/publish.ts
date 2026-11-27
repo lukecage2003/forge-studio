@@ -49,7 +49,9 @@ export function buildPost(p: Project, id: PlatformId): Post {
   const series = seriesOf(p);
   const names = comicNames(p).filter((n) => n.strong).map((n) => n.name).slice(0, 6);
   const hook = hookOf(p);
-  const title = words(p.name && !/^nouveau projet|sans titre/i.test(p.name) ? p.name : hook || series[0] || 'Vidéo comics').slice(0, id === 'shorts' ? 100 : 150);
+  const base = words(p.name && !/^nouveau projet|sans titre/i.test(p.name) ? p.name : hook || series[0] || 'Vidéo comics');
+  // series mode: the episode number is in the title (once)
+  const title = (p.episode && !/épisode\s*\d+/i.test(base) ? `${base} — épisode ${p.episode}` : base).slice(0, id === 'shorts' ? 100 : 150);
   sources.push(p.name ? 'titre : nom du projet' : hook ? 'titre : première phrase du script' : 'titre : série importée');
   const lines = [hook, series.length ? `📚 ${series.slice(0, 2).join(' · ')}` : '', names.length ? `Noms cités : ${names.slice(0, 4).join(', ')}.` : ''].filter(Boolean);
   if (hook) sources.push('description : accroche du script');

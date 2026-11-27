@@ -184,6 +184,17 @@ export async function createProject(name: string, template?: Template) {
   return p;
 }
 
+/** a project built elsewhere (short version, next episode) becomes a new project of the workspace, opened */
+export async function openAsNewProject(p: Project): Promise<Project> {
+  await saveCurrent();
+  const fresh: Project = { ...p, id: uid('p_'), production: { ...(p.production ?? { status: 'idee', tasks: [] }), createdAt: new Date().toISOString() } };
+  loadProject(fresh);
+  await flushSave();
+  await writeNow(fresh);
+  changed();
+  return fresh;
+}
+
 export async function duplicateProject(id: string): Promise<string | null> {
   if (!ws) return null;
   await saveCurrent();

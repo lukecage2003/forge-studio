@@ -5,7 +5,7 @@ import { MODELS, type ProductionModel } from '../engine/auto';
 import { autoMontage, panelThumb, sentencesOf, STYLES, timelineWords, type AutoLength, type AutoStyle } from '../engine/auto';
 import { geminiHooks, geminiMatchPanels, hasGoogle } from '../engine/google';
 import { getState, setUI, update, useStore } from '../store';
-import { aiRecut, analyzeComics, prepareMotion, researchComics, withAutoOverlays } from '../actions';
+import { aiRecut, analyzeComics, prepareMotion, researchComics, withAutoOverlays, alignMusicOnReveal } from '../actions';
 import { narration } from '../engine/narration';
 import { sentenceKey } from '../engine/storyboard';
 import { toast } from './Toast';
@@ -95,7 +95,10 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       try { const { takeVersion } = await import('../lib/studio'); await takeVersion('Avant le montage automatique', true); } catch { /* no workspace: undo still works */ }
       // overlays from the script (split screen, picture-in-picture), explained, the user's own kept
       const withOv = calques ? await withAutoOverlays(project) : { ...project, overlays: (project.overlays ?? []).filter((o) => !o.auto) };
-      update(() => withOv);
+      // a voice-led edit: the music is moved so a bar starts on the revelation
+      const aligned = await alignMusicOnReveal(withOv);
+      update(() => aligned?.project ?? withOv);
+      if (aligned) toast(`Musique calée : un temps fort tombe sur la révélation (décalée de ${aligned.shift.toFixed(2)} s).`);
       { const n = (withOv.overlays ?? []).filter((o) => o.auto).length; if (n) toast(`${n} calque${n > 1 ? 's' : ''} placé${n > 1 ? 's' : ''} d’après le script (écran partagé, incrustation) : chacun dit pourquoi dans l’inspecteur.`); }
       { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
         if (doubt) toast(`${doubt} association(s) phrase → case à vérifier : ouvre la « Correction express » (inspecteur du projet), au clavier en quelques secondes.`); }

@@ -12,7 +12,8 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
   const b = await chromium.launch(); const ctx = await b.newContext();
   const imgs = await comicPages(ctx, 3);
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
-  await p.goto(`http://localhost:${port}/`); await p.waitForFunction(() => !!globalThis.__forgeQueue, null, { timeout: 60000 });
+  // slow Windows runners can take more than a minute to serve the app the first time after another suite
+  await p.goto(`http://localhost:${port}/`); await p.waitForFunction(() => !!globalThis.__forgeQueue, null, { timeout: 150000 });
   const settle = () => p.waitForFunction(() => { const q = globalThis.__forgeQueue; const pr = window.__forge.getState().project; return pr.shots.length > 0 && q.active(pr.id).length === 0; }, null, { timeout: 180000, polling: 250 });
   await p.locator('input[type=file][accept*="pdf"]').setInputFiles(imgs.slice(0, 2));
   await settle();

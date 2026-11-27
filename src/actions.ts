@@ -851,3 +851,101 @@ export async function withAutoOverlays(p: Project): Promise<Project> {
   }
   return cur;
 }
+
+
+/* ---------------------------------------------------------------- music, series, short version */
+
+/**
+ * a voice-led edit keeps its cuts on the voice; the music is moved instead so a bar
+ * starts on the revelation of the creative director (the strongest moment lands on a beat)
+ */
+export async function alignMusicOnReveal(p: Project): Promise<{ project: Project; shift: number } | null> {
+  const rev = p.direction?.sequences?.find((q) => q.type === 'revelation');
+  const music = p.audio.find((c) => c.kind === 'music');
+  const buf = music && getAudio(music.mediaId);
+  if (!rev || !music || !buf || rev.start < music.start || rev.start > music.start + music.duration) return null;
+  const { detectBeats } = await import('./engine/beats');
+  const g = detectBeats(buf, music.offset, Math.min(buf.duration, music.offset + 600));
+  if (!g || g.confidence <= 1.15) return null;
+  let step = 60 / g.bpm; while (step < 0.3) step *= 2;
+  const bar = step * 4;
+  const src = music.offset + (rev.start - music.start);
+  const target = g.offset + Math.round((src - g.offset) / bar) * bar;
+  let off = music.offset + (target - src);
+  if (off < 0) off += bar;
+  if (off + music.duration > buf.duration || Math.abs(off - music.offset) < 0.02) return null;
+  return { project: { ...p, audio: p.audio.map((c) => (c.id === music.id ? { ...c, offset: off } : c)) }, shift: off - music.offset };
+}
+
+/** the look of a series (art direction, subtitles, colours), kept in this browser and given back to its next videos */
+const THEMES = 'forge.seriesThemes';
+type SeriesTheme = Pick<Project, 'art' | 'accent' | 'diagramStyle' | 'titleStyle'> & { subtitleStyle: Project['subtitleStyle']; look: Project['look']; profile?: string; savedAt: string };
+const readThemes = (): Record<string, SeriesTheme> => { try { return JSON.parse(localStorage.getItem(THEMES) || '{}'); } catch { return {}; } };
+export async function seriesName(p: Project): Promise<string> {
+  const { seriesOf } = await import('./engine/publish');
+  return seriesOf(p)[0] ?? p.name.replace(/\s*[—-]\s*épisode\s*\d+\s*$/i, '').trim();
+}
+export async function saveSeriesTheme(): Promise<string> {
+  const p = getState().project; const name = await seriesName(p);
+  const all = readThemes();
+  all[name] = { art: p.art, accent: p.accent, diagramStyle: p.diagramStyle, titleStyle: p.titleStyle, subtitleStyle: p.subtitleStyle, look: p.look, profile: p.direction?.profile, savedAt: new Date().toISOString() };
+  try { localStorage.setItem(THEMES, JSON.stringify(all)); } catch { /* storage blocked */ }
+  toast(`Thème de la série « ${name} » enregistré : il sera proposé pour ses prochaines vidéos.`);
+  return name;
+}
+export async function applySeriesTheme(): Promise<boolean> {
+  const p = getState().project; const name = await seriesName(p); const th = readThemes()[name];
+  if (!th) { toast(`Aucun thème enregistré pour « ${name} » : règle une vidéo de la série puis « Enregistrer le thème de la série ».`, 'error'); return false; }
+  update((x) => ({ ...x, art: th.art ?? x.art, accent: th.accent ?? x.accent, diagramStyle: th.diagramStyle ?? x.diagramStyle, titleStyle: th.titleStyle ?? x.titleStyle, subtitleStyle: { ...x.subtitleStyle, ...th.subtitleStyle }, look: { ...x.look, ...th.look }, direction: th.profile ? { ...(x.direction ?? { profile: th.profile }), profile: th.profile } : x.direction }));
+  toast(`Thème « ${name} » appliqué (annulable avec Ctrl+Z).`);
+  return true;
+}
+export const hasSeriesTheme = async () => !!readThemes()[await seriesName(getState().project)];
+
+/** series mode: a new project for the next episode, with this one's settings and look, numbered */
+export async function nextEpisode(): Promise<void> {
+  const p = getState().project; const name = await seriesName(p);
+  const n = (p.episode ?? 1) + 1;
+  const { freshProject, openAsNewProject } = await import('./lib/studio');
+  const { templateFrom } = await import('./lib/workspace');
+  const next: Project = { ...freshProject(`${name} — épisode ${n}`, { id: 'ep', name, createdAt: new Date().toISOString(), settings: templateFrom(p) }), episode: n };
+  if (!p.episode) update((x) => ({ ...x, episode: 1 }));
+  await openAsNewProject(next);
+  toast(`Épisode ${n} de « ${name} » créé, avec le style de l’épisode précédent.`);
+}
+
+/**
+ * a Short (≤ 45 s) from a long voice-over video: the hook, the revelation, the
+ * named characters and the conclusion, in their order, as a new project (the long
+ * one is untouched). Pictures, voice, subtitles and overlays follow the cut.
+ */
+export async function makeShortVersion(target = 45): Promise<boolean> {
+  const p = getState().project;
+  if (p.aroll) { toast('Version courte : pour l’instant, les vidéos en voix off seulement (pas encore avec un rush face caméra).', 'error'); return false; }
+  const { shortRanges } = await import('./engine/polish');
+  const ranges = shortRanges(p, target);
+  if (!ranges.length) { toast('Version courte : il faut une voix off transcrite ou un script calé sur la voix.', 'error'); return false; }
+  const timed = layoutShots(p);
+  const shots: Shot[] = [], audio: AudioClip[] = [], subtitles: typeof p.subtitles = [], overlays: Overlay[] = [];
+  let at = 0;
+  for (const r of ranges) {
+    const map = (t: number) => at + (t - r.s);
+    for (const ts of timed) {
+      const s0 = Math.max(ts.start, r.s), e0 = Math.min(ts.end, r.e);
+      if (e0 - s0 > 0.25) shots.push({ ...ts.shot, id: uid('s_'), start: undefined, duration: e0 - s0, transition: shots.length ? ts.shot.transition : 'cut' });
+    }
+    for (const c of p.audio.filter((x) => x.kind === 'voice' || x.kind === 'sfx')) {
+      const s0 = Math.max(c.start, r.s), e0 = Math.min(c.start + c.duration, r.e);
+      if (e0 - s0 > 0.05) audio.push({ ...c, id: uid('a_'), start: map(s0), offset: c.offset + (s0 - c.start), duration: e0 - s0, fadeIn: 0.03, fadeOut: 0.05 });
+    }
+    for (const sb of p.subtitles) if (sb.s >= r.s - 0.05 && sb.e <= r.e + 0.05) subtitles.push({ ...sb, s: map(sb.s), e: map(sb.e), words: sb.words.map((w) => ({ ...w, s: map(w.s), e: map(w.e) })) });
+    for (const o of p.overlays ?? []) { const s0 = Math.max(o.start, r.s), e0 = Math.min(o.start + o.duration, r.e); if (e0 - s0 > 0.3) overlays.push({ ...o, id: uid('ov_'), start: map(s0), duration: e0 - s0, soundClip: undefined }); }
+    at += r.e - r.s;
+  }
+  const music = p.audio.find((c) => c.kind === 'music');
+  if (music) audio.push({ ...music, id: uid('a_'), start: 0, duration: Math.min(at, music.sourceDuration - music.offset), fadeOut: 1.5 });
+  const { openAsNewProject } = await import('./lib/studio');
+  await openAsNewProject({ ...p, name: `${p.name} (version courte)`, shots, audio, subtitles, overlays, fx: [], storyboard: undefined, format: '9:16' });
+  toast(`Version courte : ${at.toFixed(0)} s, ${ranges.length} passages (${[...new Set(ranges.map((r) => r.why))].join(', ')}). La version longue n’est pas modifiée.`);
+  return true;
+}

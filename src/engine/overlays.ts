@@ -14,7 +14,7 @@ export type OverlayVideoSource = (mediaId: string, src: number) => CanvasImageSo
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 interface Box { x: number; y: number; w: number; h: number }
 
-export const PLACE_FR: Record<OverlayPlace, string> = { full: 'Plein écran', pip: 'Incrustation', top: 'Moitié haute', bottom: 'Moitié basse', left: 'Moitié gauche', right: 'Moitié droite', free: 'Libre' };
+export const PLACE_FR: Record<OverlayPlace, string> = { full: 'Plein écran', pip: 'Incrustation', top: 'Moitié haute', bottom: 'Moitié basse', left: 'Moitié gauche', right: 'Moitié droite', free: 'Libre', slider: 'Comparaison (curseur)' };
 export const ENTER_FR: Record<OverlayEnter, string> = { fade: 'Fondu', slide: 'Glissé', pop: 'Pop', wipe: 'Volet encré' };
 const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
 
@@ -41,7 +41,7 @@ export const toNBox = (b: { x: number; y: number; w: number; h: number }, W: num
 /** pure: where an overlay sits in a W×H frame */
 export function placeBox(place: OverlayPlace, W: number, H: number, corner: Overlay['corner'] = 'tr'): Box {
   switch (place) {
-    case 'full': return { x: 0, y: 0, w: W, h: H };
+    case 'full': case 'slider': return { x: 0, y: 0, w: W, h: H };
     case 'top': return { x: 0, y: 0, w: W, h: H / 2 };
     case 'bottom': return { x: 0, y: H / 2, w: W, h: H / 2 };
     case 'left': return { x: 0, y: 0, w: W / 2, h: H };
@@ -86,6 +86,12 @@ export function pipBox(aspect: number, W: number, H: number, corner: Overlay['co
 
 /** subtitles are drawn in this video */
 export const hasSubtitles = (p: Project) => !!p.subtitleStyle?.on && (p.subtitles?.length ?? 0) > 0;
+
+/** pure: where the comparison divider is at t: it sweeps from the right edge to the left one over the overlay's life */
+export function sliderX(o: Overlay, t: number, W: number): number {
+  const u = Math.min(1, Math.max(0, (t - o.start) / Math.max(0.5, o.duration)));
+  return W * (0.5 + 0.42 * Math.cos(Math.PI * u));
+}
 
 /** pure: the overlays visible at t, lower tracks first (drawn first, so higher tracks cover them) */
 export function activeOverlays(p: Project, t: number): Overlay[] {
@@ -154,6 +160,9 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
     if (en === 'slide' && pin < 1) { const fromLeft = box.x + box.w / 2 < W / 2; ctx.translate((fromLeft ? -1 : 1) * (1 - e) * (box.w + Math.min(box.x, W - box.x - box.w) + 10), 0); }
     if (en === 'pop' && pin < 1) { const s2 = 0.55 + 0.45 * e + 0.12 * Math.sin(Math.PI * e); const cx0 = box.x + box.w / 2, cy0 = box.y + box.h / 2; ctx.translate(cx0, cy0); ctx.scale(s2, s2); ctx.translate(-cx0, -cy0); }
     if (en === 'wipe' && pin < 1) { ctx.beginPath(); ctx.rect(box.x - 20, box.y - 20, (box.w + 40) * e, box.h + 40); ctx.clip(); }
+    // comparison: the overlay on the left of a divider that sweeps across the frame (before / after, two covers)
+    const divider = o.place === 'slider' ? sliderX(o, t, W) : null;
+    if (divider != null) { ctx.beginPath(); ctx.rect(0, 0, divider, H); ctx.clip(); }
     if (o.place === 'pip' || o.place === 'free') {
       // printed-comic frame: hard offset shadow and a white border, no glow
       const s = Math.round(Math.min(W, H) * 0.012);
@@ -170,6 +179,16 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
       ctx.filter = 'none';
     }
     ctx.drawImage(img, cx, cy, cw, ch, dx, dy, dw, dh);
+    if (divider != null) {
+      // the divider: an ink line with a hard shadow and a round handle (no glow)
+      ctx.restore(); ctx.save();
+      const lw = Math.max(4, Math.round(W * 0.006)), r = Math.round(W * 0.035), cy0 = H * 0.5;
+      ctx.fillStyle = '#111'; ctx.fillRect(divider + lw / 2, 0, lw, H);
+      ctx.fillStyle = '#fff'; ctx.fillRect(divider - lw / 2, 0, lw, H);
+      ctx.beginPath(); ctx.arc(divider + lw / 2, cy0 + lw / 2, r, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+      ctx.beginPath(); ctx.arc(divider, cy0, r, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.fillStyle = '#111'; ctx.font = `bold ${Math.round(r * 0.9)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('‹ ›', divider, cy0);
+    }
     if (en === 'wipe' && pin < 1) { ctx.restore(); ctx.save(); const xe = box.x + box.w * e; ctx.fillStyle = '#111'; ctx.fillRect(xe - 6, box.y, 12, box.h); }
     ctx.restore();
   }
