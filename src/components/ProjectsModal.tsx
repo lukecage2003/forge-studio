@@ -270,6 +270,48 @@ function StorageTab() {
         : <p className="help">Ce navigateur ne permet pas de choisir un dossier : utilise Chrome ou Edge sur ordinateur.</p>}
       {where === 'folder' && <button className="btn ghost sm" onClick={() => void S.forgetFolder().then(() => toast('Projets de nouveau gardés dans le navigateur (le dossier n’est pas effacé)'))}>Ne plus utiliser ce dossier</button>}
       <p className="help">Les projets déjà présents dans le navigateur sont copiés dans le dossier choisi, jamais déplacés ni effacés. Les médias sont partagés entre projets et ne sont jamais supprimés automatiquement.</p>
+      <DiskSpace />
     </section>
+  );
+}
+
+const mo = (b: number) => (!b ? "0" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} Go` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1e3))} Ko`);
+
+/** what takes room, and a cleanup that only moves unused media to a recoverable trash */
+function DiskSpace() {
+  type U = NonNullable<Awaited<ReturnType<typeof S.diskUsage>>>;
+  const [u, setU] = useState<U | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  // measured on demand only: measuring writes the open project first, which would re-trigger a studio listener
+  const measure = useCallback(async () => { setBusy('Mesure…'); try { setU(await S.diskUsage()); } finally { setBusy(null); } }, []);
+  useEffect(() => { void measure(); }, [measure]);
+  const run = async (what: string, f: () => Promise<string>) => { setBusy(what); try { toast(await f()); } catch (e) { toast((e as Error).message, 'error'); } setBusy(null); await measure(); };
+  if (!u) return <p className="help">{busy ? <><Loader2 size={13} className="spin" /> Mesure de l’espace…</> : 'Aucun espace de projets.'}</p>;
+  const unused = u.unused.reduce((a, m) => a + m.bytes, 0);
+  return (
+    <div className="pj-disk" aria-label="Espace disque">
+      <h4>Espace utilisé</h4>
+      <table className="pj-disk-table"><tbody>
+        <tr><td>Médias originaux utilisés</td><td>{u.used.count}</td><td>{mo(u.used.bytes)}</td></tr>
+        <tr><td>Médias que plus aucun projet ni version n’utilise</td><td>{u.unused.length}</td><td>{mo(unused)}</td></tr>
+        <tr><td>Versions des projets</td><td>{u.versions.count}</td><td>{mo(u.versions.bytes)}</td></tr>
+        <tr><td>Vidéos exportées</td><td>{u.exports.count}</td><td>{mo(u.exports.bytes)}</td></tr>
+        <tr><td>Corbeille</td><td>{u.trash.count}</td><td>{mo(u.trash.bytes)}</td></tr>
+        <tr><td>Cache du navigateur (copies)</td><td>{u.cache.count}</td><td>{mo(u.cache.bytes)}</td></tr>
+      </tbody></table>
+      <div className="row-gap">
+        <button className="btn" disabled={!!busy || (!u.unused.length && !u.cache.count)} onClick={() => void run('Nettoyage…', async () => {
+          const r = await S.freeSpace();
+          if (!r) return 'Aucun espace de projets';
+          return `${r.moved} média${r.moved > 1 ? 's' : ''} inutilisé${r.moved > 1 ? 's' : ''} mis à la corbeille (${mo(r.bytes)}), ${r.cacheFreed} copie${r.cacheFreed > 1 ? 's' : ''} du cache libérée${r.cacheFreed > 1 ? 's' : ''} (${mo(r.cacheBytes)})${r.refused ? ` — ${r.refused} gardé${r.refused > 1 ? 's' : ''} car utilisé${r.refused > 1 ? 's' : ''}` : ''}`;
+        })}>{busy === 'Nettoyage…' ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Libérer de la place</button>
+        {u.trash.count > 0 && <button className="btn ghost" disabled={!!busy} onClick={() => void run('Restauration…', async () => `${await S.restoreTrash()} média(s) remis en place`)}><RotateCcw size={14} /> Restaurer la corbeille</button>}
+        {u.trash.count > 0 && (confirmEmpty
+          ? <button className="btn danger" disabled={!!busy} onClick={() => { setConfirmEmpty(false); void run('Suppression…', async () => `${await S.emptyTrash()} média(s) supprimé(s) définitivement`); }}>Confirmer : supprimer définitivement</button>
+          : <button className="btn ghost" disabled={!!busy} onClick={() => setConfirmEmpty(true)}>Vider la corbeille…</button>)}
+      </div>
+      <p className="help">« Libérer de la place » ne supprime rien : les médias inutilisés vont dans la corbeille du dossier (restaurable), et seules les copies du cache que le dossier possède déjà sont retirées. Un média utilisé par un projet ou une de ses versions n’est jamais touché. Seul « Vider la corbeille » supprime, après confirmation.</p>
+    </div>
   );
 }

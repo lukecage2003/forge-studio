@@ -1,8 +1,8 @@
 import type { Project } from '../types';
 import { flushSave, getState, loadProject, newProject, onSaved, setUI } from '../store';
 import { idb } from './db';
-import { evictCached, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
-import { loadMediaOf, mediaRefs } from './projectFile';
+import { cacheUsage, evictCached, freeCacheCopies, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
+import { loadMediaOf, mediaRefs, openProjectFile, saveProjectFile, type CarriedVersion } from './projectFile';
 import { uid } from './util';
 import {
   Workspace, browserWorkspace, defaultTasks, folderPickerAvailable, folderState, pickFolder, requestFolder, templateFrom,
@@ -198,6 +198,61 @@ export async function deleteProject(id: string): Promise<boolean> {
   await ws.deleteProject(id);
   changed();
   return true;
+}
+
+/* ---------------------------------------------------------------- disk space */
+
+/** room taken by the workspace and the browser cache (the open project is written first so it counts as used) */
+export async function diskUsage() {
+  if (!ws) return null;
+  await saveCurrent();
+  return { ...(await ws.usage()), cache: await cacheUsage(), where: ws.kind };
+}
+/** unused media → trash (recoverable); the cache copies the workspace already holds are dropped */
+export async function freeSpace(): Promise<{ moved: number; bytes: number; refused: number; cacheFreed: number; cacheBytes: number } | null> {
+  if (!ws) return null;
+  await saveCurrent();
+  const u = await ws.usage();
+  const r = await ws.trashUnused(u.unused.map((m) => m.id));
+  const c = await freeCacheCopies(new Set(mediaRefs(getState().project).map((m) => m.id)));
+  changed();
+  return { ...r, cacheFreed: c.freed, cacheBytes: c.bytes };
+}
+export const restoreTrash = async () => { const n = (await ws?.restoreTrash()) ?? 0; changed(); return n; };
+export const emptyTrash = async () => { const n = (await ws?.emptyTrash()) ?? 0; changed(); return n; };
+
+/* ---------------------------------------------------------------- .forge files */
+
+/** the open project as a .forge file, with its versions (and the media they use) */
+export async function exportForge(): Promise<{ blob: Blob; versions: number }> {
+  await saveCurrent();
+  const p = getState().project;
+  const versions: CarriedVersion[] = [];
+  if (ws) for (const v of await ws.listVersions(p.id)) { const text = await ws.readVersionText(p.id, v.file); if (text) versions.push({ file: v.file, text }); }
+  return { blob: await saveProjectFile(p, { versions }), versions: versions.length };
+}
+
+/**
+ * open a .forge file. The current project is saved first; when the workspace
+ * already has a project with the same identity (the same project opened on
+ * another PC), its state is kept as a version before being replaced, so the
+ * opening can always be undone. Versions carried by the file are added, never
+ * written over existing ones.
+ */
+export async function importForge(file: File): Promise<{ name: string; versionsAdded: number; keptBefore: boolean; manifest: Awaited<ReturnType<typeof openProjectFile>>['manifest'] }> {
+  await saveCurrent();
+  const { project, versions, manifest } = await openProjectFile(file);
+  let keptBefore = false, versionsAdded = 0;
+  if (ws) {
+    const existing = await ws.readProject(project.id);
+    if (existing) { await ws.snapshot(existing.project, 'Avant ouverture d’un fichier .forge', false); keptBefore = true; }
+    for (const v of versions) if (await ws.writeVersionText(project.id, v.file, v.text)) versionsAdded++;
+  }
+  loadProject(project);
+  lastSnapAt = Date.now(); dirtySinceSnap = false;
+  await saveCurrent();
+  changed();
+  return { name: getState().project.name, versionsAdded, keptBefore, manifest };
 }
 
 /* ---------------------------------------------------------------- versions */

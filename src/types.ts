@@ -247,6 +247,8 @@ export interface Project {
   id: string;
   /** rendering engine version the project was made with (reproducibility) */
   engine?: number;
+  /** data layout version (lib/schema): migrations run from it on opening */
+  schemaVersion?: number;
   name: string;
   format: Format;
   fps: number;

@@ -3,7 +3,6 @@ import { Download, Wand2, FolderOpen, FilePlus2, FolderKanban, ListTodo, LayoutL
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
-import { openProjectFile, saveProjectFile } from '../lib/projectFile';
 import { download } from '../engine/export';
 import { toast } from './Toast';
 import { lazy, Suspense } from 'react';
@@ -18,14 +17,18 @@ export function TopBar() {
 
   const saveFile = async () => {
     const p = getState().project;
-    download(await saveProjectFile(p), `${p.name || 'projet'}.forge`);
-    toast('Projet enregistré sur ton ordinateur');
+    const { exportForge } = await import('../lib/studio');
+    const { blob, versions } = await exportForge();
+    download(blob, `${p.name || 'projet'}.forge`);
+    toast(`Projet enregistré sur ton ordinateur${versions ? ` avec ${versions} version${versions > 1 ? 's' : ''}` : ''}`);
   };
   const openFile = async (f?: File) => {
     if (!f) return;
     try {
-      loadProject(await openProjectFile(f));
-      toast(`Projet « ${getState().project.name} » ouvert`);
+      const { importForge } = await import('../lib/studio');
+      const r = await importForge(f);
+      toast(`Projet « ${r.name} » ouvert${r.versionsAdded ? ` avec ${r.versionsAdded} version${r.versionsAdded > 1 ? 's' : ''}` : ''}${r.keptBefore ? ' — l’état précédent est gardé dans les versions' : ''}`);
+      if (r.manifest?.missing.length) toast(`${r.manifest.missing.length} média manquait déjà dans ce fichier`, 'error');
     } catch (e) {
       toast((e as Error).message, 'error');
     }

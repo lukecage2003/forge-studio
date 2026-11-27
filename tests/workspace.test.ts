@@ -98,3 +98,44 @@ describe('espace de projets', () => {
     expect(m).toMatchObject({ status: 'script', hasRush: true, tasksDone: 1, tasksOpen: 7, createdAt: '2026-11-01' });
   });
 });
+
+describe('espace disque et nettoyage sûr', () => {
+  it('compte les médias utilisés, y compris par une version seulement, et ne propose que les autres', async () => {
+    const ws = await new Workspace(new MemDir(), 'folder').init();
+    const all = new Map<string, Blob>([['a', new Blob(['aaaa'])], ['b', new Blob(['bb'])], ['orphelin', new Blob(['xxxxxx'])]]);
+    const get = async (id: string) => all.get(id) ?? null;
+    const p = proj({ pages: [{ id: 'p1', mediaId: 'a' } as never, { id: 'p2', mediaId: 'b' } as never] });
+    await ws.saveProject(p, get);
+    await ws.snapshot(p, 'avec b', false);
+    // b is removed from the project but a version still uses it
+    await ws.saveProject({ ...p, pages: [p.pages[0]] }, get);
+    await ws.putMedia('orphelin', all.get('orphelin')!, { name: 'scan-oublie.jpg' });
+    const u = await ws.usage();
+    expect(u.used.count).toBe(2);
+    expect(u.unused.map((m) => m.id)).toEqual(['orphelin']);
+    expect(u.unused[0].bytes).toBe(6);
+    expect(u.versions.count).toBe(1);
+  });
+  it('un média utilisé n’est jamais mis à la corbeille, même demandé ; la corbeille se restaure', async () => {
+    const ws = await new Workspace(new MemDir(), 'folder').init();
+    const p = proj({ pages: [{ id: 'p1', mediaId: 'img1' } as never] });
+    await ws.saveProject(p, getBlob);
+    await ws.putMedia('vieux', new Blob(['123']));
+    const r = await ws.trashUnused(['img1', 'vieux']);
+    expect(r).toEqual({ moved: 1, bytes: 3, refused: 1 });
+    expect(await ws.getMedia('img1')).not.toBeNull();
+    expect(await ws.getMedia('vieux')).toBeNull();
+    expect((await ws.usage()).trash).toEqual({ count: 1, bytes: 3 });
+    expect(await ws.restoreTrash()).toBe(1);
+    expect(await (await ws.getMedia('vieux'))!.text()).toBe('123');
+    expect((await ws.usage()).trash.count).toBe(0);
+  });
+  it('vider la corbeille ne touche que la corbeille', async () => {
+    const ws = await new Workspace(new MemDir(), 'folder').init();
+    await ws.saveProject(proj({ pages: [{ id: 'p1', mediaId: 'img1' } as never] }), getBlob);
+    await ws.putMedia('vieux', new Blob(['123']));
+    await ws.trashUnused(['vieux']);
+    expect(await ws.emptyTrash()).toBe(1);
+    expect(await ws.getMedia('img1')).not.toBeNull();
+  });
+});

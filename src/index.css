@@ -843,6 +843,12 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .pj-phase { font-size: 11px; color: var(--muted); }
 .pj-where { display: flex; gap: 12px; align-items: flex-start; padding: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 .pj-where svg { color: var(--ember); flex: none; margin-top: 2px; }
+.pj-disk { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.pj-disk h4 { margin: 0; font-size: 13px; }
+.pj-disk-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pj-disk-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.pj-disk-table td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-2, inherit); }
+.row-gap { display: flex; flex-wrap: wrap; gap: 8px; }
 .save-dot.reconnect { background: #facc15; }
 .topbar-reconnect { height: 28px; font-size: 12px; }
 

@@ -28,6 +28,7 @@ import { importRush, analysisOf } from './rush';
 import { Toasts, toast } from './components/Toast';
 import { StaleVersion } from './components/StaleVersion';
 import { installStaleHandlers } from './lib/staleVersion';
+import { onSchemaNotice } from './lib/schema';
 import { getState, loadProject, redo, setUI, undo, useStore } from './store';
 import { deleteSelection, importAudioFiles, importPages } from './actions';
 import { idb } from './lib/db';
@@ -63,7 +64,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [booted, setBooted] = useState(false);
 
-  useEffect(() => { installGlobalHandlers((m) => toast(m, 'error')); installStaleHandlers(); }, []);
+  useEffect(() => { installGlobalHandlers((m) => toast(m, 'error')); installStaleHandlers(); return onSchemaNotice((m) => toast(m, 'error')); }, []);
 
   // restore last session
   useEffect(() => {

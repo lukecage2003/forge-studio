@@ -141,6 +141,30 @@ export async function evictCached(id: string): Promise<number> {
   return b.size;
 }
 
+/** size of the browser cache of media (IndexedDB) */
+export async function cacheUsage(): Promise<{ count: number; bytes: number }> {
+  let count = 0, bytes = 0;
+  for (const k of await idb.keys('media').catch(() => [] as string[])) { const b = await idb.get<Blob>('media', k).catch(() => undefined); if (b) { count++; bytes += b.size; } }
+  return { count, bytes };
+}
+/**
+ * free the browser cache copies that are only duplicates: a copy goes only when
+ * the workspace holds the same media AND the open project does not need it now.
+ * Nothing is lost: the media is read back from the workspace when needed.
+ */
+export async function freeCacheCopies(keep: Set<string>): Promise<{ freed: number; bytes: number }> {
+  if (!sink) return { freed: 0, bytes: 0 };
+  let freed = 0, bytes = 0;
+  for (const k of await idb.keys('media').catch(() => [] as string[])) {
+    if (keep.has(k)) continue;
+    const b = await idb.get<Blob>('media', k).catch(() => undefined);
+    if (!b || !(await sink.get(k).catch(() => null))) continue;
+    await idb.del('media', k);
+    freed++; bytes += b.size;
+  }
+  return { freed, bytes };
+}
+
 /* ------------------------------------------------------------ video */
 
 export interface VideoAsset { url: string; width: number; height: number; duration: number }

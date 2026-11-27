@@ -1,5 +1,6 @@
 import { useRef, useSyncExternalStore } from 'react';
 import { ENGINE_VERSION } from './engine/rng';
+import { newerMessage, schemaNotice, SCHEMA_VERSION, upgrade } from './lib/schema';
 import type { Caption, Project, Selection, Shot } from './types';
 import { observeShotDeleted, observeShotEdit } from './engine/brain';
 import { uid } from './lib/util';
@@ -54,6 +55,7 @@ export function newProject(): Project {
   return {
     id: uid('p_'),
     engine: ENGINE_VERSION,
+    schemaVersion: SCHEMA_VERSION,
     name: 'Sans titre',
     format: '9:16',
     fps: 30,
@@ -199,7 +201,9 @@ export function redo() {
 }
 
 export function loadProject(p: Project) {
-  p = migrate(p);
+  const up = upgrade(p);
+  if (up.newer) schemaNotice(newerMessage(up.from));
+  p = migrate(up.project);
   state = { ...state, project: p, past: [], future: [], ui: { ...state.ui, selection: null, playhead: 0, activePageId: p.pages[0]?.id ?? null } };
   emit();
   scheduleSave();

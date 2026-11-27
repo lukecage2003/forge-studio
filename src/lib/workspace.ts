@@ -14,6 +14,7 @@ import { uid } from './util';
  *   projects/<id>/meta.json          what the project list shows (fast listing)
  *   projects/<id>/versions/*.json    snapshots (automatic and named)
  *   media/<mediaId> + <mediaId>.json media bytes, shared by every project; never deleted automatically
+ *   corbeille/<mediaId>             media no project nor version used, moved here on request; restorable
  *   templates/<id>.json              project templates (settings only, no media)
  *
  * The functions here are pure storage: no React, no store. Writes go through
@@ -54,6 +55,8 @@ async function writeFile(d: DirLike, name: string, data: Blob | string) {
 const readText = async (d: DirLike, name: string) => (await (await d.getFileHandle(name)).getFile()).text();
 async function readJson<T>(d: DirLike, name: string): Promise<T | null> { try { return JSON.parse(await readText(d, name)) as T; } catch { return null; } }
 async function names(d: DirLike) { const out: string[] = []; for await (const k of d.keys()) out.push(k); return out; }
+const TRASH = 'corbeille';
+export interface DiskUsage { used: { count: number; bytes: number }; unused: { id: string; bytes: number; name?: string }[]; versions: { count: number; bytes: number }; exports: { count: number; bytes: number }; trash: { count: number; bytes: number } }
 const safeId = (id: string) => id.replace(/[^\w.-]/g, '_');
 
 /* ---------------------------------------------------------------- workspace */
@@ -157,6 +160,18 @@ export class Workspace {
       return (await readJson<{ project: Project }>(dir, file))?.project ?? null;
     } catch { return null; }
   }
+  /** a version file as written (exported in .forge files) */
+  async readVersionText(id: string, file: string): Promise<string | null> {
+    try { return await readText(await sub(await sub(await sub(this.root, 'projects'), safeId(id), false), 'versions', false), file); } catch { return null; }
+  }
+  /** bring a version back from a .forge file; an existing version of the same name is kept */
+  async writeVersionText(id: string, file: string, text: string): Promise<boolean> {
+    const dir = await sub(await sub(await sub(this.root, 'projects'), safeId(id)), 'versions');
+    const name = safeId(file.replace(/\.json$/, '')) + '.json';
+    if (await exists(dir, name)) return false;
+    await writeFile(dir, name, text);
+    return true;
+  }
   async deleteVersion(id: string, file: string) {
     const dir = await sub(await sub(await sub(this.root, 'projects'), safeId(id), false), 'versions', false);
     await dir.removeEntry(file);
@@ -176,6 +191,93 @@ export class Workspace {
   async readData(name: string): Promise<string | null> { try { return await readText(await sub(this.root, 'library'), name); } catch { return null; } }
   async writeData(name: string, text: string) { await writeFile(await sub(this.root, 'library'), name, text); }
   async mediaInfo(id: string): Promise<{ type?: string; size?: number; addedAt?: string; name?: string; source?: string } | null> { return readJson(await sub(this.root, 'media'), `${safeId(id)}.json`); }
+
+  /* -------- disk space and safe cleanup */
+  /** every media id that a project or one of its versions points to: these are never cleaned */
+  async usedMedia(): Promise<Set<string>> {
+    const used = new Set<string>();
+    const ps = await sub(this.root, 'projects');
+    for (const n of await names(ps)) {
+      let dir: DirLike;
+      try { dir = await sub(ps, n, false); } catch { continue; }
+      const d = await readJson<{ project: Project }>(dir, 'project.json');
+      if (d?.project) for (const m of mediaRefs(d.project)) used.add(m.id);
+      try {
+        const vd = await sub(dir, 'versions', false);
+        for (const f of await names(vd)) { const v = await readJson<{ project: Project }>(vd, f); if (v?.project) for (const m of mediaRefs(v.project)) used.add(m.id); }
+      } catch { /* no versions */ }
+    }
+    return used;
+  }
+  /** what takes room, by kind: original media (used / no longer used), versions, exports, trash */
+  async usage(): Promise<DiskUsage> {
+    const used = await this.usedMedia();
+    const size = async (d: DirLike, n: string) => { try { return (await (await d.getFileHandle(n)).getFile()).size; } catch { return 0; } };
+    const media = await sub(this.root, 'media');
+    const out: DiskUsage = { used: { count: 0, bytes: 0 }, unused: [], versions: { count: 0, bytes: 0 }, exports: { count: 0, bytes: 0 }, trash: { count: 0, bytes: 0 } };
+    for (const n of await names(media)) {
+      if (n.endsWith('.json')) continue;
+      const info = await readJson<{ id?: string; name?: string; size?: number }>(media, `${n}.json`);
+      const id = info?.id ?? n;
+      const bytes = info?.size ?? (await size(media, n));
+      if (used.has(id) || used.has(n)) { out.used.count++; out.used.bytes += bytes; } else out.unused.push({ id, bytes, name: info?.name });
+    }
+    const ps = await sub(this.root, 'projects');
+    for (const n of await names(ps)) {
+      try { const vd = await sub(await sub(ps, n, false), 'versions', false); for (const f of await names(vd)) { out.versions.count++; out.versions.bytes += await size(vd, f); } } catch { /* none */ }
+    }
+    for (const [key, dirName] of [['exports', 'exports'], ['trash', TRASH]] as const) {
+      try { const d = await sub(this.root, dirName, false); for (const f of await names(d)) { if (key === 'trash' && f.endsWith('.json')) continue; out[key].count++; out[key].bytes += await size(d, f); } } catch { /* none */ }
+    }
+    return out;
+  }
+  /**
+   * move media nobody uses any more to the trash folder (recoverable). Usage is
+   * checked again here, at the moment of moving: a media used by a project or a
+   * version is never moved, whatever the caller asked.
+   */
+  async trashUnused(ids: string[]): Promise<{ moved: number; bytes: number; refused: number }> {
+    const used = await this.usedMedia();
+    const media = await sub(this.root, 'media'), trash = await sub(this.root, TRASH);
+    let moved = 0, bytes = 0, refused = 0;
+    for (const id of ids) {
+      if (used.has(id)) { refused++; continue; }
+      const n = safeId(id);
+      try {
+        const b = await (await media.getFileHandle(n)).getFile();
+        await writeFile(trash, n, b);
+        const info = await readJson<Record<string, unknown>>(media, `${n}.json`);
+        await writeFile(trash, `${n}.json`, JSON.stringify({ ...(info ?? { id }), trashedAt: new Date().toISOString() }));
+        await media.removeEntry(n);
+        try { await media.removeEntry(`${n}.json`); } catch { /* no info file */ }
+        this.known.delete(id);
+        moved++; bytes += b.size;
+      } catch { refused++; }
+    }
+    return { moved, bytes, refused };
+  }
+  /** put everything in the trash back where it was */
+  async restoreTrash(): Promise<number> {
+    let trash: DirLike;
+    try { trash = await sub(this.root, TRASH, false); } catch { return 0; }
+    const media = await sub(this.root, 'media');
+    let n = 0;
+    for (const f of await names(trash)) {
+      if (f.endsWith('.json')) continue;
+      const b = await (await trash.getFileHandle(f)).getFile();
+      if (!(await exists(media, f))) await writeFile(media, f, b);
+      const info = await readJson<Record<string, unknown>>(trash, `${f}.json`);
+      if (info && !(await exists(media, `${f}.json`))) { delete info.trashedAt; await writeFile(media, `${f}.json`, JSON.stringify(info)); }
+      await trash.removeEntry(f);
+      try { await trash.removeEntry(`${f}.json`); } catch { /* none */ }
+      n++;
+    }
+    return n;
+  }
+  /** the only permanent deletion: what the user put in the trash, on their explicit confirmation */
+  async emptyTrash(): Promise<number> {
+    try { const t = await sub(this.root, TRASH, false); const all = await names(t); for (const f of all) await t.removeEntry(f); return all.filter((f) => !f.endsWith('.json')).length; } catch { return 0; }
+  }
 
   /* -------- exports (finished videos): written straight into the workspace, so into the user's folder */
   async putExport(name: string, blob: Blob) { await writeFile(await sub(this.root, 'exports'), name.replace(/[\\/:*?"<>|]/g, '_'), blob); }

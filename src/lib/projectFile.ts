@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { Project } from '../types';
 import { ensureMedia, ensureVideo, mediaBlob, putMediaBlob } from '../engine/media';
+import { APP_VERSION, ENGINE_VERSIONS, SCHEMA_VERSION } from './schema';
 
 const MAGIC = 'forge-project@1';
 const MAGIC2 = 'forge-project@2';
@@ -21,49 +22,64 @@ export async function loadMediaOf(p: Project) {
   await Promise.all(mediaRefs(p).map((m) => (m.kind === 'video' ? ensureVideo(m.id) : ensureMedia(m.id, m.kind)).catch(() => null)));
 }
 
+/** a version of the project carried inside a .forge file (same content as in the workspace) */
+export interface CarriedVersion { file: string; text: string }
+/** what a .forge file says about itself (read by any later version of Forge) */
+export interface ForgeManifest { schemaVersion: number; appVersion: string; engineVersions: Record<string, number>; savedAt: string; versions: number; media: number; missing: string[] }
+
 /**
- * Self-contained project file (.forge, version 2): a zip holding project.json
- * and every media as its original bytes (no base64), the rush included.
+ * Self-contained project file (.forge): a zip holding project.json (the project
+ * and a manifest: schema, Forge build, engine versions), every media as its
+ * original bytes (no base64, the rush included) and, when given, the versions
+ * of the project with the media they use, so a restore works on another PC.
  * Media are stored without recompression: images, sound and video already are.
+ * The magic stays « @2 »: an older Forge still opens the project (and ignores the versions).
  */
-export async function saveProjectFile(p: Project): Promise<Blob> {
+export async function saveProjectFile(p: Project, opts: { versions?: CarriedVersion[] } = {}): Promise<Blob> {
   const files: Zippable = {};
   const types: Record<string, string> = {};
-  for (const { id } of mediaRefs(p)) {
+  const versions = opts.versions ?? [];
+  const ids = new Set(mediaRefs(p).map((m) => m.id));
+  for (const v of versions) { try { for (const m of mediaRefs(JSON.parse(v.text).project ?? {})) ids.add(m.id); } catch { /* unreadable version: kept as text */ } }
+  const missing: string[] = [];
+  for (const id of ids) {
     const b = await mediaBlob(id);
-    if (!b) continue;
+    if (!b) { missing.push(id); continue; }
     files[`media/${id}`] = [new Uint8Array(await b.arrayBuffer()), { level: 0 }];
     types[id] = b.type;
   }
-  files['project.json'] = strToU8(JSON.stringify({ magic: MAGIC2, project: p, types }));
+  for (const v of versions) files[`versions/${v.file}`] = strToU8(v.text);
+  const manifest: ForgeManifest = { schemaVersion: p.schemaVersion ?? SCHEMA_VERSION, appVersion: APP_VERSION, engineVersions: { ...ENGINE_VERSIONS }, savedAt: new Date().toISOString(), versions: versions.length, media: ids.size - missing.length, missing };
+  files['project.json'] = strToU8(JSON.stringify({ magic: MAGIC2, manifest, project: p, types }));
   return new Blob([zipSync(files)], { type: 'application/zip' });
 }
 
-/** read a .forge file: version 2 (zip) or version 1 (JSON with base64 media) */
-export async function readProjectFile(file: Blob): Promise<{ project: Project; media: Map<string, Blob> }> {
+/** read a .forge file: zip (version 2 and later) or version 1 (JSON with base64 media) */
+export async function readProjectFile(file: Blob): Promise<{ project: Project; media: Map<string, Blob>; versions: CarriedVersion[]; manifest: ForgeManifest | null }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const media = new Map<string, Blob>();
+  const versions: CarriedVersion[] = [];
   if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
     const z = unzipSync(bytes);
     if (!z['project.json']) throw new Error("Ce fichier n'est pas un projet Forge.");
     const data = JSON.parse(strFromU8(z['project.json']));
     if (data.magic !== MAGIC2) throw new Error("Ce fichier n'est pas un projet Forge.");
     for (const [name, b] of Object.entries(z)) {
-      if (!name.startsWith('media/')) continue;
-      const id = name.slice(6);
-      media.set(id, new Blob([b as Uint8Array<ArrayBuffer>], { type: data.types?.[id] ?? '' }));
+      if (name.startsWith('media/')) { const id = name.slice(6); media.set(id, new Blob([b as Uint8Array<ArrayBuffer>], { type: data.types?.[id] ?? '' })); }
+      else if (name.startsWith('versions/') && name.length > 9) versions.push({ file: name.slice(9), text: strFromU8(b as Uint8Array) });
     }
-    return { project: data.project, media };
+    return { project: data.project, media, versions, manifest: data.manifest ?? null };
   }
   const data = JSON.parse(strFromU8(bytes));
   if (data.magic !== MAGIC) throw new Error("Ce fichier n'est pas un projet Forge.");
   for (const [id, url] of Object.entries<string>(data.media ?? {})) media.set(id, await (await fetch(url)).blob());
-  return { project: data.project, media };
+  return { project: data.project, media, versions, manifest: null };
 }
 
-export async function openProjectFile(file: File): Promise<Project> {
-  const { project, media } = await readProjectFile(file);
+/** media into the cache, decoded; returns what the studio needs to finish the opening */
+export async function openProjectFile(file: File): Promise<{ project: Project; versions: CarriedVersion[]; manifest: ForgeManifest | null }> {
+  const { project, media, versions, manifest } = await readProjectFile(file);
   for (const [id, blob] of media) await putMediaBlob(id, blob);
   await loadMediaOf(project);
-  return project;
+  return { project, versions, manifest };
 }
