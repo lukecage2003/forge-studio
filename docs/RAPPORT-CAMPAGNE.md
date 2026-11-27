@@ -120,6 +120,14 @@ Toutes vérifiées sur de vraies planches Watchmen.
   - En vertical, les cases très larges étaient de minces bandes perdues dans le fond flou. Elles sont maintenant filmées en panoramique, sur environ la moitié de leur largeur, deux fois plus grandes et sans perte de netteté.
 - **Rendu réel** : montage automatique de 4 pages de Watchmen avec un script, finition pro, contrôle qualité corrigé, puis export MP4 1080×1920 à 30 i/s en H.264. Le fichier fait 38 s, est relu sans erreur et montre 3 chapitres, le bandeau « Le Comédien » et la fin en boucle.
 
+## Suite : continuité de caméra (cases qui se suivent)
+- **Plus d'effet de pompe** (zoom avant, recul sur la page, zoom avant) : les cases qui se suivent sur une même page forment un seul trajet de caméra. Seule la première case de la page peut s'ouvrir en plan large ; chaque case suivante est atteinte en glissant depuis la précédente, dans l'ordre de lecture, avec une légère dérive vers la case d'après (`withContinuity`).
+- **Changement de page** : la page se tourne, avec un glissement latéral dans le sens de lecture, même en vertical.
+- **Glissement sur la page** : quand les deux cases sont filmées dans la page, la caméra voyage sur la page elle-même. La petite fenêtre qui se déformait entre deux formes de case a disparu.
+- **Bandeaux en vertical** : le panoramique remplace aussi le trajet automatique du directeur, avec un agrandissement jusqu'à 1,8× (le trait reste net).
+- **Chapitres** : chacun est rattaché à son plan (`anchor`) et suit le plan si le minutage change. Pas de carton dans les 3 premières secondes, au moins 8 s entre deux, aucun dans les 4 dernières secondes.
+- **Bug corrigé à la source** : le montage automatique recalculait les durées sans mettre à jour son empreinte. Tous les plans semblaient donc modifiés à la main : la finition pro les sautait et la mémoire de Forge apprenait de fausses corrections. Le montage terminé est maintenant la référence.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`

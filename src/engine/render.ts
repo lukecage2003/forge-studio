@@ -1740,7 +1740,7 @@ export function createRenderer(W: number, H: number): Renderer {
   const splitBufs = new Map<string, { r: Renderer; c: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
 
   /** one comic shot, composed according to its layout */
-  function renderShot(ctx: Ctx, project: Project, ts: TimedShot, t: number, face: FaceSource, segs: Seg[], motionStart = 0, override?: { view: View; clip: Rect }) {
+  function renderShot(ctx: Ctx, project: Project, ts: TimedShot, t: number, face: FaceSource, segs: Seg[], motionStart = 0, override?: { view: View; clip?: Rect }) {
     const shot = ts.shot;
     const local = t - ts.start;
     const rtl = project.readingOrder === 'rtl';
@@ -1949,7 +1949,7 @@ export function createRenderer(W: number, H: number): Renderer {
     drawLook(ctx, project, W, H, t);
     for (const f of project.fx ?? []) {
       if (f.kind === 'callout' && t >= f.start && t < f.start + f.duration) bigText(ctx, W, H, f, t - f.start, project.accent, false);
-      if (f.kind === 'chapter' && t >= f.start && t < f.start + f.duration) drawChapterCard(ctx, W, H, f, t - f.start, project);
+      if (f.kind === 'chapter') { const s0 = f.anchor ? layoutShots(project).find((x) => x.shot.id === f.anchor)?.start ?? f.start : f.start; if (t >= s0 && t < s0 + f.duration) drawChapterCard(ctx, W, H, f, t - s0, project); }
     }
     // subtitles from the transcript
     if (project.subtitleStyle.on && project.subtitles.length) {
@@ -2047,7 +2047,8 @@ export function createRenderer(W: number, H: number): Renderer {
         const v0 = cameraAt(prev.ts.shot, 1, W / H, rtl), v1 = cameraAt(shot, 0, W / H, rtl);
         const view = { cx: lerp(v0.cx, v1.cx, e), cy: lerp(v0.cy, v1.cy, e), vw: lerp(v0.vw, v1.vw, e) };
         const r0 = prev.ts.shot.rect, r1 = shot.rect;
-        const clip = { x: lerp(r0.x, r1.x, e), y: lerp(r0.y, r1.y, e), w: lerp(r0.w, r1.w, e), h: lerp(r0.h, r1.h, e) };
+        // both filmed inside the page: the camera travels over the page itself (no shrinking window between two panel shapes)
+        const clip = prev.ts.shot.shared && shot.shared ? undefined : { x: lerp(r0.x, r1.x, e), y: lerp(r0.y, r1.y, e), w: lerp(r0.w, r1.w, e), h: lerp(r0.h, r1.h, e) };
         renderShot(ctx, project, { ...cur.ts, shot: { ...shot, caption: { ...shot.caption, text: a > 0.5 ? shot.caption.text : '' }, shake: 0, nameTag: undefined } }, t, face, segs, 0, { view, clip });
         overlays(ctx, project, t, total, cur);
         return;
@@ -2076,8 +2077,9 @@ export function createRenderer(W: number, H: number): Renderer {
           ctx.drawImage(B, 0, 0);
           break;
         case 'slide':
-          if (vertical) { ctx.drawImage(A, 0, -e * H); ctx.drawImage(B, 0, (1 - e) * H); }
-          else { ctx.drawImage(A, -e * W, 0); ctx.drawImage(B, (1 - e) * W, 0); }
+          // a page turn (tp.dir = 1) always pushes sideways, in the reading direction, even in a tall frame
+          if (vertical && shot.tp?.dir !== 1) { ctx.drawImage(A, 0, -e * H); ctx.drawImage(B, 0, (1 - e) * H); }
+          else { const s = rtl ? -1 : 1; ctx.drawImage(A, -s * e * W, 0); ctx.drawImage(B, s * (1 - e) * W, 0); }
           break;
         case 'whip': {
           const n = Math.max(1, Math.round(tp(shot, 'trails')));

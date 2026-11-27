@@ -1043,7 +1043,11 @@ export async function autoMontage(p: Project, o: AutoOptions): Promise<{ project
     again.report.notes.unshift('Aucune case ne correspond clairement à la narration : alternance visage / cases classique à la place. Ajoute les bonnes planches ou corrige dans « À vérifier ».');
     return again;
   }
-  // camera and sound chosen in the storyboard win over the director's choice
+  // the finished auto edit is the reference of « untouched »: later steps (voice timing, director)
+  // changed durations and moves after the first stamp; without this every shot looked edited by hand,
+  // so the pro finish skipped them and Forge Brain learned corrections the user never made
+  proj = { ...proj, shots: proj.shots.map((s) => (s.auto ? { ...s, auto: { ...s.auto, duration: s.duration, layout: s.layout, motion: s.motion } } : s)) };
+  // camera and sound chosen in the storyboard win over the director's choice (stamped after: they are the user's)
   if (o.board) proj = { ...proj, shots: applyBoardChoices(proj.shots, o.board) };
   o.onProgress?.('Contrôle final…', 0.97);
   noteMontage();

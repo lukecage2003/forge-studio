@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newProject, newShot } from '../src/store';
-import { chapterCards, coverPicks, firstSecondIssues, moodOf, musicCurve, onomatopoeias, untouched, withFramingVariety, withProFinish } from '../src/engine/pro';
+import { withContinuity, chapterCards, coverPicks, firstSecondIssues, moodOf, musicCurve, onomatopoeias, untouched, withFramingVariety, withProFinish } from '../src/engine/pro';
 import { compact } from '../src/ai/orchestrator';
 import type { Motion, Project } from '../src/types';
 
@@ -43,12 +43,17 @@ describe('finition pro', () => {
     expect(v.shots[2].auto?.motion).toBe(v.shots[2].motion);
   });
   it('chapitres et musique suivent les séquences du directeur', () => {
-    const p = proj({ direction: { profile: 'x', sequences: [
+    const base = proj();
+    const p = { ...base, shots: base.shots.map((x) => ({ ...x, duration: 6, auto: { ...x.auto ?? { layout: 'full' as const, motion: x.motion, style: 'x' }, duration: 6 } })), direction: { profile: 'x', sequences: [
       { type: 'introduction', treatment: '', label: 'Intro', from: 0, to: 0, start: 0 },
       { type: 'explication', treatment: '', label: 'Le contexte', from: 1, to: 1, start: 2 },
-      { type: 'revelation', treatment: '', label: 'La révélation', from: 2, to: 3, start: 4 },
-    ] } });
-    expect(chapterCards(p).map((f) => f.text)).toEqual(['2. COMMENT ÇA MARCHE', '3. LA RÉVÉLATION']);
+      { type: 'comparaison', treatment: '', label: 'Face', from: 2, to: 2, start: 3 },
+      { type: 'revelation', treatment: '', label: 'La révélation', from: 3, to: 3, start: 4 },
+    ] } };
+    // on the real cuts (6 s, 18 s), the one 6 s after the previous dropped (chapters at least 8 s apart)
+    const ch = chapterCards(p);
+    expect(ch.map((f) => f.text)).toEqual(['2. COMMENT ÇA MARCHE', '3. LA RÉVÉLATION']);
+    expect(ch.map((f) => [f.start, f.anchor])).toEqual([[6, 'b'], [18, 'd']]);
     const c = musicCurve(p);
     expect(c.find(([t]) => t === 4)?.[1]).toBeGreaterThan(c.find(([t]) => t === 2)![1]);
     const f = withProFinish(p);
@@ -79,5 +84,25 @@ describe('cases larges en vertical', () => {
     expect(s.path![0].vw).toBeGreaterThanOrEqual(1000);
     expect(s.path![0].cx).toBeLessThan(s.path![1].cx);
     expect(withProFinish({ ...wide, format: '16:9' }).shots[0].path).toBeUndefined();
+  });
+});
+describe('continuité de caméra', () => {
+  it('cases qui se suivent sur la page : glissé de l’une à l’autre, léger mouvement vers la suivante, jamais de zoom en pompe', () => {
+    const p = proj();
+    // a, b, d on page p1 are not adjacent (c is on p2): make a, b consecutive on p1 then c on p2
+    const c = withContinuity(p);
+    const [a, b, cc] = c.shots;
+    expect(b.transition).toBe('glide');
+    expect(['pan-down', 'pan-up', 'pan-left', 'pan-right']).toContain(a.motion);
+    expect(a.intensity).toBeLessThanOrEqual(0.2);
+    expect(b.why).toContain('glisse');
+    // a new page: the page turns sideways
+    expect(cc.transition).toBe('slide');
+    expect(cc.tp?.dir).toBe(1);
+  });
+  it('un plan réglé à la main garde son mouvement', () => {
+    const p = proj();
+    const hand = { ...p, shots: p.shots.map((s) => (s.id === 'b' ? { ...s, motion: 'zoom-out' as const } : s)) };
+    expect(withContinuity(hand).shots[1].motion).toBe('zoom-out');
   });
 });

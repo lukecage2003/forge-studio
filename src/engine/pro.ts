@@ -89,8 +89,15 @@ export function withNameBanners(p: Project): Project {
 /** chapter titles a viewer reads (the sequence's story role, not the director's camera treatment) */
 const CHAPTER_FR: Record<string, string> = { introduction: 'Le début', personnage: 'Les personnages', contexte: 'Le contexte', explication: 'Comment ça marche', demonstration: 'La preuve', comparaison: 'Face à face', confrontation: 'L’affrontement', revelation: 'La révélation', conclusion: 'Ce qu’il faut retenir' };
 export function chapterCards(p: Project): FxItem[] {
-  const seq = (p.direction?.sequences ?? []).filter((q, i, a) => i > 0 && q.type !== a[i - 1].type).slice(0, 6);
-  return seq.map((q, i) => ({ id: `chap_${i}`, kind: 'chapter' as const, start: q.start, duration: 1.6, text: `${i + 2}. ${(CHAPTER_FR[q.type] ?? q.type).toUpperCase()}` }));
+  const timed = layoutShots(p);
+  const total = timed.reduce((m, t) => Math.max(m, t.end), 0);
+  // on the cut where the sequence really starts; not in the first 3 s, at least 8 s apart, never in the last 4 s
+  const all = (p.direction?.sequences ?? []).filter((q, i, a) => i > 0 && q.type !== a[i - 1].type)
+    // snapped to the first cut at or after the sequence start (a card never lands in the middle of a shot)
+    .map((q) => { const id = p.shots[q.from]?.id; const at = timed.find((t) => t.shot.id === id); return { ...q, id, start: at?.start ?? q.start }; });
+  const seq: typeof all = [];
+  for (const q of all) if (q.start >= 3 && q.start <= total - 4 && (!seq.length || q.start - seq[seq.length - 1].start >= 8)) seq.push(q);
+  return seq.slice(0, 5).map((q, i) => ({ id: `chap_${i}`, kind: 'chapter' as const, start: q.start, anchor: q.id, duration: 1.6, text: `${i + 2}. ${(CHAPTER_FR[q.type] ?? q.type).toUpperCase()}` }));
 }
 
 /* ---------------------------------------------------------------- 7. framing variety */
@@ -108,6 +115,53 @@ export function withFramingVariety(p: Project): Project {
   return { ...p, shots };
 }
 
+/* ---------------------------------------------------------------- camera continuity */
+/**
+ * panels that follow each other on the same page are one camera journey, not a series of
+ * separate shots: the first panel of the page may open wide (the page, then the panel);
+ * every next one GLIDES from the previous panel, in reading order, and the camera drifts
+ * gently toward where it goes next. No « zoom in, back out to the page, zoom in again ».
+ * A new page arrives as a page turn (sideways push in the reading direction).
+ */
+type Dir = 'pan-left' | 'pan-right' | 'pan-up' | 'pan-down';
+const centre = (s: Shot) => ({ x: s.rect.x + s.rect.w / 2, y: s.rect.y + s.rect.h / 2 });
+function towards(a: Shot, b: Shot): Dir {
+  const ca = centre(a), cb = centre(b), dx = cb.x - ca.x, dy = cb.y - ca.y;
+  return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'pan-right' : 'pan-left') : dy >= 0 ? 'pan-down' : 'pan-up';
+}
+const SOFT: Transition[] = ['fade', 'dip', 'flash'];
+export function withContinuity(p: Project): Project {
+  const order = layoutShots(p).map((t) => t.shot.id);
+  const byId = new Map(p.shots.map((s) => [s.id, s]));
+  const seq = order.map((id) => byId.get(id)!).filter(Boolean);
+  const free = (s: Shot) => !!s.pageId && !s.diagram && s.layout === 'full' && untouched(s);
+  const next = new Map<string, Shot>();
+  for (let i = 0; i < seq.length; i++) {
+    const s = seq[i], pv = seq[i - 1], nx = seq[i + 1];
+    if (!free(s)) continue;
+    const samePrev = pv && free(pv) && pv.pageId === s.pageId;
+    const sameNext = nx && free(nx) && nx.pageId === s.pageId;
+    const impact = s.sfx === 'impact' || s.shake >= 0.6;
+    let x: Shot = s;
+    if (samePrev) {
+      // inside the page: glide from the previous panel; no wide opening of its own
+      const dur = +Math.min(0.8, Math.max(0.45, s.duration * 0.3)).toFixed(2);
+      const fromWide = !!s.path?.length && !(s.why ?? '').includes('panoramique');
+      x = { ...x, transition: 'glide', transitionDur: dur, path: fromWide ? undefined : x.path, shared: true, why: why(x, 'case suivante de la page : la caméra glisse') };
+    } else if (pv && pv.pageId && s.pageId !== pv.pageId && !SOFT.includes(s.transition) && !impact) {
+      // a new page: a page turn
+      x = { ...x, transition: 'slide', transitionDur: Math.max(0.35, Math.min(0.55, s.duration * 0.25)), tp: { ...(x.tp ?? {}), dir: 1 }, why: why(x, 'nouvelle page : on tourne la page') };
+    }
+    if ((samePrev || sameNext) && !x.path?.length && !impact) {
+      // a gentle drift toward the next panel (or on along the way it came), never a zoom pump
+      const m: Dir = sameNext ? towards(s, nx!) : towards(pv!, s);
+      x = { ...x, motion: m, intensity: Math.min(x.intensity, 0.2), framing: 'fit', auto: { ...x.auto!, motion: m } };
+    }
+    if (x !== s) next.set(s.id, x);
+  }
+  return next.size ? { ...p, shots: p.shots.map((s) => next.get(s.id) ?? s) } : p;
+}
+
 /* ---------------------------------------------------------------- wide panels in a vertical video */
 /**
  * a long horizontal panel in 9:16 is a thin strip lost in the blurred background; filled
@@ -119,8 +173,9 @@ export function withWidePans(p: Project): Project {
   const W = p.format === '9:16' ? 1080 : 1080;
   const rtl = p.readingOrder === 'rtl';
   return { ...p, shots: p.shots.map((s) => {
-    if (!s.pageId || s.diagram || s.path?.length || !untouched(s) || s.layout !== 'full' || s.rect.w / s.rect.h < 2.2) return s;
-    const vw = Math.max(s.rect.w * 0.5, W / 1.3, s.rect.h * 1.2);
+    // the auto edit's own camera path on a strip is replaced too (it shows the strip whole, thin); a user's path never
+    if (!s.pageId || s.diagram || !untouched(s) || s.layout !== 'full' || s.rect.w / s.rect.h < 2.2) return s;
+    const vw = Math.max(s.rect.w * 0.5, W / 1.8, s.rect.h * 1.2); // comic line art stays clean up to ~1.8x
     if (vw >= s.rect.w * 0.9) return s;
     const cy = s.rect.y + s.rect.h / 2, a = s.rect.x + vw / 2, b = s.rect.x + s.rect.w - vw / 2;
     return { ...s, path: [{ t: 0, cx: rtl ? b : a, cy, vw, ease: 'smooth' as const }, { t: 1, cx: rtl ? a : b, cy, vw, ease: 'smooth' as const }], why: why(s, 'case large : panoramique pour la lire en grand') };
@@ -189,6 +244,7 @@ export function withProFinish(p: Project, o: ProOptions = PRO_ALL): Project {
   if (o.impacts) x = withImpacts(x);
   if (o.emotion) x = withEmotionRhythm(x);
   if (o.variety) x = withFramingVariety(x);
+  x = withContinuity(x);
   x = withWidePans(x);
   if (o.names) x = withNameBanners(x);
   const fx = (x.fx ?? []).filter((f) => !f.id.startsWith('chap_'));

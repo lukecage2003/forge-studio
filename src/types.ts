@@ -170,6 +170,8 @@ export interface FxItem {
   id: string; kind: FxKind; start: number; duration: number;
   text?: string; color?: string; y?: number; size?: number;
   pageId?: string; rect?: Rect;
+  /** shot the item belongs to (chapter cards): it starts with that shot wherever the shot moves */
+  anchor?: string;
 }
 
 /**
