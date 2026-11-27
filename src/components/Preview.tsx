@@ -10,6 +10,7 @@ import { setUI, useStore } from '../store';
 import { pause, seek, toggle } from '../engine/transport';
 import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
 import { arollPlayer, overlayVideos } from '../engine/video';
+import { OverlayHandle } from './OverlayHandle';
 import { toSource } from '../engine/speech';
 import { fmtTime } from '../lib/util';
 import { loadSegmenter, segmenterReady } from '../engine/segment';
@@ -112,6 +113,7 @@ export function Preview() {
       <div className="preview-box" ref={boxRef}>
         <div className="screen" ref={screenRef} style={{ width: size.w, height: size.h }}>
           <canvas ref={canvasRef} width={W} height={H} onClick={() => toggle()} />
+          <OverlayHandle W={FORMATS[project.format].w} H={FORMATS[project.format].h} scale={size.w / FORMATS[project.format].w} />
           {safe && project.format === '9:16' && (
             <div className="safe-zones" aria-hidden="true">
               <div className="sz top" /><div className="sz bottom" /><div className="sz right" />

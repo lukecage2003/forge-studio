@@ -992,3 +992,11 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 /* narrow windows: the tagline goes, then the bar scrolls sideways rather than overlapping (every button stays reachable) */
 @media (max-width: 1300px) { .topbar .wordmark-tag { display: none; } }
 @media (max-width: 1200px) { .topbar { overflow-x: auto; scrollbar-width: thin; } }
+.check-row { display: flex; gap: 8px; align-items: center; font-size: 12.5px; margin-top: 6px; }
+.screen { position: relative; }
+.ov-handle { position: absolute; border: 2px dashed #38bdf8; cursor: move; z-index: 5; box-sizing: border-box; touch-action: none; }
+.ov-handle.end { border-color: #facc15; }
+.ov-handle-tag { position: absolute; top: -20px; left: -2px; font-size: 10.5px; font-weight: 700; padding: 1px 6px; background: #38bdf8; color: #001018; border-radius: 3px; pointer-events: none; }
+.ov-handle.end .ov-handle-tag { background: #facc15; }
+.ov-handle-corner { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; background: #fff; border: 2px solid #38bdf8; cursor: nwse-resize; }
+.btn.wrap-btn { white-space: normal; text-align: left; height: auto; padding-block: 5px; max-width: 100%; }

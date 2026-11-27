@@ -254,7 +254,9 @@ Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages
 
 ## Calques (pistes de superposition)
 
-Au-dessus de la piste principale, trois pistes de calques reçoivent une case, une image ou une vidéo, à n'importe quel moment : *Ctrl K → Superposer la case sélectionnée* ou *Superposer une image ou une vidéo* (au curseur). Dans l'inspecteur : piste, placement (plein écran, incrustation, moitiés), début, durée, départ dans la vidéo, fondu, zoom lent. La piste la plus haute passe devant ; tout s'annule avec Ctrl+Z. Une vidéo en calque est muette (le son passe par les pistes voix et musique). L'aperçu et l'export sont identiques (même moteur de rendu, vérifié image par image dans `tests/e2e/overlays.e2e.cjs`).
+Au-dessus de la piste principale, trois pistes de calques reçoivent une case, une image ou une vidéo, à n'importe quel moment : *Ctrl K → Superposer la case sélectionnée* ou *Superposer une image ou une vidéo* (au curseur). Dans l'inspecteur : piste, placement (plein écran, incrustation, moitiés), début, durée, départ dans la vidéo, fondu, zoom lent. La piste la plus haute passe devant ; tout s'annule avec Ctrl+Z. À l'ajout, le placement conseillé pour la forme de la case est choisi (une case large en moitié haute ou basse…) ; une case qui serait trop rognée est montrée entière, et en incrustation le cadre prend sa forme. Dans l'aperçu, glisse le cadre du calque pour le placer librement et son coin pour la taille ; « Faire bouger : régler la fin » le fait aller d'un point à l'autre. Entrées et sorties : fondu, glissé, pop, volet encré. Une vidéo en calque peut garder son son (case à cocher) : il devient un bruitage qui suit le calque ; une vidéo plus grande que 720p reçoit un aperçu léger.
+
+**Diagnostic de ton PC** : *Réglages → Performance de cet ordinateur → Mesurer*, puis *Rapport « mon PC »* : mesures, carte graphique, encodeurs, place disponible, conseils, dans un fichier texte (rien n'est envoyé). L'aperçu et l'export sont identiques (même moteur de rendu, vérifié image par image dans `tests/e2e/overlays.e2e.cjs`).
 
 ## Studios
 

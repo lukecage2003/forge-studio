@@ -6,6 +6,8 @@ import { setUI } from '../store';
 import { hasKey, keyOf, masked, removeKey } from '../ai/vault';
 import { clearJournal, journal } from '../lib/errors';
 import { toast } from './Toast';
+import { download } from '../lib/util';
+import { APP_VERSION as APP_BUILD } from '../lib/schema';
 import { Gauge } from 'lucide-react';
 import { lastBench, type BenchResult } from '../engine/bench';
 
@@ -142,6 +144,30 @@ export function SettingsModal() {
   );
 }
 
+/** a plain-text report of this computer for Forge: measures, hardware, browser, room left; nothing is sent */
+async function pcReport(r: BenchResult): Promise<string> {
+  const { detectHardware } = await import('../engine/hardware');
+  const h = await detectHardware().catch(() => null);
+  const est = await navigator.storage?.estimate?.().catch(() => null);
+  const go = (b?: number) => (b == null ? '?' : `${(b / 1e9).toFixed(1)} Go`);
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'autre';
+  const os = /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'autre';
+  const ms = (v: number | null) => (v == null ? 'indisponible' : `${Math.round(v)} ms`);
+  return [
+    'FORGE — DIAGNOSTIC DE CET ORDINATEUR', `Date : ${new Date().toLocaleString('fr-FR')}`, `Version de Forge : ${APP_BUILD}`, '',
+    `Système : ${os} · navigateur : ${browser}`,
+    `Processeurs : ${r.cores || '?'} · mémoire annoncée : ${r.memoryGb ?? '?'} Go`,
+    `Carte graphique : ${h?.gpu || 'inconnue'} · WebGPU : ${r.webgpu ? 'oui' : 'non'} · WebGL : ${r.webgl ? 'oui' : 'non'} · niveau : ${h?.tier ?? '?'}`,
+    `Stockage du navigateur : ${go(est?.usage)} utilisés sur ${go(est?.quota)} disponibles`, '',
+    `Image 1080p : ${ms(r.frame1080)} · image 4K : ${ms(r.frame4k)} · transition GPU : ${ms(r.frameGl)} · 3D : ${ms(r.frame3d)}`,
+    `Export : ${r.exportFactor == null ? 'impossible' : `${r.exportFactor.toFixed(2)} × la durée de la vidéo`}`,
+    `Encodeurs : H.264 ${r.h264 ? 'oui' : 'non'} · H.264 4K ${r.h264_4k ? 'oui' : 'non'} · AAC ${r.aac ? 'oui' : 'non'}`,
+    `Aperçu : ${r.previewFps} images/s`, '', 'Conseils :', ...r.verdict.map((v) => `- ${v}`), '',
+    'Ce rapport reste sur ton ordinateur : Forge n’envoie rien.',
+  ].join('\n');
+}
+
 function BenchSection() {
   const [r, setR] = useState<BenchResult | null>(lastBench());
   const [run, setRun] = useState<{ label: string; p: number } | null>(null);
@@ -179,6 +205,7 @@ function BenchSection() {
             </tbody>
           </table>
           <p className="muted">Mesuré le {new Date(r.date).toLocaleString('fr-FR')}.</p>
+          <button className="btn sm ghost" onClick={() => void pcReport(r).then((txt) => { void navigator.clipboard?.writeText(txt).catch(() => {}); download(new Blob([txt], { type: 'text/plain' }), 'forge-diagnostic.txt'); toast('Rapport copié et enregistré (forge-diagnostic.txt) : rien n’est envoyé'); })}>Rapport « mon PC » (copier et enregistrer)</button>
         </>
       )}
     </section>

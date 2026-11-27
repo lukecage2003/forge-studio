@@ -60,6 +60,17 @@ Fait avec ton accord.
 - **Mesure** (`tests/e2e/overlays.e2e.cjs`) : sur les images du MP4 exporté, l'écart avec l'aperçu est de 0,1/255 pour la case et de 0,9/255 pour la vidéo, contre 136 et 59 sans calque. L'aperçu et l'export sont donc la même image.
 - **Barre du haut** : plus aucun chevauchement de 1 024 à 1 440 px. Sous 1 200 px, elle défile de côté.
 
+## Suite : améliorations des calques (sans export DaVinci, à ta demande)
+Toutes vérifiées sur de vraies planches Watchmen.
+- **Placement conseillé selon la forme de la case.** Le plein écran n'est conseillé que s'il est nettement meilleur.
+- **Case trop rognée montrée entière.** En incrustation ou en calque libre, le cadre prend la forme de la case.
+- **Calque libre.** On le glisse et on le redimensionne dans l'aperçu, et il peut se déplacer d'une position à une autre.
+- **Entrées** : glissé, pop, volet encré.
+- **Son des vidéos en calque.** Il devient un bruitage lié, qui suit le calque et disparaît avec lui.
+- **Aperçu léger pour les vidéos en calque de plus de 720p.**
+- **Rapport « mon PC ».** C'est un complément au banc d'essai qui existait déjà.
+- **Bugs trouvés grâce aux vraies planches et corrigés** : les coordonnées des cases étaient mal lues, la bulle d'une case était rognée en moitié d'écran, et une case large flottait dans un cadre flou en incrustation.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`

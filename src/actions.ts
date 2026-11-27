@@ -1,7 +1,9 @@
 import type { DiagramKind, FxItem, FxKind } from './types';
-import type { AudioKind, Overlay, OverlaySource, Page, Project, Rect, Shot } from './types';
+import type { AudioClip, AudioKind, Overlay, OverlaySource, Page, Project, Rect, Shot } from './types';
+import { FORMATS } from './types';
 import { getState, newShot, setUI, update } from './store';
-import { getImage, importAudio, importImage, importVideo } from './engine/media';
+import { getAudio, getImage, importAudio, importImage, importVideo } from './engine/media';
+import { bestPlace } from './engine/overlays';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, trimBottomToArt, type PageText } from './engine/classify';
@@ -245,7 +247,7 @@ export function deleteSelection() {
   if (sel.kind === 'audio') update((p) => ({ ...p, audio: p.audio.filter((s) => s.id !== sel.id) }));
   if (sel.kind === 'page') return removePage(sel.id);
   if (sel.kind === 'fx') update((p) => ({ ...p, fx: p.fx.filter((f) => f.id !== sel.id) }));
-  if (sel.kind === 'overlay') update((p) => ({ ...p, overlays: (p.overlays ?? []).filter((o) => o.id !== sel.id) }));
+  if (sel.kind === 'overlay') update((p) => { const o = p.overlays?.find((x) => x.id === sel.id); return { ...p, overlays: (p.overlays ?? []).filter((x) => x.id !== sel.id), audio: o?.soundClip ? p.audio.filter((c) => c.id !== o.soundClip) : p.audio }; });
   setUI({ selection: null });
 }
 
@@ -259,6 +261,13 @@ export function freeTrack(p: Project, start: number, duration: number): number {
   }
   return OVERLAY_TRACKS;
 }
+/** the place that cuts the least of this picture in the project's format (a video fills the screen) */
+function defaultPlace(src: OverlaySource): Overlay['place'] {
+  const { w, h } = FORMATS[getState().project.format];
+  if (src.kind === 'panel') return bestPlace(src.rect.w, src.rect.h, w, h);
+  if (src.kind === 'image') { const a = getImage(src.mediaId); return a ? bestPlace(a.width, a.height, w, h) : 'full'; }
+  return 'full';
+}
 /** place a picture on an overlay track at the playhead; undoable, selected for editing */
 export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
   const start = opts.start ?? getState().ui.playhead;
@@ -266,7 +275,7 @@ export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
   const o: Overlay = {
     id: uid('ov_'), start, duration, source,
     track: opts.track ?? freeTrack(getState().project, start, duration),
-    place: opts.place ?? (source.kind === 'panel' ? 'pip' : 'full'),
+    place: opts.place ?? defaultPlace(source),
     zoom: opts.zoom ?? (source.kind === 'video' ? 0 : 1),
     fade: opts.fade ?? 0.25,
   };
@@ -275,7 +284,24 @@ export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
   return o;
 }
 export function patchOverlay(id: string, patch: Partial<Overlay>, key?: string) {
-  update((p) => ({ ...p, overlays: (p.overlays ?? []).map((o) => (o.id === id ? { ...o, ...patch } : o)) }), key);
+  update((p) => {
+    const overlays = (p.overlays ?? []).map((o) => (o.id === id ? { ...o, ...patch } : o));
+    const o = overlays.find((x) => x.id === id);
+    // the video's own sound follows its picture (same start, length and place in the file)
+    const audio = o?.soundClip && o.source.kind === 'video'
+      ? p.audio.map((c) => (c.id === o.soundClip ? { ...c, start: o.start, duration: o.duration, offset: (o.source as { offset: number }).offset } : c))
+      : p.audio;
+    return { ...p, overlays, audio };
+  }, key);
+}
+/** keep or drop the sound of a video overlay: it becomes a sound-effects clip on the timeline, kept in step */
+export function setOverlaySound(id: string, on: boolean) {
+  const o = getState().project.overlays?.find((x) => x.id === id);
+  if (!o || o.source.kind !== 'video') return;
+  if (!on) { update((p) => ({ ...p, audio: p.audio.filter((c) => c.id !== o.soundClip), overlays: (p.overlays ?? []).map((x) => (x.id === id ? { ...x, soundClip: undefined } : x)) })); return; }
+  if (!getAudio(o.source.mediaId)) { toast('Cette vidéo n’a pas de son lisible.', 'error'); return; }
+  const clip: AudioClip = { id: uid('a_'), kind: 'sfx', name: `Son : ${o.source.name ?? 'vidéo en calque'}`, mediaId: o.source.mediaId, start: o.start, offset: o.source.offset, duration: o.duration, sourceDuration: o.source.sourceDuration, volume: 1, fadeIn: 0.1, fadeOut: 0.2 };
+  update((p) => ({ ...p, audio: [...p.audio, clip], overlays: (p.overlays ?? []).map((x) => (x.id === id ? { ...x, soundClip: clip.id } : x)) }));
 }
 /** the selected panel, on an overlay track (its page stays where it is) */
 export function overlaySelectedPanel(): boolean {
@@ -294,6 +320,9 @@ export async function importOverlayFiles(files: File[]) {
         const { id, asset } = await importVideo(f);
         const o = addOverlay({ kind: 'video', mediaId: id, name: f.name, offset: 0, sourceDuration: asset.duration, width: asset.width, height: asset.height }, { start: at });
         at += o.duration;
+        // a large video gets a light copy for a fluid preview, like the rush
+        const { needsProxy } = await import('./engine/proxy');
+        if (needsProxy(asset.width, asset.height)) void import('./production/kinds').then((K) => K.proxyMedia(id, asset.width, asset.height));
       } else if (f.type.startsWith('image/')) {
         const { id } = await importImage(f);
         const o = addOverlay({ kind: 'image', mediaId: id, name: f.name }, { start: at });

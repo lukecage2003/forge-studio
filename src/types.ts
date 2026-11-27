@@ -177,7 +177,11 @@ export interface FxItem {
  * a panel, an image or a video, at any time, on track 1..3 (higher on top).
  * Video overlays are silent (the voice and music lanes carry the sound).
  */
-export type OverlayPlace = 'full' | 'pip' | 'top' | 'bottom' | 'left' | 'right';
+export type OverlayPlace = 'full' | 'pip' | 'top' | 'bottom' | 'left' | 'right' | 'free';
+/** how an overlay comes in and goes out */
+export type OverlayEnter = 'fade' | 'slide' | 'pop' | 'wipe';
+/** a box in the frame, as shares of its width and height (0..1) */
+export interface NBox { x: number; y: number; w: number; h: number }
 export type OverlaySource =
   | { kind: 'panel'; pageId: string; rect: Rect }
   | { kind: 'image'; mediaId: string; name?: string }
@@ -189,6 +193,13 @@ export interface Overlay {
   /** slow push-in (1) or none (0): views only, the picture is never altered */
   zoom: number;
   fade: number;
+  /** entrance and exit (fade when absent) */
+  enter?: OverlayEnter;
+  /** place 'free': where it sits, and where it ends (moves from box to boxEnd over its life) */
+  box?: NBox;
+  boxEnd?: NBox;
+  /** id of the audio clip that carries the video's own sound (kept in step with the overlay) */
+  soundClip?: string;
 }
 
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';

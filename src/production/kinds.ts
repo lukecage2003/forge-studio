@@ -122,19 +122,21 @@ export function registerKinds(q: TaskQueue) {
     },
   });
 
-  q.register<{ mediaId: string }, Blob>({
+  q.register<{ mediaId: string; width?: number; height?: number }, Blob>({
     kind: 'rush.proxy', lane: 'heavy', family: 'proxy', priority: 20,
-    label: () => 'Aperçu léger du rush (540p)',
+    label: (p) => (p.width ? 'Aperçu léger d’une vidéo en calque (540p)' : 'Aperçu léger du rush (540p)'),
     key: (p) => p.mediaId,
     // a copy for the preview only: nothing the user edits depends on it
     guard: (p) => `${p.mediaId}`,
     run: async (ctx, p) => {
+      // the rush, or a video overlay (its size comes with the task)
       const ar = aroll(p.mediaId);
+      const w = p.width ?? ar?.width, h = p.height ?? ar?.height;
       const { mediaBlob } = await import('../engine/media');
       const blob = await mediaBlob(p.mediaId);
-      if (!ar || !blob) throw Object.assign(new Error('Rush introuvable'), { kind: 'input' });
+      if (!w || !h || !blob) throw Object.assign(new Error('Vidéo introuvable'), { kind: 'input' });
       const { makeProxy } = await import('../engine/proxy');
-      return makeProxy(blob, ar.width, ar.height, (x) => ctx.progress(x), ctx.signal);
+      return makeProxy(blob, w, h, (x) => ctx.progress(x), ctx.signal);
     },
     commit: (b, p) => { void import('../engine/media').then((M) => M.setProxy(p.mediaId, b)); },
   });
@@ -411,6 +413,14 @@ export async function analyseRush(mediaId: string) {
   const { hasProxy, loadProxy } = await import('../engine/media');
   if (ar?.mediaId === mediaId && needsProxy(ar.width, ar.height) && !hasProxy(mediaId) && !(await loadProxy(mediaId))) enqueue('rush.proxy', { mediaId }, { group: 'rush' });
   return a;
+}
+
+/** a light preview copy of a video overlay (same task as the rush's) */
+export async function proxyMedia(mediaId: string, width: number, height: number) {
+  await startOrchestrator();
+  const { hasProxy, loadProxy } = await import('../engine/media');
+  if (hasProxy(mediaId) || (await loadProxy(mediaId))) return null;
+  return enqueue('rush.proxy', { mediaId, width, height }, { group: 'media' });
 }
 
 export async function transcribeRush(engine: 'whisper' | 'gemini' | 'ai', model = 'base') {

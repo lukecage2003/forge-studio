@@ -56,3 +56,30 @@ describe('calques : la case entière quand le cadrage la couperait trop', () => 
     expect(fitLoss(1000, 900, 1080, 960)).toBeLessThan(0.25); // nearly the same shape: fills the box
   });
 });
+
+describe('calques : placement conseillé, mouvement, entrées', () => {
+  it('le placement conseillé suit la forme : case large en moitié haute ou basse, case haute en incrustation ou moitié', async () => {
+    const { bestPlace, fitLoss, placeBox } = await import('../src/engine/overlays');
+    const wide = bestPlace(1600, 700, 1080, 1920);
+    expect(['bottom', 'top']).toContain(wide);
+    const tall = bestPlace(500, 1100, 1080, 1920);
+    expect(['pip', 'right', 'left']).toContain(tall);
+    // whatever it picks, it cuts no more than the picture-in-picture would
+    const pb = placeBox('pip', 1080, 1920), wb = placeBox(wide, 1080, 1920);
+    expect(fitLoss(1600, 700, wb.w, wb.h)).toBeLessThanOrEqual(fitLoss(1600, 700, pb.w, pb.h));
+  });
+  it('un calque libre va de sa position de départ à sa position de fin', async () => {
+    const { overlayBox } = await import('../src/engine/overlays');
+    const o = ov({ place: 'free', start: 0, duration: 2, box: { x: 0, y: 0, w: 0.5, h: 0.5 }, boxEnd: { x: 0.5, y: 0.5, w: 0.5, h: 0.5 } });
+    expect(overlayBox(o, 0, 1000, 1000)).toEqual({ x: 0, y: 0, w: 500, h: 500 });
+    expect(overlayBox(o, 1, 1000, 1000).x).toBeCloseTo(250);
+    expect(overlayBox(o, 2, 1000, 1000).x).toBeCloseTo(500);
+  });
+  it('glissé, pop, volet : opaques pendant l’entrée (seul le fondu joue sur l’opacité)', async () => {
+    const { overlayAlpha, overlayIn } = await import('../src/engine/overlays');
+    const o = ov({ start: 0, duration: 2, fade: 0.5, enter: 'pop' });
+    expect(overlayIn(o, 0.25)).toBeCloseTo(0.5);
+    expect(overlayAlpha(o, 0.25)).toBe(1);
+    expect(overlayAlpha({ ...o, enter: 'fade' }, 0.25)).toBeCloseTo(0.5);
+  });
+});
