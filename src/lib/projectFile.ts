@@ -8,12 +8,14 @@ const MAGIC2 = 'forge-project@2';
 
 export type MediaKind = 'image' | 'audio' | 'video';
 
-/** every media a project points to: comic pages, audio clips, the face-cam rush */
+/** every media a project points to: comic pages, audio clips, the face-cam rush, overlay pictures and videos */
 export function mediaRefs(p: Project): { id: string; kind: MediaKind }[] {
   const out = new Map<string, MediaKind>();
   for (const x of p.pages ?? []) out.set(x.mediaId, 'image');
   for (const x of p.audio ?? []) out.set(x.mediaId, 'audio');
   if (p.aroll?.mediaId) out.set(p.aroll.mediaId, 'video');
+  // overlay tracks: their pictures and videos are used media too (saved, carried in .forge, never cleaned)
+  for (const o of p.overlays ?? []) if (o.source.kind === 'image') out.set(o.source.mediaId, 'image'); else if (o.source.kind === 'video') out.set(o.source.mediaId, 'video');
   return [...out].map(([id, kind]) => ({ id, kind }));
 }
 

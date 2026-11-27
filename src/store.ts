@@ -78,6 +78,7 @@ export function newProject(): Project {
     progressBar: false,
     accent: '#FF5A1F',
     fx: [],
+    overlays: [],
     look: { grade: 'natural', vignette: 0.25, grain: 0, cutout: true, handheld: 0.3, speedLines: true, motionBlur: true, parallax: true, balloonPop: true },
     autoSfx: { on: true, volume: 0.6 },
     mix: { voiceClean: true, target: -14 },

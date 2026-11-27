@@ -28,6 +28,11 @@ export function checkProject(p: Project): Issue[] {
   const missingPages = p.pages.filter((pg) => !pg.skip && !getImage(pg.mediaId));
   if (missingPages.length) out.push({ level: 'error', text: `${missingPages.length} page(s) introuvable(s) : réimporte les fichiers.` });
   if (p.aroll && !getVideo(p.aroll.mediaId)) out.push({ level: 'error', text: 'Le rush face caméra est introuvable : réimporte-le.' });
+  // overlay tracks: a picture that can't be read would leave a hole in the export
+  const lostOv = (p.overlays ?? []).filter((o) => (o.source.kind === 'image' && !getImage(o.source.mediaId)) || (o.source.kind === 'video' && !getVideo(o.source.mediaId)) || (o.source.kind === 'panel' && !p.pages.some((pg) => pg.id === (o.source as { pageId: string }).pageId)));
+  if (lostOv.length) out.push({ level: 'error', text: `${lostOv.length} superposition(s) sans média lisible : réimporte le fichier ou supprime-la.`, at: lostOv[0].start, fix: { label: 'Retirer ces superpositions', apply: (x) => ({ ...x, overlays: (x.overlays ?? []).filter((o) => !lostOv.some((l) => l.id === o.id)) }) } });
+  const longOv = (p.overlays ?? []).filter((o) => o.start + o.duration > dur + 0.05);
+  if (longOv.length && dur > 0) out.push({ level: 'warn', text: `${longOv.length} superposition(s) dépasse(nt) la fin de la vidéo (${dur.toFixed(1)} s) : la fin ne sera pas exportée.`, at: longOv[0].start });
   if (dur <= 0) out.push({ level: 'error', text: 'La vidéo est vide.' });
 
   // colour: story pages of one comic that stand out (darker, greyer, faded scans)

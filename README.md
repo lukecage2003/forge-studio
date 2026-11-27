@@ -252,6 +252,10 @@ Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages
 - **Aperçus légers.** Un rush plus grand que 720p reçoit une copie 540p pour un aperçu fluide ; l'export utilise toujours l'original. Ces copies sont dans `proxies/` et peuvent être supprimées à tout moment (*Projets → Stockage*) : elles se refont.
 - **Faire de la place.** *Projets → Stockage → Libérer de la place* met à la corbeille les médias que plus aucun projet ni aucune version n'utilise (restaurable) et retire les copies en double du cache. Un média utilisé n'est jamais touché. Seul *Vider la corbeille*, après confirmation, supprime des fichiers.
 
+## Calques (pistes de superposition)
+
+Au-dessus de la piste principale, trois pistes de calques reçoivent une case, une image ou une vidéo, à n'importe quel moment : *Ctrl K → Superposer la case sélectionnée* ou *Superposer une image ou une vidéo* (au curseur). Dans l'inspecteur : piste, placement (plein écran, incrustation, moitiés), début, durée, départ dans la vidéo, fondu, zoom lent. La piste la plus haute passe devant ; tout s'annule avec Ctrl+Z. Une vidéo en calque est muette (le son passe par les pistes voix et musique). L'aperçu et l'export sont identiques (même moteur de rendu, vérifié image par image dans `tests/e2e/overlays.e2e.cjs`).
+
 ## Studios
 
 La barre sous le menu regroupe les outils par étape : Production, Recherche et script, Visuel, Montage, Son, Animation et sous-titres, Finition, Publication. Ce ne sont pas des applications séparées : les huit travaillent sur le même projet. Chaque studio dit ce qu'il reste à faire, lu dans le projet (un point vert quand l'étape est faite), et propose ses vraies commandes, les mêmes que la palette *Ctrl K*.

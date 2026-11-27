@@ -9,7 +9,7 @@ import { DIAGRAM_3D } from '../types';
 import { setUI, useStore } from '../store';
 import { pause, seek, toggle } from '../engine/transport';
 import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
-import { arollPlayer } from '../engine/video';
+import { arollPlayer, overlayVideos } from '../engine/video';
 import { toSource } from '../engine/speech';
 import { fmtTime } from '../lib/util';
 import { loadSegmenter, segmenterReady } from '../engine/segment';
@@ -77,7 +77,10 @@ export function Preview() {
     const face = ar ? () => arollPlayer.frame(ar.mediaId) : undefined;
     if (!ctx) return;
     const t0 = performance.now();
-    renderer.draw(ctx, project, t, face);
+    // video overlays: only those on screen play
+    const ovIds = new Set((project.overlays ?? []).filter((o) => o.source.kind === 'video' && t >= o.start && t < o.start + o.duration).map((o) => (o.source as { mediaId: string }).mediaId));
+    overlayVideos.pauseExcept(ovIds);
+    renderer.draw(ctx, project, t, face, ovIds.size ? (id, src) => overlayVideos.frame(id, src, playing) : undefined);
     if (playing) {
       // keep playback fluid: average draw time over 12 frames, step the resolution down (never below 35 %)
       const a = drawMs.current; a.push(performance.now() - t0); if (a.length > 12) a.shift();

@@ -10,6 +10,7 @@ import { createRenderer, loadFonts } from './render';
 import { layoutShots, segmentsOf, videoDuration } from './timeline';
 import { ensureMedia, ensureVideo, mediaBlob } from './media';
 import { toSource } from './speech';
+import { overlaySourceTime } from './overlays';
 import { validateProject } from './validate';
 import { sfxEvents } from './sfx';
 import { loadSegmenter } from './segment';
@@ -86,6 +87,7 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
     ...project.pages.map((p) => ensureMedia(p.mediaId, 'image')),
     ...project.audio.map((a) => ensureMedia(a.mediaId, 'audio')),
     ...(project.aroll ? [ensureVideo(project.aroll.mediaId)] : []),
+    ...(project.overlays ?? []).flatMap((ov) => (ov.source.kind === 'image' ? [ensureMedia(ov.source.mediaId, 'image')] : [])),
   ]);
 
   if (project.look?.parallax !== false) {
@@ -163,9 +165,30 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
       }
     }
 
+    // video overlays: each decoded frame-exact, only over the frames where it is on screen
+    const ovIters: { mediaId: string; on: (t: number) => boolean; it: AsyncGenerator<WrappedCanvas | null, void, unknown>; input: Input }[] = [];
+    for (const ov of project.overlays ?? []) {
+      if (ov.source.kind !== 'video') continue;
+      const src = ov.source;
+      const blob = await mediaBlob(src.mediaId);
+      if (!blob) continue;
+      const inp = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+      const tr = await inp.getPrimaryVideoTrack();
+      if (!tr) continue;
+      const k = Math.min(1, Math.max(W, H) / Math.max(src.width, src.height));
+      const sink = new CanvasSink(tr, { width: Math.round(src.width * k), height: Math.round(src.height * k), fit: 'fill', poolSize: 2 });
+      const on = (t: number) => t >= ov.start && t < ov.start + ov.duration;
+      const times = (function* () { for (let f = 0; f < frames; f++) { const t = f * dt; if (on(t)) yield overlaySourceTime(ov, t); } })();
+      ovIters.push({ mediaId: src.mediaId, on, it: sink.canvasesAtTimestamps(times), input: inp });
+    }
+    const ovFrames = new Map<string, CanvasImageSource>();
+    const ovSource = (id: string) => ovFrames.get(id) ?? null;
+
     for (let f = 0; f < frames; f++) {
       if (o.signal.aborted) throw new DOMException('Export annulé', 'AbortError');
       const t = f * dt;
+      ovFrames.clear();
+      for (const v of ovIters) if (v.on(t)) { const r = await v.it.next(); if (r.value?.canvas) ovFrames.set(v.mediaId, r.value.canvas as CanvasImageSource); }
       let faceFrame: CanvasImageSource | null = null;
       if (faceIter) {
         const r = await faceIter.next();
@@ -176,18 +199,19 @@ export async function exportMp4(input0: Project, o: ExportOpts): Promise<Blob> {
         const n = 4;
         for (let k = 0; k < n; k++) {
           if (k) await o.step?.();
-          renderer.draw(subCtx, project, t + ((k + 0.5) / n - 0.5) * dt * 0.5, () => faceFrame);
+          renderer.draw(subCtx, project, t + ((k + 0.5) / n - 0.5) * dt * 0.5, () => faceFrame, ovSource);
           ctx.globalAlpha = 1 / (k + 1);
           ctx.drawImage(sub, 0, 0);
         }
         ctx.globalAlpha = 1;
-      } else renderer.draw(ctx, project, t, () => faceFrame);
+      } else renderer.draw(ctx, project, t, () => faceFrame, ovSource);
       await video.add(t, dt);
       await o.step?.();
       if (f % 6 === 0) o.onProgress(0.03 + 0.95 * (f / frames), `Rendu image ${f + 1} / ${frames}`);
     }
     video.close();
     await faceIter?.return(undefined);
+    for (const v of ovIters) { await v.it.return(undefined); (v.input as unknown as { dispose?: () => void }).dispose?.(); }
     (input as unknown as { dispose?: () => void } | null)?.dispose?.();
     o.onProgress(0.99, 'Finalisation du MP4…');
     await output.finalize();

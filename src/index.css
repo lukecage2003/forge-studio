@@ -560,6 +560,13 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 }
 
 /* ============================================= v3: effects, schemas, pages */
+.tl-label.lane-overlay { height: 42px; } .tl-label.lane-overlay svg { color: #38bdf8; }
+.tl-lane.lane-overlay { height: 42px; position: relative; }
+.ov-chip { position: absolute; box-sizing: border-box; border-radius: 3px; padding: 0 5px; font-size: 9.5px; font-weight: 600; line-height: 12px; background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.5); color: #e0f2fe; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab; }
+.ov-chip.k-video { background: rgba(250, 204, 21, 0.14); border-color: rgba(250, 204, 21, 0.5); color: #fef9c3; }
+.ov-chip.on { border-color: #fff; background: rgba(56, 189, 248, 0.32); }
+.ov-chip span { pointer-events: none; }
+.ov-chip .trim { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
 .tl-label.lane-fx { height: 26px; } .tl-label.lane-fx svg { color: #c084fc; }
 .tl-lane.lane-fx { height: 26px; }
 .fx-chip { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; padding: 0 6px; font-size: 10.5px; font-weight: 600; line-height: 18px; background: rgba(192, 132, 252, 0.16); border: 1px solid rgba(192, 132, 252, 0.5); color: #e9d5ff; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: grab; }
@@ -978,3 +985,10 @@ kbd { display: inline-block; min-width: 20px; padding: 1px 5px; margin-right: 3p
 .brain-scope.on { border-color: var(--ember); }
 .brain-scope-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .brain-scope .pill { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: rgba(255, 90, 31, 0.15); color: var(--ember); }
+.seg.wrap { flex-wrap: wrap; height: auto; } .seg.wrap button { flex: 1 1 30%; }
+/* the brand and the command button keep their shape; below 1400 px the secondary labels go first */
+.topbar > :first-child, .topbar .cmd-btn { flex-shrink: 0; }
+@media (max-width: 1400px) { .topbar .cmd-btn > span { display: none; } .topbar .btn.accent-outline { font-size: 0; gap: 0; padding-inline: 10px; } .topbar .btn.accent-outline svg { margin: 0; } }
+/* narrow windows: the tagline goes, then the bar scrolls sideways rather than overlapping (every button stays reachable) */
+@media (max-width: 1300px) { .topbar .wordmark-tag { display: none; } }
+@media (max-width: 1200px) { .topbar { overflow-x: auto; scrollbar-width: thin; } }

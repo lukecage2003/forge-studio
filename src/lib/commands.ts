@@ -81,6 +81,8 @@ export function commands(): Cmd[] {
     { id: 'subs', studios: ['motion'], label: 'Recréer les sous-titres depuis la transcription', group: 'Sous-titres', run: () => void import('../rush').then((m) => m.rebuildSubtitles()) },
     { id: 'subs-style', studios: ['motion'], label: 'Appliquer le style de sous-titre à tous les plans', group: 'Sous-titres', run: () => void import('../actions').then((m) => m.applyDefaultCaptionToAll()) },
     { id: 'motion-prep', studios: ['motion'], label: 'Préparer les mouvements (profondeur, détourage)', group: 'Animation', run: () => void import('../actions').then((m) => m.prepareMotion()) },
+    { id: 'ov-file', studios: ['editing', 'motion'], label: 'Superposer une image ou une vidéo (au curseur)', group: 'Superposition', run: () => pick('image/*,video/*', true, (f) => void import('../actions').then((m) => m.importOverlayFiles(f))) },
+    { id: 'ov-panel', studios: ['editing', 'motion'], label: 'Superposer la case sélectionnée (au curseur)', group: 'Superposition', run: () => void import('../actions').then((m) => m.overlaySelectedPanel()) },
     { id: 'qc', studios: ['finishing'], label: 'Contrôle qualité et export', group: 'Finition', run: () => setUI({ exportOpen: true }) },
   ];
 }

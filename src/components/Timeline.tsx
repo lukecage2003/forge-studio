@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2, ScanFace, Sparkles } from 'lucide-react';
+import { Film, Type, Music2, AudioLines, Volume2, ZoomIn, ZoomOut, Maximize2, ScanFace, Sparkles, Layers } from 'lucide-react';
 import { FX_LABEL } from './FxDiagram';
-import { patchFx } from '../actions';
+import { patchFx, patchOverlay, OVERLAY_TRACKS } from '../actions';
 import type { AudioClip, AudioKind, Project, Shot } from '../types';
 import { getState, setUI, update, useStore } from '../store';
 import { layoutShots, segmentsOf, videoDuration } from '../engine/timeline';
@@ -12,9 +12,10 @@ import { useMediaVersion } from '../lib/hooks';
 import { moveShot } from '../actions';
 import { clamp, fmtShort, fmtTime } from '../lib/util';
 
-const LANES: { kind: 'face' | 'video' | 'text' | 'fx' | AudioKind; label: string; icon: React.ReactNode }[] = [
+const LANES: { kind: 'face' | 'video' | 'overlay' | 'text' | 'fx' | AudioKind; label: string; icon: React.ReactNode }[] = [
   { kind: 'face', label: 'Visage', icon: <ScanFace size={14} /> },
   { kind: 'video', label: 'Cases', icon: <Film size={14} /> },
+  { kind: 'overlay', label: 'Calques', icon: <Layers size={14} /> },
   { kind: 'text', label: 'Texte', icon: <Type size={14} /> },
   { kind: 'fx', label: 'Effets', icon: <Sparkles size={14} /> },
   { kind: 'voice', label: 'Voix', icon: <AudioLines size={14} /> },
@@ -201,6 +202,34 @@ export function Timeline() {
               ))}
               {drop != null && <div className="drop-line" style={{ left: (timed[drop]?.start ?? vdur) * pps }} />}
               {!timed.length && <div className="lane-empty">Les cases apparaîtront ici</div>}
+            </div>
+
+            {/* overlay tracks: three stacked rows, higher track on top of the picture */}
+            <div className="tl-lane lane-overlay">
+              {(project.overlays ?? []).map((o) => (
+                <div key={o.id} className={`ov-chip k-${o.source.kind} ${sel?.kind === 'overlay' && sel.id === o.id ? 'on' : ''}`}
+                  style={{ left: o.start * pps, width: Math.max(6, o.duration * pps), top: `${((OVERLAY_TRACKS - o.track) / OVERLAY_TRACKS) * 100}%`, height: `${100 / OVERLAY_TRACKS}%` }}
+                  title={`Piste ${o.track} · ${o.source.kind === 'panel' ? 'case' : o.source.kind === 'image' ? 'image' : 'vidéo'} · ${o.duration.toFixed(1)} s`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setUI({ selection: { kind: 'overlay', id: o.id } });
+                    const x0 = e.clientX, s0 = o.start, d0 = o.duration;
+                    const edge = (e.target as HTMLElement).classList.contains('trim');
+                    // a video overlay can't last longer than what is left of its file
+                    const maxD = o.source.kind === 'video' ? o.source.sourceDuration - o.source.offset : 600;
+                    const mv = (ev: PointerEvent) => {
+                      const dt = (ev.clientX - x0) / pps;
+                      if (edge) patchOverlay(o.id, { duration: clamp(d0 + dt, 0.3, maxD) }, 'ovd' + o.id);
+                      else patchOverlay(o.id, { start: Math.max(0, snap(s0 + dt)) }, 'ovs' + o.id);
+                    };
+                    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); };
+                    window.addEventListener('pointermove', mv);
+                    window.addEventListener('pointerup', up);
+                  }}>
+                  <span>{o.source.kind === 'panel' ? 'Case' : o.source.name ?? (o.source.kind === 'image' ? 'Image' : 'Vidéo')}</span>
+                  <div className="trim r" />
+                </div>
+              ))}
             </div>
 
             {/* text lane */}

@@ -35,7 +35,7 @@ Voir [ETAT-TECHNIQUE.md](ETAT-TECHNIQUE.md). En résumé :
 | 10 Documentation | lancement, compilation, sauvegarde et récupération, studios, licences | — |
 
 ## 5. Encore incomplet (non fait dans cette campagne)
-- **Montage multipiste libre** : il y a une seule piste d'images, plus le rush, la voix, la musique, les sous-titres et les effets. Ce n'est pas une timeline de NLE avec des pistes vidéo empilées à volonté.
+- **Montage multipiste** : trois pistes de calques au-dessus de la piste principale. Ce n'est pas une timeline de NLE illimitée : les calques vidéo sont muets, ils n'ont pas de transitions propres et ne sont pas exportés vers DaVinci (OTIO).
 - **Historique d'annulation** : il n'est pas conservé après fermeture. Les versions jouent ce rôle.
 - **Barre de nouvelle version et fenêtre de rechargement** : testées localement et en CI, pas encore observées en ligne sur un vrai changement de version.
 
@@ -47,6 +47,18 @@ Fait après le rapport initial.
 - **Même image** : le rendu dessine le rush à la taille de sa zone, donc la composition est identique. Seule la netteté de l'aperçu change.
 - **Suppression** : les copies se suppriment sans risque depuis Projets › Stockage.
 - **Mesure** (`tests/e2e/proxy.e2e.cjs`, Chromium sans GPU) : un déplacement dans l'aperçu prend environ 400 ms sur un original 1080p WebM et 26 ms sur la copie. Cet original vient d'un enregistrement du navigateur, sans index, donc particulièrement lent à parcourir. Le gain sur un MP4 de caméra sera plus faible : **non mesuré**.
+
+## Suite : pistes de calques
+Fait avec ton accord.
+- **Contenu** : trois pistes au-dessus de la piste principale, pour une case, une image ou une vidéo muette.
+- **Placement** : plein écran, incrustation façon BD (bord blanc et ombre franche, sans halo), ou moitiés de l'écran.
+- **Réglages** : fondu, zoom lent sans toucher au dessin, départ dans la vidéo.
+- **Commandes** : réglage dans l'inspecteur, déplacement et raccourcissement à la souris dans la timeline, annulation avec Ctrl+Z.
+- **Projets** : schéma 3, avec migration automatique des anciens projets.
+- **Médias** : ceux des calques sont sauvegardés, emportés dans le `.forge` et jamais nettoyés.
+- **Contrôle qualité** : il signale un calque sans média, avec une correction proposée, et un calque qui dépasse la fin de la vidéo.
+- **Mesure** (`tests/e2e/overlays.e2e.cjs`) : sur les images du MP4 exporté, l'écart avec l'aperçu est de 0,1/255 pour la case et de 0,9/255 pour la vidéo, contre 136 et 59 sans calque. L'aperçu et l'export sont donc la même image.
+- **Barre du haut** : plus aucun chevauchement de 1 024 à 1 440 px. Sous 1 200 px, elle défile de côté.
 
 ## 6. Fichiers importants
 - **Nouveaux :**

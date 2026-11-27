@@ -1,7 +1,7 @@
 import type { DiagramKind, FxItem, FxKind } from './types';
-import type { AudioKind, Page, Project, Rect, Shot } from './types';
+import type { AudioKind, Overlay, OverlaySource, Page, Project, Rect, Shot } from './types';
 import { getState, newShot, setUI, update } from './store';
-import { getImage, importAudio, importImage } from './engine/media';
+import { getImage, importAudio, importImage, importVideo } from './engine/media';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, trimBottomToArt, type PageText } from './engine/classify';
@@ -245,7 +245,62 @@ export function deleteSelection() {
   if (sel.kind === 'audio') update((p) => ({ ...p, audio: p.audio.filter((s) => s.id !== sel.id) }));
   if (sel.kind === 'page') return removePage(sel.id);
   if (sel.kind === 'fx') update((p) => ({ ...p, fx: p.fx.filter((f) => f.id !== sel.id) }));
+  if (sel.kind === 'overlay') update((p) => ({ ...p, overlays: (p.overlays ?? []).filter((o) => o.id !== sel.id) }));
   setUI({ selection: null });
+}
+
+/* ---------------------------------------------------------------- overlay tracks (B-roll) */
+
+export const OVERLAY_TRACKS = 3;
+/** pure: the lowest track free over [start, start + duration), else the top one */
+export function freeTrack(p: Project, start: number, duration: number): number {
+  for (let k = 1; k <= OVERLAY_TRACKS; k++) {
+    if (!(p.overlays ?? []).some((o) => o.track === k && o.start < start + duration && start < o.start + o.duration)) return k;
+  }
+  return OVERLAY_TRACKS;
+}
+/** place a picture on an overlay track at the playhead; undoable, selected for editing */
+export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
+  const start = opts.start ?? getState().ui.playhead;
+  const duration = opts.duration ?? (source.kind === 'video' ? Math.min(5, Math.max(0.5, source.sourceDuration - source.offset)) : 3);
+  const o: Overlay = {
+    id: uid('ov_'), start, duration, source,
+    track: opts.track ?? freeTrack(getState().project, start, duration),
+    place: opts.place ?? (source.kind === 'panel' ? 'pip' : 'full'),
+    zoom: opts.zoom ?? (source.kind === 'video' ? 0 : 1),
+    fade: opts.fade ?? 0.25,
+  };
+  update((p) => ({ ...p, overlays: [...(p.overlays ?? []), o] }));
+  setUI({ selection: { kind: 'overlay', id: o.id } });
+  return o;
+}
+export function patchOverlay(id: string, patch: Partial<Overlay>, key?: string) {
+  update((p) => ({ ...p, overlays: (p.overlays ?? []).map((o) => (o.id === id ? { ...o, ...patch } : o)) }), key);
+}
+/** the selected panel, on an overlay track (its page stays where it is) */
+export function overlaySelectedPanel(): boolean {
+  const { ui, project } = getState();
+  const sh = ui.selection?.kind === 'shot' ? project.shots.find((x) => x.id === (ui.selection as { id: string }).id) : null;
+  if (!sh?.pageId) { toast('Sélectionne d’abord une case dans la timeline.', 'error'); return false; }
+  addOverlay({ kind: 'panel', pageId: sh.pageId, rect: sh.rect });
+  return true;
+}
+/** pictures and videos from files, each on an overlay track at the playhead (one after the other) */
+export async function importOverlayFiles(files: File[]) {
+  let at = getState().ui.playhead;
+  for (const f of files) {
+    try {
+      if (f.type.startsWith('video/')) {
+        const { id, asset } = await importVideo(f);
+        const o = addOverlay({ kind: 'video', mediaId: id, name: f.name, offset: 0, sourceDuration: asset.duration, width: asset.width, height: asset.height }, { start: at });
+        at += o.duration;
+      } else if (f.type.startsWith('image/')) {
+        const { id } = await importImage(f);
+        const o = addOverlay({ kind: 'image', mediaId: id, name: f.name }, { start: at });
+        at += o.duration;
+      } else toast(`${f.name} : seulement des images ou des vidéos en superposition.`, 'error');
+    } catch (e) { toast(`${f.name} : ${(e as Error).message}`, 'error'); }
+  }
 }
 
 export async function importAudioFiles(kind: AudioKind, files: File[] | Blob[], names?: string[]) {

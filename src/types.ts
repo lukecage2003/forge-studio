@@ -172,6 +172,25 @@ export interface FxItem {
   pageId?: string; rect?: Rect;
 }
 
+/**
+ * OVERLAY TRACKS — pictures placed freely above the main track (B-roll):
+ * a panel, an image or a video, at any time, on track 1..3 (higher on top).
+ * Video overlays are silent (the voice and music lanes carry the sound).
+ */
+export type OverlayPlace = 'full' | 'pip' | 'top' | 'bottom' | 'left' | 'right';
+export type OverlaySource =
+  | { kind: 'panel'; pageId: string; rect: Rect }
+  | { kind: 'image'; mediaId: string; name?: string }
+  | { kind: 'video'; mediaId: string; name?: string; offset: number; sourceDuration: number; width: number; height: number };
+export interface Overlay {
+  id: string; track: number; start: number; duration: number;
+  source: OverlaySource;
+  place: OverlayPlace;
+  /** slow push-in (1) or none (0): views only, the picture is never altered */
+  zoom: number;
+  fade: number;
+}
+
 export type Grade = 'natural' | 'cinema' | 'warm' | 'punch' | 'noir';
 export interface Look { grade: Grade; vignette: number; grain: number; cutout: boolean; handheld?: number; speedLines?: boolean; motionBlur?: boolean; chroma?: boolean; paper?: number; parallax?: boolean; balloonPop?: boolean; /** contrast-adaptive sharpening of comic frames, 0..1 (default 0.45) */ sharpen?: number }
 
@@ -274,6 +293,8 @@ export interface Project {
   /** look of diagrams and maps: 'encre' = printed comic (ink, halftone, captions), 'neon' = the earlier dark cards */
   diagramStyle?: 'encre' | 'neon';
   fx: FxItem[];
+  /** overlay tracks above the main track (absent in projects before schema 3) */
+  overlays?: Overlay[];
   look: Look;
   /** background research on the comics (Google search grounding) */
   research?: { title: string; summary: string; characters: { name: string; aliases?: string[]; role?: string }[]; facts: string[]; sources?: string[] };
@@ -310,4 +331,5 @@ export type Selection =
   | { kind: 'page'; id: string }
   | { kind: 'aroll' }
   | { kind: 'fx'; id: string }
+  | { kind: 'overlay'; id: string }
   | null;

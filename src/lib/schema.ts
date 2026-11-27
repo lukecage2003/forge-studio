@@ -11,7 +11,7 @@ import { ENGINE_VERSION } from '../engine/rng';
  * To change the layout: add a step to MIGRATIONS (it receives the project at
  * version `to - 1`), then raise SCHEMA_VERSION. Never edit a past step.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** versions of the engines whose output a project depends on: raise one when the same project would render differently */
 export const ENGINE_VERSIONS = { render: ENGINE_VERSION, comicCamera: 1, director: 1, storyboard: 1, transcription: 2 } as const;
@@ -27,6 +27,7 @@ type Step = { to: number; what: string; run: (p: Project) => Project };
  */
 export const MIGRATIONS: Step[] = [
   { to: 2, what: 'numéro de schéma ajouté', run: (p) => p },
+  { to: 3, what: 'pistes de superposition', run: (p) => ({ ...p, overlays: p.overlays ?? [] }) },
 ];
 
 export const schemaOf = (p: Partial<Project> | null | undefined) => (p?.schemaVersion ?? 1);

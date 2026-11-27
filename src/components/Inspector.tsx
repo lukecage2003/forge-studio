@@ -12,6 +12,7 @@ import { toast } from './Toast';
 import { CATEGORIES, TRANSITION, TRANSITIONS, tp, type Category } from '../engine/effects';
 import { DiagramPanel, FxAdd, FxPanel, LookSection } from './FxDiagram';
 import { ArtPanel } from './ArtPanel';
+import { OverlayPanel } from './OverlayPanel';
 import { FavoritesPanel } from './FavoritesPanel';
 import { CameraPathEditor } from './CameraPathEditor';
 import { applyDefaultCaptionToAll, confirmMatch, deleteSelection, duplicateShot, fitMusicToVideo, setCameraMode, swapPanel } from '../actions';
@@ -30,9 +31,10 @@ export function Inspector() {
   const clip = useStore((s) => (sel?.kind === 'audio' ? s.project.audio.find((x) => x.id === sel.id) : undefined));
   const ar = useStore((s) => (sel?.kind === 'aroll' ? s.project.aroll : null));
   const fx = useStore((s) => (sel?.kind === 'fx' ? s.project.fx.find((f) => f.id === sel.id) : undefined));
+  const ov = useStore((s) => (sel?.kind === 'overlay' ? s.project.overlays?.find((o) => o.id === sel.id) : undefined));
   return (
     <aside className="inspector">
-      {shot ? <ShotPanel shot={shot} /> : clip ? <AudioPanel clip={clip} /> : fx ? <FxPanel fx={fx} /> : ar ? <ARollPanel ar={ar} /> : <ProjectPanel />}
+      {shot ? <ShotPanel shot={shot} /> : ov ? <OverlayPanel o={ov} /> : clip ? <AudioPanel clip={clip} /> : fx ? <FxPanel fx={fx} /> : ar ? <ARollPanel ar={ar} /> : <ProjectPanel />}
     </aside>
   );
 }

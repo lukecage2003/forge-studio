@@ -1,5 +1,6 @@
 import { DIAGRAM_3D, FORMATS, type Caption, type Diagram, type FxItem, type Grade, type Layout, type Project, type Rect, type Shot } from '../types';
 import { toneFilter } from './color';
+import { drawOverlays, type OverlayVideoSource } from './overlays';
 import { personMask } from './segment';
 import { faceAt } from './faces';
 import { layersFor, type Layers } from './layers';
@@ -1635,7 +1636,7 @@ export interface Renderer {
   H: number;
   /** true when the frame moves fast (transitions, impacts): export renders it with motion blur */
   fast(project: Project, t: number): boolean;
-  draw(ctx: Ctx, project: Project, t: number, face?: FaceSource): void;
+  draw(ctx: Ctx, project: Project, t: number, face?: FaceSource, overlayVideo?: OverlayVideoSource): void;
 }
 
 function makeBuf(W: number, H: number) {
@@ -1693,6 +1694,7 @@ export function createRenderer(W: number, H: number): Renderer {
   const actx = A.getContext('2d')!, bctx = B.getContext('2d')!;
   const vertical = H > W;
   const noFace: FaceSource = () => null;
+  let curOverlayVideo: OverlayVideoSource | undefined;
 
   /** one comic shot, composed according to its layout */
   function renderShot(ctx: Ctx, project: Project, ts: TimedShot, t: number, face: FaceSource, segs: Seg[], motionStart = 0, override?: { view: View; clip: Rect }) {
@@ -1898,6 +1900,8 @@ export function createRenderer(W: number, H: number): Renderer {
         chroma(ctx, W, H, A, amt);
       }
     }
+    // overlay tracks (B-roll) above the main track, under the look and the subtitles
+    if (project.overlays?.length) drawOverlays(ctx, project, t, W, H, curOverlayVideo);
     drawLook(ctx, project, W, H, t);
     for (const f of project.fx ?? []) {
       if (f.kind === 'callout' && t >= f.start && t < f.start + f.duration) bigText(ctx, W, H, f, t - f.start, project.accent, false);
@@ -1940,7 +1944,8 @@ export function createRenderer(W: number, H: number): Renderer {
       }
       return false;
     },
-    draw(ctx, project, t, face = noFace) {
+    draw(ctx, project, t, face = noFace, overlayVideo) {
+      curOverlayVideo = overlayVideo;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
       const segs = segmentsOf(project.aroll);

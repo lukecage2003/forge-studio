@@ -103,3 +103,39 @@ class ARollPlayer {
 }
 
 export const arollPlayer = new ARollPlayer();
+
+/**
+ * Preview frames of the video overlays (B-roll on the overlay tracks): one
+ * muted <video> per media, reading the light copy when there is one. Paused,
+ * it shows the exact source time; playing, it plays along and is put back on
+ * time when it drifts. The export decodes frames itself (engine/export).
+ */
+class OverlayVideos {
+  private els = new Map<string, { el: HTMLVideoElement; url: string }>();
+  frame(mediaId: string, src: number, playing: boolean): HTMLVideoElement | null {
+    const url = previewUrl(mediaId);
+    if (!url) return null;
+    let e = this.els.get(mediaId);
+    if (!e || e.url !== url) {
+      e?.el.pause();
+      const el = document.createElement('video');
+      el.muted = true; el.playsInline = true; el.preload = 'auto'; el.src = url;
+      el.addEventListener('seeked', () => notifyMedia());
+      el.addEventListener('loadeddata', () => notifyMedia());
+      e = { el, url };
+      this.els.set(mediaId, e);
+    }
+    const el = e.el;
+    if (playing) {
+      if (el.paused) { el.currentTime = src; void el.play().catch(() => {}); }
+      else if (Math.abs(el.currentTime - src) > 0.25) el.currentTime = src;
+    } else {
+      if (!el.paused) el.pause();
+      if (Math.abs(el.currentTime - src) > 0.02) el.currentTime = src;
+    }
+    return el.readyState >= 2 ? el : null;
+  }
+  /** pause those not on screen any more */
+  pauseExcept(ids: Set<string>) { for (const [id, e] of this.els) if (!ids.has(id) && !e.el.paused) e.el.pause(); }
+}
+export const overlayVideos = new OverlayVideos();
