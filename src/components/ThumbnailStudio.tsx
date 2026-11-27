@@ -85,6 +85,28 @@ export function ThumbnailStudio() {
     } finally { setBusy(null); }
   };
 
+  // automatic cover: the two strongest panels of the edit (engine/pro coverPicks), one per slot
+  const autoCover = async () => {
+    const { coverPicks } = await import('../engine/pro');
+    const p = getState().project;
+    const picks = coverPicks(p, 2);
+    if (!picks.length) { toast('Aucune case dans le montage pour la couverture.', 'error'); return; }
+    setBusy('Détourage…');
+    try {
+      const next: Slot[] = [null, null];
+      for (let i = 0; i < picks.length; i++) {
+        const s = picks[i]; const pg = p.pages.find((x) => x.id === s.pageId); const a = pg && getImage(pg.mediaId);
+        if (!a) continue;
+        const c = document.createElement('canvas'); const k = Math.min(1, 1200 / Math.max(s.rect.w, s.rect.h));
+        c.width = Math.round(s.rect.w * k); c.height = Math.round(s.rect.h * k);
+        c.getContext('2d')!.drawImage(a.img, s.rect.x, s.rect.y, s.rect.w, s.rect.h, 0, 0, c.width, c.height);
+        next[i] = { sticker: await toSticker(c, panelFocus(a.img, s.rect)), label: s.chars?.[0] ?? 'Case du comics' };
+      }
+      setSlots(next); setTarget(next[1] ? 1 : 0);
+      toast('Couverture choisie : les cases les plus fortes (grandes, personnages, peu de bulles). Remplace-les si tu veux.');
+    } catch (e) { toast('Image : ' + (e as Error).message, 'error'); } finally { setBusy(null); }
+  };
+
   const fromBlob = async (blob: Blob, label = 'Image') => put(await imageToCanvas(blob), label);
 
   // paste anywhere while the studio is open: an image, or an image link
@@ -166,6 +188,7 @@ export function ThumbnailStudio() {
         <p className="help"><Clipboard size={12} /> Sur Google Images : clic droit sur l’image → <b>Copier l’image</b>, puis <b>Ctrl+V</b> ici. Ou glisse un fichier sur l’aperçu.</p>
         <div className="row-btns gap">
           <button className="btn sm ghost" onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = () => i.files?.[0] && void fromBlob(i.files[0], i.files[0].name); i.click(); }}><ImagePlus size={14} /> Fichier</button>
+          <button className="btn sm" disabled={!!busy} onClick={() => void autoCover()}>Choix auto</button>
           <button className="btn sm ghost" onClick={() => setPicking(!picking)}>Prendre une case</button>
           <div className="seg sm">
             {([['auto', 'Auto'], ['right', 'Droite'], ['solo', 'Centre'], ['duo', 'Duo']] as const).map(([k, l]) => (

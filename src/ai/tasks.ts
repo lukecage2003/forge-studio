@@ -95,7 +95,7 @@ export async function aiTranscribe(pcm: Float32Array, language: string, localWhi
   for (let off = 0; off < pcm.length; off += chunk) {
     const part = pcm.subarray(off, Math.min(pcm.length, off + chunk));
     const r = await run({
-      kind: 'audio.transcribe', audio: wav(part), language, needs: ['transcribe'], data: ['audio'], fresh: true,
+      kind: 'audio.transcribe', audio: wav(part), language, needs: ['transcribe'], data: ['audio'],
       local: async () => { localUsed = true; return { text: '', words: (await localWhisper()).map((w) => ({ w: w.w, s: w.s, e: w.e })) }; },
     });
     via = r;

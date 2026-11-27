@@ -16,7 +16,7 @@ export const anthropic: ProviderAdapter = {
     if (!key) throw new AiError('auth', 'Anthropic : aucune clé enregistrée.');
     const content: unknown[] = [{ type: 'text', text: task.prompt ?? '' }];
     for (const url of task.images ?? []) { const m = url.match(/^data:([^;]+);base64,(.*)$/); if (m) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }); }
-    const d = await (await call(`${BASE}/messages`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...H(key) }, body: JSON.stringify({ model, max_tokens: 4096, system: task.system, messages: [{ role: 'user', content }] }) }, 'Anthropic')).json();
+    const d = await (await call(`${BASE}/messages`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', ...H(key) }, body: JSON.stringify({ model, max_tokens: 4096, system: task.system ? [{ type: 'text', text: task.system, cache_control: { type: 'ephemeral' } }] : undefined, messages: [{ role: 'user', content }] }) }, 'Anthropic')).json();
     const text = (d.content ?? []).map((c: { text?: string }) => c.text ?? '').join('');
     if (!text) throw new AiError('invalid-answer', 'Anthropic : réponse vide.');
     return { text, usage: { inputTokens: d.usage?.input_tokens, outputTokens: d.usage?.output_tokens } };

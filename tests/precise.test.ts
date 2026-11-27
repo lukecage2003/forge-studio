@@ -25,3 +25,13 @@ describe('chat précis (sans IA)', () => {
     expect(parsePrecise('rends la vidéo plus dynamique', p)).toBeNull();
   });
 });
+
+describe('chat précis : plusieurs demandes dans un message', () => {
+  it('« plan 3 : 4 s, transition fondu et zoom avant » → trois changements sur le plan 3 ; « plans 2 et 4 » reste une seule cible', () => {
+    const r = parsePrecise('plan 3 : 4 s, transition fondu au plan 3 et zoom avant sur le plan 3', p)!;
+    expect(r.map((x) => x.type)).toEqual(['shot.duration', 'shot.transition', 'shot.motion']);
+    const r2 = parsePrecise('plan 2 : 5 s puis transition fondu', p)!;
+    expect(r2.map((x) => [x.type, (x as { shotId: string }).shotId])).toEqual([['shot.duration', 's2'], ['shot.transition', 's2']]);
+    expect(parsePrecise('supprime les plans 2 et 4', p)!.map((x) => (x as { shotId: string }).shotId)).toEqual(['s2', 's4']);
+  });
+});

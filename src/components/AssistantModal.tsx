@@ -1,5 +1,7 @@
 import { PLACE_FR } from '../engine/overlays';
 import { LAYOUT_FR } from '../engine/brain';
+import { TRANSITION } from '../engine/effects';
+const MOTION_FR: Record<string, string> = { 'zoom-in': 'zoom avant', 'zoom-out': 'zoom arrière', 'pan-left': 'vers la gauche', 'pan-right': 'vers la droite', 'pan-up': 'vers le haut', 'pan-down': 'vers le bas', static: 'fixe', read: 'lecture des bulles', tour: 'exploration' };
 import { addOverlay } from '../actions';
 import { useEffect, useState } from 'react';
 import { MessageSquareText, X, Loader2, Check, Lightbulb, Send } from 'lucide-react';
@@ -20,14 +22,14 @@ function describe(p: Proposal): string {
   const where = shot ? `le plan ${getState().project.shots.indexOf(shot) + 1}` : '';
   switch (p.type) {
     case 'shot.duration': return `Mettre ${where} à ${p.seconds.toFixed(1)} s (au lieu de ${shot?.duration.toFixed(1)} s)`;
-    case 'shot.transition': return `Transition de ${where} : ${p.transition}`;
+    case 'shot.transition': return `Transition ${where.replace(/^le /, 'du ')} : ${TRANSITION[p.transition as Transition]?.label ?? p.transition}`;
     case 'title.add': return `Mot-clé « ${p.text} » à ${p.at.toFixed(1)} s`;
     case 'visual.suggest': return `${p.kind === 'chronologie' ? 'Frise' : p.kind === 'reseau' ? 'Carte des relations' : p.kind === 'versus' ? 'Duel' : p.kind === 'echelle' ? 'Échelle' : 'Citation'} « ${p.title} » à ${p.at.toFixed(1)} s (${p.items.map((i) => i.label).join(', ')})`;
     case 'rush.cut': return `Couper le rush de ${p.s.toFixed(2)} à ${p.e.toFixed(2)} s`;
     case 'note': return p.text;
     case 'shot.delete': return `Supprimer ${where}`;
     case 'shot.layout': return `${where} en ${LAYOUT_FR[p.layout].toLowerCase()}`;
-    case 'shot.motion': return `Mouvement de ${where} : ${p.motion}`;
+    case 'shot.motion': return `Mouvement ${where.replace(/^le /, 'du ')} : ${MOTION_FR[p.motion] ?? p.motion}`;
     case 'subtitle.replace': return `Sous-titres : « ${p.from} » → « ${p.to} » (${p.count} fois)`;
     case 'music.volume': return `Musique ${p.factor > 1 ? 'plus forte' : 'moins forte'} (×${p.factor})`;
     case 'subs.size': return `Sous-titres ${p.factor > 1 ? 'plus gros' : 'plus petits'} (×${p.factor})`;

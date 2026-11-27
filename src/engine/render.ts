@@ -517,7 +517,7 @@ function bigText(ctx: Ctx, W: number, H: number, fx: FxItem, local: number, acce
 /** Full-frame face with background effects; the person is cut out and put back on top. */
 function drawFaceWithFx(ctx: Ctx, project: Project, W: number, H: number, face: FaceSource, segs: Seg[], t: number, active: FxItem[]) {
   const box: Box = { x: 0, y: 0, w: W, h: H };
-  const behind = active.filter((f) => f.kind !== 'callout');
+  const behind = active.filter((f) => f.kind !== 'callout' && f.kind !== 'chapter');
   if (!behind.length) { drawFace(ctx, project, box, face, segs, t); return; }
   const pl = placeFace(project, box, face, segs, t);
   const mask = pl && project.look?.cutout !== false ? personMask(pl.img, pl.src) : null;
@@ -1617,6 +1617,26 @@ function drawNameTag(ctx: Ctx, W: number, H: number, text: string, local: number
   ctx.restore();
 }
 
+/** chapter card: a black band with yellow ink (the channel's look), hard offset shadow, slides in and out */
+function drawChapterCard(ctx: Ctx, W: number, H: number, f: FxItem, local: number, project: Project) {
+  const text = (f.text ?? '').trim();
+  if (!text) return;
+  const bg = project.brand?.bg ?? '#0B0B0B', ink = project.brand?.ink ?? '#FFD400';
+  const inA = easeOutCubic(clamp(local / 0.3, 0, 1)), outA = easeInOutCubic(clamp((local - (f.duration - 0.3)) / 0.3, 0, 1));
+  const size = Math.min(W, H) * (H > W ? 0.075 : 0.06);
+  ctx.save();
+  ctx.font = `900 ${size}px ${FONT_STACK.grotesk}`;
+  const tw = ctx.measureText(text).width, pad = size * 0.6;
+  const bw = Math.min(W * 0.94, tw + pad * 2), bh = size * 1.7;
+  const y = H > W ? H * 0.3 : H * 0.18;
+  const x = lerp(-bw - 20, W * 0.04, inA) + lerp(0, W + bw, outA);
+  ctx.fillStyle = ink; ctx.fillRect(x + size * 0.14, y + size * 0.14, bw, bh);
+  ctx.fillStyle = bg; ctx.fillRect(x, y, bw, bh);
+  ctx.fillStyle = ink; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + pad, y + bh / 2 + size * 0.04, bw - pad * 2);
+  ctx.restore();
+}
+
 function drawWatermark(ctx: Ctx, W: number, H: number, text: string) {
   if (!text?.trim()) return;
   const size = Math.min(W, H) * 0.028;
@@ -1690,6 +1710,24 @@ export function effectiveLayout(shot: Shot, hasFace: boolean): Layout {
   if (!hasFace && (shot.layout === 'split' || shot.layout === 'pip')) return 'full';
   if (shot.layout === 'grid' && !shot.group?.length) return 'full';
   return shot.layout;
+}
+
+/** looping ending: over the last LOOP_S seconds the first frame fades in, so the video's end meets its start */
+let loopDepth = 0;
+export const LOOP_S = 0.45;
+function withLoop(r: Renderer, W: number, H: number): Renderer {
+  let sub: { r: Renderer; c: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
+  return { W: r.W, H: r.H, fast: (p, t) => r.fast(p, t), draw(ctx, project, t, face, overlayVideo) {
+    r.draw(ctx, project, t, face, overlayVideo);
+    if (!project.loopEnd || project.aroll || loopDepth || splitDepth) return;
+    const total = layoutShots(project).reduce((m, x) => Math.max(m, x.end), 0);
+    const k = (t - (total - LOOP_S)) / LOOP_S;
+    if (k <= 0 || total < 3) return;
+    if (!sub) { const c = makeBuf(W, H); sub = { r: createRenderer(W, H), c, ctx: c.getContext('2d')! }; }
+    loopDepth++;
+    try { sub.r.draw(sub.ctx, project, 0, face); } finally { loopDepth--; }
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = easeInOutCubic(clamp(k, 0, 1)); ctx.drawImage(sub.c, 0, 0); ctx.restore();
+  } };
 }
 
 export function createRenderer(W: number, H: number): Renderer {
@@ -1911,6 +1949,7 @@ export function createRenderer(W: number, H: number): Renderer {
     drawLook(ctx, project, W, H, t);
     for (const f of project.fx ?? []) {
       if (f.kind === 'callout' && t >= f.start && t < f.start + f.duration) bigText(ctx, W, H, f, t - f.start, project.accent, false);
+      if (f.kind === 'chapter' && t >= f.start && t < f.start + f.duration) drawChapterCard(ctx, W, H, f, t - f.start, project);
     }
     // subtitles from the transcript
     if (project.subtitleStyle.on && project.subtitles.length) {
@@ -1938,7 +1977,7 @@ export function createRenderer(W: number, H: number): Renderer {
     drawWatermark(ctx, W, H, project.watermark);
   }
 
-  return {
+  const R: Renderer = {
     W, H,
     fast(project, t) {
       for (const ts of layoutShots(project)) {
@@ -1973,7 +2012,7 @@ export function createRenderer(W: number, H: number): Renderer {
         let sub = splitBufs.get(key);
         if (!sub) { const c = makeBuf(bw, bh); sub = { r: createRenderer(bw, bh), c, ctx: c.getContext('2d')! }; splitBufs.set(key, sub); }
         // drawn once on the whole frame afterwards: overlays, subtitles, look, callouts, progress bar
-        const inner: Project = { ...project, overlays: [], fx: (project.fx ?? []).filter((f) => f.kind !== 'callout'), subtitleStyle: { ...project.subtitleStyle, on: false }, progressBar: false, watermark: '', look: { ...project.look, vignette: 0, grain: 0 } };
+        const inner: Project = { ...project, overlays: [], fx: (project.fx ?? []).filter((f) => f.kind !== 'callout' && f.kind !== 'chapter'), subtitleStyle: { ...project.subtitleStyle, on: false }, progressBar: false, watermark: '', look: { ...project.look, vignette: 0, grain: 0 } };
         splitDepth++;
         try { sub.r.draw(sub.ctx, inner, t, face, overlayVideo); } finally { splitDepth--; }
         ctx.fillStyle = '#0B0B0D'; ctx.fillRect(0, 0, W, H);
@@ -2238,6 +2277,7 @@ export function createRenderer(W: number, H: number): Renderer {
       overlays(ctx, project, t, total, cur);
     },
   };
+  return withLoop(R, W, H);
 }
 
 export const frameSize = (p: Project) => FORMATS[p.format];

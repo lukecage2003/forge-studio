@@ -56,6 +56,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
   const boardOk = useStore((s) => { const b = s.project.storyboard; return !!b && b.key === sentenceKey(narration(s.project).sentences); });
   const [useBoard, setUseBoard] = useState(true);
   const [calques, setCalques] = useState(true);
+  const [pro, setPro] = useState(true);
   const [storyEngine, setStoryEngine] = useState<'local' | 'google'>(hasGoogle() ? 'google' : 'local');
   const google = hasGoogle();
 
@@ -96,8 +97,10 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
       // overlays from the script (split screen, picture-in-picture), explained, the user's own kept
       const withOv = calques ? await withAutoOverlays(project) : { ...project, overlays: (project.overlays ?? []).filter((o) => !o.auto) };
       // a voice-led edit: the music is moved so a bar starts on the revelation
-      const aligned = await alignMusicOnReveal(withOv);
-      update(() => aligned?.project ?? withOv);
+      // pro finish (engine/pro): impacts, rhythm by emotion, name banners, chapters, varied framing, music by sequence, loop
+      const finished = pro ? (await import('../engine/pro')).withProFinish(withOv) : withOv;
+      const aligned = await alignMusicOnReveal(finished);
+      update(() => aligned?.project ?? finished);
       if (aligned) toast(`Musique calée : un temps fort tombe sur la révélation (décalée de ${aligned.shift.toFixed(2)} s).`);
       { const n = (withOv.overlays ?? []).filter((o) => o.auto).length; if (n) toast(`${n} calque${n > 1 ? 's' : ''} placé${n > 1 ? 's' : ''} d’après le script (écran partagé, incrustation) : chacun dit pourquoi dans l’inspecteur.`); }
       { const doubt = project.shots.filter((x) => x.match && x.match.conf < 0.5).length;
@@ -223,6 +226,7 @@ export function AutoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="toggles">
+          <Toggle on={pro} set={setPro} label="Finition pro : impacts, rythme, bandeaux, chapitres, musique, fin en boucle" hint="BOOM et KRAK secouent la case, l’action coupe sec et l’émotion ralentit, le nom s’affiche à la première apparition, chapitres noir et jaune, la musique suit l’histoire ; tes plans modifiés ne sont jamais touchés" />
           <Toggle on={calques} set={setCalques} label="Calques d’après le script : écran partagé, incrustation" hint="Une comparaison met deux cases côte à côte, « pendant ce temps » montre l’autre lieu en vignette ; tes propres calques ne sont jamais touchés" />
           <Toggle on={dir.sequences} set={setD('sequences')} label="Directeur créatif : traiter le montage par séquences" hint="Introduction, contexte, révélation… chacune reçoit un traitement visuel adapté, jamais deux fois le même d’affilée" />
           <Toggle on={dir.camera} set={setD('camera')} label="Le directeur choisit les mouvements de caméra" hint="Désactivé : mouvements automatiques simples, à régler toi-même" />

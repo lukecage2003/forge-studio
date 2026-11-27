@@ -964,3 +964,14 @@ export function withMyDA(p: Project): Project {
 export const myDAForNewProjects = () => { try { return localStorage.getItem('forge.myDA') !== 'off'; } catch { return true; } };
 export function setMyDAForNewProjects(on: boolean) { try { localStorage.setItem('forge.myDA', on ? 'on' : 'off'); } catch { /* storage blocked */ } }
 export function applyMyDA() { update((x) => withMyDA(x)); toast('DA noir et jaune appliquée (accent, sous-titres, schémas, couleurs de la chaîne) — annulable avec Ctrl+Z.'); }
+
+/** pro finish on the current edit (engine/pro): one undo step, only untouched auto shots change */
+export async function applyProFinish() {
+  const { withProFinish, onomatopoeias } = await import('./engine/pro');
+  const before = getState().project;
+  update((x) => withProFinish(x));
+  const after = getState().project;
+  const changed = after.shots.filter((s, i) => s !== before.shots[i]).length;
+  const chap = (after.fx ?? []).filter((f) => f.kind === 'chapter').length;
+  toast(`Finition pro : ${changed} plan(s) ajusté(s), ${onomatopoeias(after).length} impact(s), ${chap} chapitre(s)${after.musicCurve ? ', musique selon l’histoire' : ''}${after.loopEnd ? ', fin en boucle' : ''} — annulable avec Ctrl+Z.`);
+}

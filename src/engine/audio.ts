@@ -99,10 +99,16 @@ export function schedule(ctx: BaseAudioContext, dest: AudioNode, p: Project, t0:
     applyKfs(g.gain, fadeKfs(c), t0, T0);
     let tail: AudioNode = g;
     src.connect(g);
+    if (c.kind === 'music' && p.musicCurve?.length) {
+      const mg = ctx.createGain();
+      applyKfs(mg.gain, p.musicCurve, t0, T0);
+      tail.connect(mg);
+      tail = mg;
+    }
     if (duck && c.kind === 'music') {
       const dg = ctx.createGain();
       applyKfs(dg.gain, duck, t0, T0);
-      g.connect(dg);
+      tail.connect(dg);
       tail = dg;
     }
     tail.connect(c.kind === 'voice' ? voiceIn : dest);

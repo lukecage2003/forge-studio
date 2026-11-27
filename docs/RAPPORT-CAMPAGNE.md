@@ -85,6 +85,26 @@ Toutes vérifiées sur de vraies planches Watchmen.
 - **Ajouts** : Forge installable comme application ; coupe (S) et ajustements ([ ]) au curseur ; aimantation sur tous les bords ; miniatures dans les blocs de calques ; calques proposés d'après le script.
 - **Fichiers PNG du logo** (`brand-kit/logo-forge-*.png`) : ils sont défectueux, ce sont des captures d'une image cassée. Le problème existait déjà. Les icônes de l'application sont générées depuis `favicon.svg`.
 
+## Suite : finition pro et économies d'API
+- **Finition pro** (`src/engine/pro.ts`) : interrupteur du montage automatique, activé par défaut, et commande « Finition pro ». Elle ne touche que les plans automatiques que tu n'as jamais modifiés, et chaque plan dit pourquoi il a changé.
+  - Impacts sur les onomatopées (BOOM, KRAK…) : la case secoue, zoome sur le mot quand le lettrage a été lu, et reçoit un son d'impact.
+  - Rythme selon l'émotion : coupes sèches pour l'action, fondus lents pour l'émotion.
+  - Bandeau du nom à la première fois qu'un personnage est nommé par la voix.
+  - Cartons de chapitre noir et jaune au début de chaque séquence du directeur.
+  - Variété : jamais trois fois le même mouvement de caméra d'affilée.
+  - La musique suit l'histoire : plus forte sur les révélations et les combats, plus douce pendant les explications. Cela vaut pour l'aperçu et l'export.
+  - Fin en boucle (formats verticaux) : la dernière demi-seconde fond vers la première image.
+- **Couverture TikTok automatique** : le bouton « Choix auto » prend les deux cases les plus fortes (grandes, avec des personnages, peu de bulles).
+- **Contrôle « première seconde »** dans la revue : ouverture sur un carton, transition depuis le noir, image fixe, voix qui commence tard. Chaque point propose une correction.
+- **Moins d'appels payants** :
+  - une réponse déjà obtenue est réutilisée, quel que soit le fournisseur ;
+  - la même demande envoyée deux fois en même temps ne part qu'une fois ;
+  - une transcription déjà faite du même son n'est pas refaite ;
+  - les espaces inutiles sont retirés des requêtes ;
+  - le cache passe de 60 à 200 réponses ;
+  - les instructions système sont mises en cache chez Anthropic.
+- **Non testé** : l'économie réelle sur une vraie clé API (pas de clé ici), et le rendu de la musique variable à l'oreille.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`

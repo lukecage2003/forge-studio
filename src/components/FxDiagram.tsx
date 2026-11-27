@@ -49,7 +49,7 @@ export function PanelPicker({ onPick, onClose }: { onPick: (pageId: string, rect
 /* ------------------------------------------------------------- effects */
 
 export const FX_LABEL: Record<FxKind, string> = {
-  textBehind: 'Texte derrière moi', panelBehind: 'Case derrière moi', callout: 'Mot choc', bgBlur: 'Fond flou', bgHalftone: 'Fond trame',
+  textBehind: 'Texte derrière moi', panelBehind: 'Case derrière moi', callout: 'Mot choc', bgBlur: 'Fond flou', bgHalftone: 'Fond trame', chapter: 'Chapitre',
 };
 
 export function FxAdd() {

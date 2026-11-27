@@ -220,7 +220,10 @@ function drawVerticalThumb(b: Brand, title: string, layout: ThumbLayout, a: HTML
   spacedTitle(x, title, W / 2, H * 0.24, W * 0.9, 240, b.ink);
   const place = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.95) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
   // characters big, bottom at 84 % (the caption and the buttons cover the last part of the screen)
-  if (a && c2 && layout !== 'solo') { place(a, W * 0.3, H * 0.84, H * 0.5); place(c2, W * 0.7, H * 0.86, H * 0.56); }
+  // two characters stacked, the second lower and slightly to the right, each up to 92 % of the width:
+  // the frame stays full whether the pictures are tall cut-outs or wide panels
+  const fit = (s: HTMLCanvasElement, cx: number, bottom: number, h: number) => { const k = Math.min(h / s.height, (W * 0.92) / s.width); x.drawImage(s, cx - (s.width * k) / 2, bottom - s.height * k, s.width * k, s.height * k); };
+  if (a && c2 && layout !== 'solo') { fit(a, W * 0.46, H * 0.6, H * 0.28); fit(c2, W * 0.54, H * 0.88, H * 0.3); }
   else if (a) place(a, W / 2, H * 0.86, H * 0.58);
   if (logo) drawLogo(x, b, 40, H * 0.06, 140);
   return cv;

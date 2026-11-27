@@ -165,7 +165,7 @@ export interface DiagramLink { a: number; b: number; label?: string; status?: Ce
 export interface Diagram { kind: DiagramKind; title: string; items: DiagramItem[]; links: DiagramLink[]; /** the map image (a page or a part of one), for map diagrams */ map?: { pageId: string; rect: Rect } }
 
 /** Effects on the face cam (need the person cut-out for the "behind me" ones). */
-export type FxKind = 'textBehind' | 'panelBehind' | 'callout' | 'bgBlur' | 'bgHalftone';
+export type FxKind = 'textBehind' | 'panelBehind' | 'callout' | 'bgBlur' | 'bgHalftone' | 'chapter';
 export interface FxItem {
   id: string; kind: FxKind; start: number; duration: number;
   text?: string; color?: string; y?: number; size?: number;
@@ -313,6 +313,10 @@ export interface Project {
   /** look of diagrams and maps: 'encre' = printed comic (ink, halftone, captions), 'neon' = the earlier dark cards */
   diagramStyle?: 'encre' | 'neon';
   fx: FxItem[];
+  /** the last 0.45 s melt into the first frame: the video loops on itself (engine/pro) */
+  loopEnd?: boolean;
+  /** music gain over time [seconds, gain] following the story (engine/pro musicCurve) */
+  musicCurve?: [number, number][];
   /** episode number in a series (series mode): numbered titles and publication text */
   episode?: number;
   /** overlay tracks above the main track (absent in projects before schema 3) */

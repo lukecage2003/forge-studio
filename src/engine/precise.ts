@@ -40,7 +40,24 @@ function targets(c: string, p: Project, selected?: string | null): string[] {
   return [...new Set(ids)];
 }
 
+/** several requests in one message (« plan 3 : 4 s, transition fondu et zoom avant ») are read one by one;
+ * a part that names no shot is about the shots of the part before */
 export function parsePrecise(command: string, p: Project, selected?: string | null): PreciseProposal[] | null {
+  const parts = command.split(/\s*(?:,(?!\s*\d)|;|\bet\b(?!\s*\d)|\bpuis\b)\s*(?=[^»”"]*(?:[«“"][^»”"]*[»”"][^»”"]*)*$)/i).filter((x) => x.trim());
+  if (parts.length <= 1) return parseOne(command, p, selected);
+  const out: PreciseProposal[] = [];
+  let last = selected ?? null; let lastPlan = '';
+  for (const part of parts) {
+    const named = /(?:plans?|cases?)\s+\d/.test(part.toLowerCase());
+    const r = parseOne(named ? part : `${part} ${lastPlan}`, p, last);
+    const m = part.toLowerCase().match(/(?:plans?|cases?)\s+((?:\d+(?:\s*(?:à|-)\s*\d+)?))/);
+    if (m) lastPlan = `plan ${m[1]}`;
+    if (r) { out.push(...r); const id = r.map((x) => (x as { shotId?: string }).shotId).find(Boolean); if (id) last = id; }
+  }
+  return out.length ? out : parseOne(command, p, selected);
+}
+
+function parseOne(command: string, p: Project, selected?: string | null): PreciseProposal[] | null {
   const c = command.toLowerCase().replace(/[’']/g, "'");
   const out: PreciseProposal[] = [];
   const quoted = [...command.matchAll(/[«"“]\s*([^»"”]+?)\s*[»"”]/g)].map((m) => m[1]);

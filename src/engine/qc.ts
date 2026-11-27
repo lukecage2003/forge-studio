@@ -11,6 +11,7 @@ import type { SeqType } from './director';
 import { narration } from './narration';
 import { buildSubtitles, timelineWords } from './auto';
 import { applyNameFixes, hookCandidate, nameFixes, openWith, repeatedPanels } from './polish';
+import { firstSecondIssues } from './pro';
 
 /**
  * Pre-export check: everything that would look or sound wrong once on
@@ -244,6 +245,9 @@ export function checkProject(p: Project): Issue[] {
   for (const r of repeatedPanels(p).slice(0, 3)) out.push({ level: 'warn', text: `La même case revient ${r.shots.length} fois (${r.times.map((t) => t.toFixed(0) + ' s').join(', ')}) : le public la reconnaît, varie avec une autre case.`, at: r.times[1] ?? r.times[0] });
   const names = nameFixes(p);
   if (names.length) out.push({ level: 'warn', text: `Noms mal orthographiés dans les sous-titres : ${names.slice(0, 4).map((f) => `« ${f.from} » → « ${f.to} »`).join(', ')}.`, fix: { label: 'Corriger les noms', apply: (x) => ({ ...x, subtitles: applyNameFixes(x.subtitles, nameFixes(x)) }) } });
+  // the first second decides whether a viewer stays (engine/pro)
+  out.push(...firstSecondIssues(p));
+  if (p.format === '9:16' && !p.loopEnd && !p.aroll && dur > 8) out.push({ level: 'warn', text: 'Fin : la vidéo ne boucle pas ; sur TikTok, une fin qui retombe sur la première image se revoit en boucle.', fix: { label: 'Fin en boucle', apply: (x) => ({ ...x, loopEnd: true }) } });
   return out;
 }
 

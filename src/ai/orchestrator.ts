@@ -74,14 +74,45 @@ export interface RunResult { answer: AiAnswer; provider: ProviderId; model: stri
 
 const cost = (m: ModelInfo | null, a: AiAnswer) => (m?.price ? ((a.usage?.inputTokens ?? 0) * m.price.input + (a.usage?.outputTokens ?? 0) * m.price.output) / 1e6 : 0);
 
+/** fewer tokens for the same request: trailing spaces and runs of blank lines removed (meaning unchanged) */
+export const compact = (s?: string) => s?.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim();
+async function audioHash(b?: Blob) {
+  if (!b) return null;
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', await b.arrayBuffer()));
+  return [...d.slice(0, 16)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+/** the same request asked twice at once is sent once */
+const inflight = new Map<string, Promise<RunResult>>();
+
 export async function run(task: AiTask & { local?: () => Promise<AiAnswer> }, signal?: AbortSignal): Promise<RunResult> {
+  task = { ...task, system: compact(task.system), prompt: compact(task.prompt) };
+  const key = task.fresh ? null : await hashOf(JSON.stringify([task.kind, task.system, task.prompt, task.images, await audioHash(task.audio), task.language]));
+  if (!key) return runOnce(task, null, signal);
+  const going = inflight.get(key);
+  if (going) return going;
+  const pr = runOnce(task, key, signal).finally(() => inflight.delete(key));
+  inflight.set(key, pr);
+  return pr;
+}
+
+async function runOnce(task: AiTask, key: string | null, signal?: AbortSignal): Promise<RunResult> {
   // OpenRouter: read the catalogue (with prices) before choosing, so « free » is checked, not assumed
   if (routeFor(task.kind).includes('openrouter') && getConfig().providers.openrouter.enabled && hasKey('openrouter') && !modelsOf('openrouter').length) {
     try { await refreshModels('openrouter', signal); } catch { /* keep the hint */ }
   }
   const steps = plan(task);
   const attempts: AttemptLog[] = [];
-  const key = task.fresh ? null : await hashOf(JSON.stringify([task.kind, task.system, task.prompt, task.images?.length, task.audio?.size, task.language]));
+  // an answer already paid for, by any provider of the route, is reused before anything is sent
+  if (key) for (const st of steps) {
+    if (st.skip || st.provider === 'local') continue;
+    const hit = cacheGet(`${key}:${st.provider}:${st.model!.id}`);
+    if (hit) {
+      const log = { provider: st.provider, model: st.model!.id, ok: true, ms: 0, cached: true };
+      attempts.push(log);
+      logAttempt({ ...log, t: new Date().toISOString(), task: task.kind, sent: [] });
+      return { answer: JSON.parse(hit) as AiAnswer, provider: st.provider, model: st.model!.id, attempts, cached: true };
+    }
+  }
   for (const st of steps) {
     if (st.skip) continue;
     const p = st.provider, m = st.model!;
@@ -96,15 +127,7 @@ export async function run(task: AiTask & { local?: () => Promise<AiAnswer> }, si
         setConfig((c) => ({ ...c, consent: { ...c.consent, [p]: [...new Set([...(c.consent[p] ?? []), ...missing])] } }));
       }
     }
-    const ck = key ? `${key}:${p}:${m.id}` : null;
-    const hit = ck ? cacheGet(ck) : null;
-    if (hit) {
-      const answer = JSON.parse(hit) as AiAnswer;
-      const log = { provider: p, model: m.id, ok: true, ms: 0, cached: true };
-      attempts.push(log);
-      logAttempt({ ...log, t: new Date().toISOString(), task: task.kind, sent: [] });
-      return { answer, provider: p, model: m.id, attempts, cached: true };
-    }
+    const ck = key && p !== 'local' ? `${key}:${p}:${m.id}` : null;
     const t0 = performance.now();
     try {
       const answer = await slot(p, async () => {

@@ -70,7 +70,11 @@ export function cacheGet(k: string, maxAgeH = 24 * 7): string | null {
 }
 export function cachePut(k: string, v: string) {
   if (v.length > 200_000) return;
-  cache = [{ k, v, t: Date.now() }, ...cache.filter((x) => x.k !== k)].slice(0, 60);
+  // up to 200 answers, within 1.5 MB of browser storage (oldest dropped first)
+  let next = [{ k, v, t: Date.now() }, ...cache.filter((x) => x.k !== k)].slice(0, 200);
+  let size = 0;
+  next = next.filter((e) => (size += e.v.length) <= 1_500_000);
+  cache = next;
   save('forge.ai.cache', cache);
 }
 export function clearCache() { cache = []; save('forge.ai.cache', cache); }
