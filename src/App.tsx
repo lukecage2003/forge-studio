@@ -30,8 +30,8 @@ import { Toasts, toast } from './components/Toast';
 import { StaleVersion } from './components/StaleVersion';
 import { installStaleHandlers } from './lib/staleVersion';
 import { onSchemaNotice } from './lib/schema';
-import { getState, loadProject, redo, setUI, undo, useStore } from './store';
-import { deleteSelection, importAudioFiles, importPages } from './actions';
+import { getState, loadProject, redo, restoreHistory, setUI, undo, useStore } from './store';
+import { deleteSelection, importAudioFiles, importPages, splitAtPlayhead, trimToPlayhead } from './actions';
 import { idb } from './lib/db';
 import { isComicFile } from './engine/importers';
 import { ensureMedia, ensureVideo } from './engine/media';
@@ -79,6 +79,8 @@ export default function App() {
             ...(p.aroll ? [ensureVideo(p.aroll.mediaId)] : []),
           ]);
           loadProject(p);
+          // Ctrl+Z works across sessions: the undo history of this project is put back
+          void restoreHistory();
           if (p.aroll) void analysisOf(p.aroll).catch(() => {});
         }
       } catch { /* first run */ }
@@ -86,6 +88,8 @@ export default function App() {
       try {
         const { initStudio } = await import('./lib/studio');
         const r = await initStudio();
+        // the workspace may have reopened its own copy of the project: the undo history goes back after it
+        await restoreHistory();
         // the toast area exists once the app is shown: tell it on the next frame
         const msg = r.recovered ? 'Dernières modifications récupérées après une fermeture inattendue' : r.loadedFromDisk ? 'Version plus récente du projet ouverte depuis le dossier' : '';
         if (msg) window.setTimeout(() => toast(msg), 300);
@@ -113,6 +117,10 @@ export default function App() {
       if (e.key === 'ArrowRight') { e.preventDefault(); seek(ui.playhead + (e.shiftKey ? 1 : 1 / project.fps)); return; }
       if (e.key === 'Escape') setUI({ selection: null });
       if (e.key.toLowerCase() === 'a' && !mod) setUI({ autoOpen: true });
+      // precise editing at the playhead: S cuts the selection in two, [ and ] trim its start or end
+      if (e.key.toLowerCase() === 's' && !mod) { e.preventDefault(); splitAtPlayhead(); return; }
+      if (e.key === '[' && !mod) { e.preventDefault(); trimToPlayhead('start'); return; }
+      if (e.key === ']' && !mod) { e.preventDefault(); trimToPlayhead('end'); return; }
       if (e.key === '1') setUI({ mode: 'rush' });
       if (e.key === '2') setUI({ mode: 'cut' });
       if (e.key === '3') setUI({ mode: 'preview' });

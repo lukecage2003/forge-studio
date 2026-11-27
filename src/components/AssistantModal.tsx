@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { PLACE_FR } from '../engine/overlays';
+import { addOverlay } from '../actions';
+import { useEffect, useState } from 'react';
 import { MessageSquareText, X, Loader2, Check, Lightbulb, Send } from 'lucide-react';
-import { getState, setUI, update } from '../store';
+import { useStore, getState, setUI, update } from '../store';
 import { aiAssistant, type Proposal } from '../ai/tasks';
 import { INFO } from '../ai/providers';
 import { addFx, addTitleCard, acceptSuggestion } from '../actions';
@@ -22,6 +24,7 @@ function describe(p: Proposal): string {
     case 'visual.suggest': return `${p.kind === 'chronologie' ? 'Frise' : p.kind === 'reseau' ? 'Carte des relations' : p.kind === 'versus' ? 'Duel' : p.kind === 'echelle' ? 'Échelle' : 'Citation'} « ${p.title} » à ${p.at.toFixed(1)} s (${p.items.map((i) => i.label).join(', ')})`;
     case 'rush.cut': return `Couper le rush de ${p.s.toFixed(2)} à ${p.e.toFixed(2)} s`;
     case 'note': return p.text;
+    case 'overlay.add': return `Calque ${PLACE_FR[p.place].toLowerCase()} à ${p.at.toFixed(1)} s pendant ${p.duration.toFixed(1)} s`;
   }
 }
 
@@ -34,6 +37,7 @@ function apply(p: Proposal) {
     case 'visual.suggest': acceptSuggestion({ id: 'as' + Date.now(), kind: p.kind as 'chronologie', passages: [], title: p.title, detail: p.raison ?? '', items: p.items, at: p.at }); break;
     case 'rush.cut': addManualCut(p.s, p.e, 'assistant'); break;
     case 'note': break;
+    case 'overlay.add': addOverlay({ kind: 'panel', pageId: p.pageId, rect: p.rect }, { start: p.at, duration: p.duration, place: p.place, enter: p.place === 'pip' ? 'pop' : 'slide', fade: 0.35 }); break;
   }
 }
 
@@ -53,6 +57,9 @@ export function AssistantModal() {
     } catch (e) { toast((e as Error).message, 'error'); }
     setBusy(false);
   };
+  // opened by a command with a request: run it at once
+  const pending = useStore((s) => s.ui.assistantAsk);
+  useEffect(() => { if (pending) { setCmd(pending); setUI({ assistantAsk: undefined }); void ask(pending); } }, [pending]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="modal assistant-modal" role="dialog" aria-labelledby="as-title">

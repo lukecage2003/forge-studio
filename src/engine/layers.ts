@@ -1,6 +1,7 @@
 import type { Project, Rect, Shot } from '../types';
 import { getImage, notifyMedia } from './media';
 import { depthOf } from './vision';
+import { idb } from '../lib/db';
 
 /**
  * 2.5D motion-comic layers for a panel: the closest elements (characters,
@@ -27,13 +28,33 @@ export async function ensureLayers(p: Project, s: Shot, onLoad?: (pr: number) =>
   if (cache.has(k)) return;
   cache.set(k, 'pending');
   try {
-    const depth = await depthOf(a.img, s.rect, onLoad);
+    const depth = (await storedDepth(k)) ?? (await depthOf(a.img, s.rect, onLoad).then((d) => { if (d) void storeDepth(k, d); return d; }));
+    if (!depth) { cache.set(k, 'none'); return; }
     const L = build(a.img, s.rect, depth);
     cache.set(k, L ?? 'none');
     if (L) notifyMedia();
   } catch {
     cache.set(k, 'none');
   }
+}
+
+/*
+ * The depth map is the only costly part (the local depth model, about a second per
+ * panel without a graphics card): it is kept in the browser, a small grey picture per
+ * panel, so the first export after a reload does not run the model again.
+ */
+async function storedDepth(k: string): Promise<HTMLCanvasElement | null> {
+  try {
+    const b = await idb.get<Blob>('media', 'depth:' + k);
+    if (!b) return null;
+    const bmp = await createImageBitmap(b);
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close();
+    return c;
+  } catch { return null; }
+}
+async function storeDepth(k: string, c: HTMLCanvasElement) {
+  try { const b = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png')); if (b) await idb.put('media', 'depth:' + k, b); } catch { /* storage full: computed again next time */ }
 }
 
 function build(img: CanvasImageSource, r: Rect, depth: HTMLCanvasElement): Layers | null {

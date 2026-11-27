@@ -83,3 +83,20 @@ describe('calques : placement conseillé, mouvement, entrées', () => {
     expect(overlayAlpha({ ...o, enter: 'fade' }, 0.25)).toBeCloseTo(0.5);
   });
 });
+
+describe('calques proposés d’après le script', () => {
+  it('comparaison → deux cases côte à côte ; « pendant ce temps » → incrustation ; rien sur un calque déjà posé', async () => {
+    const { suggestOverlays } = await import('../src/engine/overlaySuggest');
+    const { newShot } = await import('../src/store');
+    const base = newProject();
+    const pages = [{ id: 'pa', mediaId: 'a', name: 'a', width: 1000, height: 1500 }, { id: 'pb', mediaId: 'b', name: 'b', width: 1000, height: 1500 }] as never;
+    const shots = [0, 1, 2, 3].map((i) => newShot(base, { id: `s${i}`, pageId: i < 2 ? 'pa' : 'pb', rect: { x: 0, y: i * 300, w: 1000, h: 300 }, duration: 4 }));
+    const script = 'Galactus arrive sur Terre. Le Surfeur est fort, alors que Galactus est immense. Pendant ce temps, les Quatre Fantastiques préparent une arme. Tout se joue maintenant.';
+    const p: Project = { ...base, pages, shots, script };
+    const r = suggestOverlays(p);
+    expect(r.map((x) => x.place)).toEqual(['bottom', 'pip']);
+    expect(r[0].pageId).toBe('pb'); // a panel of the other page
+    expect(r[0].raison).toMatch(/comparaison/);
+    expect(suggestOverlays({ ...p, overlays: [ov({ start: 0, duration: 60 })] })).toEqual([]);
+  });
+});

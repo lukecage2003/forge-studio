@@ -52,6 +52,8 @@ export interface UIState {
   studioPanel?: boolean;
   /** dragging a free overlay in the preview sets its end position (its movement) */
   overlayEditEnd?: boolean;
+  /** a request the assistant runs as it opens (from a command) */
+  assistantAsk?: string;
 }
 
 export const defaultCaption = (): Omit<Caption, 'text'> => ({ preset: 'tiktok', anim: 'pop', y: 0.78, size: 1 });
@@ -166,8 +168,39 @@ async function journal() {
 /** write now (before switching project, before a version) */
 export const flushSave = () => journal();
 
+/* ------------------------------------------------- undo history kept across sessions
+   The last HIST states before and after are written per project, every 20 s when
+   they changed and when Forge goes to the background (not on every edit: cheap). */
+const HIST = 30;
+let histDirty = false;
+export const historyOf = () => ({ past: state.past.slice(-HIST), future: state.future.slice(0, HIST) });
+export async function saveHistory() {
+  if (!histDirty) return;
+  histDirty = false;
+  const { past, future } = historyOf();
+  await idb.put('projects', '__history:' + state.project.id, { id: state.project.id, past, future }).catch(() => { histDirty = true; });
+}
+/** put back the undo history of this project (from the browser, or from a .forge file) */
+export function setHistory(past: Project[], future: Project[] = []) {
+  const fix = (x: Project) => migrate(upgrade(x).project);
+  state = { ...state, past: past.slice(-HIST).map(fix), future: future.slice(0, HIST).map(fix) };
+  emit();
+}
+export async function restoreHistory(id = state.project.id): Promise<number> {
+  const h = await idb.get<{ id: string; past: Project[]; future: Project[] }>('projects', '__history:' + id).catch(() => undefined);
+  if (!h || h.id !== state.project.id || state.past.length) return 0;
+  setHistory(h.past ?? [], h.future ?? []);
+  return state.past.length;
+}
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.setInterval(() => void saveHistory(), 20000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void saveHistory(); });
+  window.addEventListener('pagehide', () => void saveHistory());
+}
+
 /** Mutate the project. `key` coalesces rapid edits (sliders, drags) into a single undo step. */
 export function update(fn: (p: Project) => Project, key?: string) {
+  histDirty = true;
   const now = performance.now();
   const coalesce = key && key === lastKey && now - lastAt < 800;
   lastKey = key ?? '';
@@ -191,6 +224,7 @@ export function setUI(patch: Partial<UIState>) {
 }
 
 export function undo() {
+  histDirty = true;
   const prev = state.past[state.past.length - 1];
   if (!prev) return;
   state = { ...state, project: prev, past: state.past.slice(0, -1), future: [state.project, ...state.future] };
@@ -199,6 +233,7 @@ export function undo() {
   scheduleSave();
 }
 export function redo() {
+  histDirty = true;
   const nxt = state.future[0];
   if (!nxt) return;
   state = { ...state, project: nxt, future: state.future.slice(1), past: [...state.past, state.project] };

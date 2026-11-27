@@ -696,3 +696,84 @@ export async function addFromLibrary(items: { id: string; name: string; width?: 
   toast(`${pages.length} page${pages.length > 1 ? 's' : ''} ajoutée${pages.length > 1 ? 's' : ''} depuis la médiathèque (lecture des cases en cours)`);
   return pages.length;
 }
+
+
+/* ---------------------------------------------------------------- precise editing at the playhead */
+
+/** S: cut the selected shot, overlay, sound clip or effect in two at the playhead (one undo step) */
+export function splitAtPlayhead(): boolean {
+  const { ui, project } = getState();
+  const t = ui.playhead, sel = ui.selection;
+  if (!sel || !('id' in sel)) { toast('Sélectionne un plan, un calque, un son ou un effet à couper.', 'error'); return false; }
+  const inside = (s: number, d: number) => t > s + 0.05 && t < s + d - 0.05;
+  if (sel.kind === 'shot') {
+    const ts = layoutShots(project).find((x) => x.shot.id === sel.id);
+    if (!ts || !inside(ts.start, ts.shot.duration)) { toast('Place le curseur dans le plan à couper.', 'error'); return false; }
+    const a = t - ts.start;
+    const second: Shot = { ...ts.shot, id: uid('s_'), duration: ts.shot.duration - a, transition: 'cut', ...(ts.shot.start != null ? { start: ts.shot.start + a } : {}) };
+    update((p) => { const i = p.shots.findIndex((x) => x.id === sel.id); const shots = [...p.shots]; shots.splice(i, 1, { ...p.shots[i], duration: a }, second); return { ...p, shots }; });
+    return true;
+  }
+  if (sel.kind === 'overlay') {
+    const o = project.overlays?.find((x) => x.id === sel.id);
+    if (!o || !inside(o.start, o.duration)) { toast('Place le curseur dans le calque à couper.', 'error'); return false; }
+    const a = t - o.start;
+    const src = o.source.kind === 'video' ? { ...o.source, offset: o.source.offset + a } : o.source;
+    const second: Overlay = { ...o, id: uid('ov_'), start: t, duration: o.duration - a, source: src, soundClip: undefined, box: o.boxEnd ?? o.box, boxEnd: undefined };
+    update((p) => ({ ...p, overlays: (p.overlays ?? []).flatMap((x) => (x.id === o.id ? [{ ...x, duration: a }, second] : [x])) }));
+    return true;
+  }
+  if (sel.kind === 'audio') {
+    const c = project.audio.find((x) => x.id === sel.id);
+    if (!c || !inside(c.start, c.duration)) { toast('Place le curseur dans le son à couper.', 'error'); return false; }
+    const a = t - c.start;
+    update((p) => ({ ...p, audio: p.audio.flatMap((x) => (x.id === c.id ? [{ ...x, duration: a, fadeOut: 0.05 }, { ...x, id: uid('a_'), start: t, offset: x.offset + a, duration: x.duration - a, fadeIn: 0.05, words: x.words }] : [x])) }));
+    return true;
+  }
+  if (sel.kind === 'fx') {
+    const f = project.fx.find((x) => x.id === sel.id);
+    if (!f || !inside(f.start, f.duration)) { toast('Place le curseur dans l’effet à couper.', 'error'); return false; }
+    const a = t - f.start;
+    update((p) => ({ ...p, fx: p.fx.flatMap((x) => (x.id === f.id ? [{ ...x, duration: a }, { ...x, id: uid('fx_'), start: t, duration: x.duration - a }] : [x])) }));
+    return true;
+  }
+  return false;
+}
+
+/** [ and ]: the selected element starts (or ends) at the playhead */
+export function trimToPlayhead(side: 'start' | 'end'): boolean {
+  const { ui, project } = getState();
+  const t = ui.playhead, sel = ui.selection;
+  if (!sel || !('id' in sel)) return false;
+  const trim = (s: number, d: number) => {
+    const end = s + d;
+    if (side === 'start') return t < end - 0.1 ? { start: Math.max(0, t), duration: end - Math.max(0, t), cut: Math.max(0, t) - s } : null;
+    return t > s + 0.1 ? { start: s, duration: t - s, cut: 0 } : null;
+  };
+  if (sel.kind === 'overlay') {
+    const o = project.overlays?.find((x) => x.id === sel.id); const r = o && trim(o.start, o.duration);
+    if (!o || !r) return false;
+    const src = o.source.kind === 'video' ? { ...o.source, offset: Math.max(0, o.source.offset + r.cut) } : o.source;
+    patchOverlay(o.id, { start: r.start, duration: r.duration, source: src });
+    return true;
+  }
+  if (sel.kind === 'audio') {
+    const c = project.audio.find((x) => x.id === sel.id); const r = c && trim(c.start, c.duration);
+    if (!c || !r) return false;
+    update((p) => ({ ...p, audio: p.audio.map((x) => (x.id === c.id ? { ...x, start: r.start, duration: r.duration, offset: Math.max(0, x.offset + r.cut) } : x)) }));
+    return true;
+  }
+  if (sel.kind === 'fx') {
+    const f = project.fx.find((x) => x.id === sel.id); const r = f && trim(f.start, f.duration);
+    if (!f || !r) return false;
+    update((p) => ({ ...p, fx: p.fx.map((x) => (x.id === f.id ? { ...x, start: r.start, duration: r.duration } : x)) }));
+    return true;
+  }
+  if (sel.kind === 'shot' && side === 'end') {
+    const ts = layoutShots(project).find((x) => x.shot.id === sel.id);
+    if (!ts || t <= ts.start + 0.3) return false;
+    update((p) => ({ ...p, shots: p.shots.map((x) => (x.id === sel.id ? { ...x, duration: t - ts.start } : x)) }));
+    return true;
+  }
+  return false;
+}

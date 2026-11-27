@@ -117,7 +117,8 @@ export function Timeline() {
   };
 
   /* -------- audio drag: move / trim */
-  const snapPoints = () => [0, getState().ui.playhead, ...segs.map((g) => g.t), ...layoutShots(getState().project).flatMap((t) => [t.start, t.end])];
+  // shot cuts, the playhead, the rush cuts, and the edges of overlays, effects and sounds
+  const snapPoints = () => { const pr = getState().project; return [0, getState().ui.playhead, ...segs.map((g) => g.t), ...layoutShots(pr).flatMap((t) => [t.start, t.end]), ...(pr.overlays ?? []).flatMap((o) => [o.start, o.start + o.duration]), ...pr.fx.flatMap((f) => [f.start, f.start + f.duration]), ...pr.audio.flatMap((c) => [c.start, c.start + c.duration])]; };
   const snap = (t: number) => {
     for (const p of snapPoints()) if (Math.abs(p - t) * pps < 7) return p;
     return t;
@@ -226,6 +227,7 @@ export function Timeline() {
                     window.addEventListener('pointermove', mv);
                     window.addEventListener('pointerup', up);
                   }}>
+                  <OverlayThumb o={o} />
                   <span>{o.source.kind === 'panel' ? 'Case' : o.source.name ?? (o.source.kind === 'image' ? 'Image' : 'Vidéo')}</span>
                   <div className="trim r" />
                 </div>
@@ -354,4 +356,16 @@ function ClipBlock({ clip, pps, on, onDown }: {
       <div className="trim r" onPointerDown={(e) => onDown(e, 'r')} />
     </div>
   );
+}
+
+/** the picture of an overlay, small, in its timeline block (a video shows its name only) */
+function OverlayThumb({ o }: { o: import('../types').Overlay }) {
+  const pages = useStore((s) => s.project.pages);
+  if (o.source.kind === 'video') return null;
+  if (o.source.kind === 'image') { const a = getImage(o.source.mediaId); return a ? <i className="ov-thumb" style={{ backgroundImage: `url(${a.url})`, backgroundSize: 'cover' }} /> : null; }
+  const src = o.source;
+  const pg = pages.find((p) => p.id === src.pageId); const a = pg && getImage(pg.mediaId);
+  if (!a) return null;
+  const k = 12 / Math.max(1, src.rect.h);
+  return <i className="ov-thumb" style={{ backgroundImage: `url(${a.url})`, backgroundSize: `${a.width * k}px ${a.height * k}px`, backgroundPosition: `${-src.rect.x * k}px ${-src.rect.y * k}px`, width: Math.max(8, Math.min(28, src.rect.w * k)) }} />;
 }

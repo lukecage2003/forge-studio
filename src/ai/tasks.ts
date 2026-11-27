@@ -3,6 +3,7 @@
  * the remote route, and the same job done by Forge itself offline. Results
  * are proposals; nothing is applied without the user.
  */
+import { suggestOverlays } from '../engine/overlaySuggest';
 import type { Project, Word } from '../types';
 import { run, extractJson, type RunResult } from './orchestrator';
 import { SYSTEM, analysePrompt, assistantPrompt, punctuatePrompt, reviewPrompt } from './prompts';
@@ -113,7 +114,8 @@ export type Proposal =
   | { type: 'title.add'; at: number; text: string; raison?: string }
   | { type: 'visual.suggest'; at: number; kind: string; title: string; items: { label: string; sub?: string }[]; raison?: string }
   | { type: 'rush.cut'; s: number; e: number; raison?: string }
-  | { type: 'note'; text: string };
+  | { type: 'note'; text: string }
+  | import('../engine/overlaySuggest').OverlayProposal;
 
 /** what the assistant sees of the edit: compact, no media */
 export function editContext(p: Project): string {
@@ -223,7 +225,8 @@ export function localAssistant(command: string, p: Project): { resume: string; p
     out.push({ type: 'note', text: first ? `Ton accroche : « ${first.text} ». ${first.text.split(' ').length > 18 ? 'Elle est longue : vise une phrase de moins de 15 mots, une question ou un chiffre fort.' : 'Elle est courte : garde un visuel fort dès la première seconde.'}` : 'Colle ton script pour que je juge l’accroche.' });
   }
   if (/sous-titre/.test(c)) out.push({ type: 'note', text: p.subtitles.length ? `${p.subtitles.length} lignes de sous-titres. Utilise « Corriger la ponctuation » dans l’inspecteur pour les relire.` : 'Transcris le rush (onglet Rush) pour générer les sous-titres.' });
-  if (!out.length) out.push({ type: 'note', text: 'L’assistant hors ligne comprend : passages trop longs, rythme, images à afficher, accroche, sous-titres. Branche une IA dans le centre de contrôle pour les autres demandes.' });
+  if (/calque|superpos|incrust|partag|côte à côte|split/.test(c)) { /* added by aiAssistant from suggestOverlays */ }
+  else if (!out.length) out.push({ type: 'note', text: 'L’assistant hors ligne comprend : passages trop longs, rythme, images à afficher, accroche, sous-titres, calques d’après le script. Branche une IA dans le centre de contrôle pour les autres demandes.' });
   return { resume: `${out.length} proposition(s) de l’assistant hors ligne.`, propositions: out };
 }
 
@@ -234,6 +237,10 @@ export async function aiAssistant(command: string, p: Project): Promise<{ resume
     local: async () => ({ text: JSON.stringify(localAssistant(command, p)) }),
   });
   const raw = JSON.parse(extractJson(via.answer.text));
-  return { resume: String(raw.resume ?? ''), proposals: validProposals(raw.propositions, p), via, context };
+  // overlays are proposed by the local reading of the script (deterministic, the user's own panels)
+  const ov = /calque|superpos|incrust|partag|côte à côte|split/i.test(command) ? suggestOverlays(p) : [];
+  const props = validProposals(raw.propositions, p);
+  const resume = ov.length ? `${ov.length} calque${ov.length > 1 ? 's' : ''} proposé${ov.length > 1 ? 's' : ''} d’après le script${props.length ? `, et ${String(raw.resume ?? '').toLowerCase()}` : '.'}` : /calque|superpos|incrust|partag/i.test(command) ? 'Aucun passage du script n’appelle un calque (comparaison, « pendant ce temps », rappel), ou un calque y est déjà.' : String(raw.resume ?? '');
+  return { resume, proposals: [...props, ...ov], via, context };
 }
 export const roleLabel = (r: string) => ROLE_FR[r as Role] ?? r;

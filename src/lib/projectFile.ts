@@ -37,12 +37,14 @@ export interface ForgeManifest { schemaVersion: number; appVersion: string; engi
  * Media are stored without recompression: images, sound and video already are.
  * The magic stays « @2 »: an older Forge still opens the project (and ignores the versions).
  */
-export async function saveProjectFile(p: Project, opts: { versions?: CarriedVersion[] } = {}): Promise<Blob> {
+export interface CarriedHistory { past: Project[]; future: Project[] }
+export async function saveProjectFile(p: Project, opts: { versions?: CarriedVersion[]; history?: CarriedHistory } = {}): Promise<Blob> {
   const files: Zippable = {};
   const types: Record<string, string> = {};
   const versions = opts.versions ?? [];
   const ids = new Set(mediaRefs(p).map((m) => m.id));
   for (const v of versions) { try { for (const m of mediaRefs(JSON.parse(v.text).project ?? {})) ids.add(m.id); } catch { /* unreadable version: kept as text */ } }
+  for (const h of [...(opts.history?.past ?? []), ...(opts.history?.future ?? [])]) for (const m of mediaRefs(h)) ids.add(m.id);
   const missing: string[] = [];
   for (const id of ids) {
     const b = await mediaBlob(id);
@@ -51,13 +53,15 @@ export async function saveProjectFile(p: Project, opts: { versions?: CarriedVers
     types[id] = b.type;
   }
   for (const v of versions) files[`versions/${v.file}`] = strToU8(v.text);
+  // the undo history (Ctrl+Z after reopening); its media are the project's or its versions' (no new bytes)
+  if (opts.history?.past.length || opts.history?.future.length) files['history.json'] = strToU8(JSON.stringify(opts.history));
   const manifest: ForgeManifest = { schemaVersion: p.schemaVersion ?? SCHEMA_VERSION, appVersion: APP_VERSION, engineVersions: { ...ENGINE_VERSIONS }, savedAt: new Date().toISOString(), versions: versions.length, media: ids.size - missing.length, missing };
   files['project.json'] = strToU8(JSON.stringify({ magic: MAGIC2, manifest, project: p, types }));
   return new Blob([zipSync(files)], { type: 'application/zip' });
 }
 
 /** read a .forge file: zip (version 2 and later) or version 1 (JSON with base64 media) */
-export async function readProjectFile(file: Blob): Promise<{ project: Project; media: Map<string, Blob>; versions: CarriedVersion[]; manifest: ForgeManifest | null }> {
+export async function readProjectFile(file: Blob): Promise<{ project: Project; media: Map<string, Blob>; versions: CarriedVersion[]; manifest: ForgeManifest | null; history: CarriedHistory | null }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const media = new Map<string, Blob>();
   const versions: CarriedVersion[] = [];
@@ -70,18 +74,20 @@ export async function readProjectFile(file: Blob): Promise<{ project: Project; m
       if (name.startsWith('media/')) { const id = name.slice(6); media.set(id, new Blob([b as Uint8Array<ArrayBuffer>], { type: data.types?.[id] ?? '' })); }
       else if (name.startsWith('versions/') && name.length > 9) versions.push({ file: name.slice(9), text: strFromU8(b as Uint8Array) });
     }
-    return { project: data.project, media, versions, manifest: data.manifest ?? null };
+    let history: CarriedHistory | null = null;
+    try { if (z['history.json']) history = JSON.parse(strFromU8(z['history.json'])); } catch { /* unreadable history: the project still opens */ }
+    return { project: data.project, media, versions, manifest: data.manifest ?? null, history };
   }
   const data = JSON.parse(strFromU8(bytes));
   if (data.magic !== MAGIC) throw new Error("Ce fichier n'est pas un projet Forge.");
   for (const [id, url] of Object.entries<string>(data.media ?? {})) media.set(id, await (await fetch(url)).blob());
-  return { project: data.project, media, versions, manifest: null };
+  return { project: data.project, media, versions, manifest: null, history: null };
 }
 
 /** media into the cache, decoded; returns what the studio needs to finish the opening */
-export async function openProjectFile(file: File): Promise<{ project: Project; versions: CarriedVersion[]; manifest: ForgeManifest | null }> {
-  const { project, media, versions, manifest } = await readProjectFile(file);
+export async function openProjectFile(file: File): Promise<{ project: Project; versions: CarriedVersion[]; manifest: ForgeManifest | null; history: CarriedHistory | null }> {
+  const { project, media, versions, manifest, history } = await readProjectFile(file);
   for (const [id, blob] of media) await putMediaBlob(id, blob);
   await loadMediaOf(project);
-  return { project, versions, manifest };
+  return { project, versions, manifest, history };
 }

@@ -66,3 +66,24 @@ describe('fichier .forge avec manifeste et versions', () => {
     expect(r.manifest?.missing).toEqual(['disparu']);
   });
 });
+
+describe('historique d’annulation dans le .forge', () => {
+  it('emporte l’historique et les médias qu’il utilise, puis le relit', async () => {
+    const p: Project = { ...newProject(), name: 'Après', pages: [{ id: 'pg', mediaId: 'img1' } as never] };
+    const before: Project = { ...p, name: 'Avant', pages: [{ id: 'pg0', mediaId: 'old' } as never] };
+    const r = await readProjectFile(await saveProjectFile(p, { history: { past: [before], future: [] } }));
+    expect(r.history?.past[0].name).toBe('Avant');
+    expect(await r.media.get('old')?.text()).toBe('ancienne-page');
+  });
+  it('un fichier sans historique s’ouvre comme avant', async () => {
+    const r = await readProjectFile(await saveProjectFile({ ...newProject() }));
+    expect(r.history).toBeNull();
+  });
+  it('l’historique remis en place permet Ctrl+Z', async () => {
+    const st = await import('../src/store');
+    st.loadProject({ ...newProject(), name: 'Maintenant' });
+    st.setHistory([{ ...newProject(), name: 'Hier' }]);
+    st.undo();
+    expect(st.getState().project.name).toBe('Hier');
+  });
+});

@@ -258,6 +258,16 @@ Au-dessus de la piste principale, trois pistes de calques reçoivent une case, u
 
 **Diagnostic de ton PC** : *Réglages → Performance de cet ordinateur → Mesurer*, puis *Rapport « mon PC »* : mesures, carte graphique, encodeurs, place disponible, conseils, dans un fichier texte (rien n'est envoyé). L'aperçu et l'export sont identiques (même moteur de rendu, vérifié image par image dans `tests/e2e/overlays.e2e.cjs`).
 
+## Installer Forge comme une application (Windows)
+
+Dans Chrome ou Edge : icône « Installer » dans la barre d'adresse, ou *Ctrl K → Installer Forge comme application*. Forge s'ouvre alors dans sa propre fenêtre, sans onglets ni favoris (≈ 90 px de hauteur en plus pour la planche et la timeline). Les mises à jour arrivent toujours en ligne : rien n'est gardé hors ligne.
+
+## Montage précis et annulation
+
+- **S** coupe l'élément sélectionné (plan, calque, son, effet) au curseur ; **[** et **]** placent son début ou sa fin au curseur. Les bords s'aimantent aux plans, calques, effets et sons.
+- **Ctrl+Z** fonctionne après un rechargement de la page et dans un projet rouvert depuis un `.forge` (les 30 dernières étapes sont gardées).
+- **Calques d'après le script** : *Ctrl K → Proposer des calques d'après le script*. Une comparaison (« alors que », « face à »…) propose deux cases côte à côte, « pendant ce temps » une incrustation de l'autre lieu, « plus tôt » une case d'avant ; chaque proposition se valide ou se refuse.
+
 ## Studios
 
 La barre sous le menu regroupe les outils par étape : Production, Recherche et script, Visuel, Montage, Son, Animation et sous-titres, Finition, Publication. Ce ne sont pas des applications séparées : les huit travaillent sur le même projet. Chaque studio dit ce qu'il reste à faire, lu dans le projet (un point vert quand l'étape est faite), et propose ses vraies commandes, les mêmes que la palette *Ctrl K*.

@@ -1,5 +1,5 @@
 import type { Project } from '../types';
-import { flushSave, getState, loadProject, newProject, onSaved, setUI } from '../store';
+import { flushSave, getState, historyOf, loadProject, newProject, onSaved, restoreHistory, saveHistory, setHistory, setUI } from '../store';
 import { idb } from './db';
 import { cacheUsage, dropProxies, setProxyStore, evictCached, freeCacheCopies, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
 import { loadMediaOf, mediaRefs, openProjectFile, saveProjectFile, type CarriedVersion } from './projectFile';
@@ -148,6 +148,7 @@ export const listProjects = (): Promise<ProjectMeta[]> => ws?.listProjects() ?? 
 export async function saveNow() { await saveCurrent(); }
 async function saveCurrent() {
   await flushSave();
+  await saveHistory();
   await writeNow(getState().project);
 }
 
@@ -158,6 +159,7 @@ export async function openProject(id: string): Promise<boolean> {
   if (!r) return false;
   await bringMedia(r.project);
   loadProject(r.project);
+  await restoreHistory(r.project.id);
   lastSnapAt = Date.now(); dirtySinceSnap = false;
   return true;
 }
@@ -233,7 +235,7 @@ export async function exportForge(): Promise<{ blob: Blob; versions: number }> {
   const p = getState().project;
   const versions: CarriedVersion[] = [];
   if (ws) for (const v of await ws.listVersions(p.id)) { const text = await ws.readVersionText(p.id, v.file); if (text) versions.push({ file: v.file, text }); }
-  return { blob: await saveProjectFile(p, { versions }), versions: versions.length };
+  return { blob: await saveProjectFile(p, { versions, history: historyOf() }), versions: versions.length };
 }
 
 /**
@@ -247,7 +249,7 @@ export async function importForge(file: File): Promise<{ name: string; versionsA
   // the workspace may still be opening (a file opened right after start): its versions must not be lost
   await initStudio().catch(() => null);
   await saveCurrent();
-  const { project, versions, manifest } = await openProjectFile(file);
+  const { project, versions, manifest, history } = await openProjectFile(file);
   let keptBefore = false, versionsAdded = 0;
   if (ws) {
     const existing = await ws.readProject(project.id);
@@ -255,6 +257,7 @@ export async function importForge(file: File): Promise<{ name: string; versionsA
     for (const v of versions) if (await ws.writeVersionText(project.id, v.file, v.text)) versionsAdded++;
   }
   loadProject(project);
+  if (history?.past.length) setHistory(history.past, history.future);
   lastSnapAt = Date.now(); dirtySinceSnap = false;
   await saveCurrent();
   changed();

@@ -12,6 +12,18 @@ import type { Format } from '../types';
 export type StudioId = 'production' | 'script' | 'visual' | 'editing' | 'audio' | 'motion' | 'finishing' | 'publishing';
 export interface Cmd { id: string; label: string; group: string; keys?: string; run: () => void; when?: () => boolean; /** workspaces that show this command */ studios?: StudioId[] }
 
+/* installing Forge as an app: the browser offers it once its install conditions are met (manifest.webmanifest) */
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+let installEvt: InstallEvent | null = null;
+if (typeof window !== 'undefined') window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e as InstallEvent; });
+const canInstall = () => !!installEvt && !matchMedia('(display-mode: standalone)').matches;
+async function installApp() {
+  if (!installEvt) return;
+  await installEvt.prompt();
+  const r = await installEvt.userChoice.catch(() => ({ outcome: 'dismissed' }));
+  if (r.outcome === 'accepted') installEvt = null;
+}
+
 export const pick = (accept: string, multiple: boolean, fn: (f: File[]) => void) => {
   const i = document.createElement('input');
   i.type = 'file'; i.accept = accept; i.multiple = multiple;
@@ -81,6 +93,11 @@ export function commands(): Cmd[] {
     { id: 'subs', studios: ['motion'], label: 'Recréer les sous-titres depuis la transcription', group: 'Sous-titres', run: () => void import('../rush').then((m) => m.rebuildSubtitles()) },
     { id: 'subs-style', studios: ['motion'], label: 'Appliquer le style de sous-titre à tous les plans', group: 'Sous-titres', run: () => void import('../actions').then((m) => m.applyDefaultCaptionToAll()) },
     { id: 'motion-prep', studios: ['motion'], label: 'Préparer les mouvements (profondeur, détourage)', group: 'Animation', run: () => void import('../actions').then((m) => m.prepareMotion()) },
+    { id: 'ov-suggest', studios: ['editing', 'motion'], label: 'Proposer des calques d’après le script (à valider)', group: 'Superposition', run: () => setUI({ assistantOpen: true, assistantAsk: 'Propose des calques d’après le script' }) },
+    { id: 'split', studios: ['editing'], label: 'Couper la sélection au curseur', group: 'Montage', keys: 'S', run: () => void import('../actions').then((m) => m.splitAtPlayhead()) },
+    { id: 'trim-in', studios: ['editing'], label: 'Début de la sélection au curseur', group: 'Montage', keys: '[', run: () => void import('../actions').then((m) => m.trimToPlayhead('start')) },
+    { id: 'trim-out', studios: ['editing'], label: 'Fin de la sélection au curseur', group: 'Montage', keys: ']', run: () => void import('../actions').then((m) => m.trimToPlayhead('end')) },
+    { id: 'install', studios: ['production'], label: 'Installer Forge comme application (fenêtre à part, plus de place)', group: 'Production', run: () => void installApp(), when: canInstall },
     { id: 'ov-file', studios: ['editing', 'motion'], label: 'Superposer une image ou une vidéo (au curseur)', group: 'Superposition', run: () => pick('image/*,video/*', true, (f) => void import('../actions').then((m) => m.importOverlayFiles(f))) },
     { id: 'ov-panel', studios: ['editing', 'motion'], label: 'Superposer la case sélectionnée (au curseur)', group: 'Superposition', run: () => void import('../actions').then((m) => m.overlaySelectedPanel()) },
     { id: 'qc', studios: ['finishing'], label: 'Contrôle qualité et export', group: 'Finition', run: () => setUI({ exportOpen: true }) },

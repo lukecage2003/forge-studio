@@ -162,6 +162,13 @@ function voiceWav(sentences = 5, sr = 44100) {
   times['rendu / durée vidéo'] = rep.duration ? +(r.sec / rep.duration).toFixed(2) : null;
   step('export');
 
+  /* 13b. the undo history survives a reload of the page */
+  const undoBefore = await p.evaluate(async () => { const S = await import('/src/lib/studio.ts'); await S.saveNow(); return window.__forge.getState().past.length; });
+  await p.reload(); await p.waitForFunction(() => !!globalThis.__forgeQueue, null, { timeout: 60000 });
+  await p.waitForFunction(() => window.__forge.getState().past.length > 0, null, { timeout: 20000 }).catch(() => {});
+  const undoAfter = await p.evaluate(() => window.__forge.getState().past.length);
+  check(undoBefore > 0 && undoAfter > 0, `Ctrl+Z après rechargement de la page (${undoAfter} étapes gardées sur ${undoBefore})`);
+
   /* 14. close and reopen: the .forge file, opened in another browser (empty storage) */
   const before = await p.evaluate(async () => {
     const S = await import('/src/lib/studio.ts'); await S.takeVersion('Avant export du projet');
@@ -184,8 +191,9 @@ function voiceWav(sentences = 5, sr = 44100) {
     const blobs = await Promise.all(ids.map((id) => M.mediaBlob(id)));
     const decoded = { pages: sum.pages.every((id) => !!M.getImage(id)), video: !!M.getVideo(sum.aroll) };
     const versions = (await S.listVersions(pr.id)).map((v) => v.label);
+    const undoSteps = window.__forge.getState().past.length;
     const disk = await S.diskUsage();
-    return { sum, missing: ids.filter((_, i) => !blobs[i]).length, decoded, versions, unused: disk?.unused.length, manifest: res.manifest, ms };
+    return { sum, missing: ids.filter((_, i) => !blobs[i]).length, decoded, versions, unused: disk?.unused.length, manifest: res.manifest, ms, undoSteps };
   }, before.bytes);
   times['réouverture .forge'] = +(after.ms / 1000).toFixed(1);
   check(after.sum.id === pid && JSON.stringify(after.sum) === JSON.stringify(before.sum), `14. projet rouvert dans un autre navigateur, identique (${(before.bytes.length / 1e6).toFixed(1)} Mo)`);
@@ -193,6 +201,7 @@ function voiceWav(sentences = 5, sr = 44100) {
   check(after.missing === 0 && after.decoded.pages && after.decoded.video, `15. tous les médias présents et lisibles (planches, voix, rush) ${JSON.stringify({ manquants: after.missing, ...after.decoded })}`);
   check(after.versions.includes('Avant export du projet') && after.manifest?.versions === before.versions, `15. versions rapportées avec le projet (${after.versions.join(", ")} ; manifeste ${after.manifest?.versions}, envoyées ${before.versions})`);
   check(after.unused === 0 && after.manifest?.missing.length === 0, `15. aucun média manquant ni orphelin (${after.unused} inutilisé, ${after.manifest?.missing.length} manquant)`);
+  check(after.undoSteps > 0, `Ctrl+Z possible dans le projet rouvert ailleurs (${after.undoSteps} étapes dans le .forge)`);
   check(errs.length === 0, `aucune erreur de page ${errs.slice(0, 2).join(' | ')}`);
   console.log('\nTemps par étape (s) :', JSON.stringify(times));
   await b.close();

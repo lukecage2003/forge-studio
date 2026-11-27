@@ -71,6 +71,20 @@ Toutes vérifiées sur de vraies planches Watchmen.
 - **Rapport « mon PC ».** C'est un complément au banc d'essai qui existait déjà.
 - **Bugs trouvés grâce aux vraies planches et corrigés** : les coordonnées des cases étaient mal lues, la bulle d'une case était rognée en moitié d'écran, et une case large flottait dans un cadre flou en incrustation.
 
+## Suite : optimisations mesurées
+| Mesure | Avant | Après |
+|---|---|---|
+| Mémoire du navigateur, numéro de 24 pages | 1 795 Mo | essai retiré (voir ci-dessous) |
+| Relief 2.5D au premier export après rechargement (50 s de vidéo) | 29,3 s | 1,4 s |
+| Ctrl+Z après rechargement | 0 étape | 13 sur 13 |
+| Hauteur utile, Forge installé | environ 870 px | environ 960 px |
+
+- **Mémoire** : un essai remplaçait le décodage des planches (`ImageBitmap`) par des images que le navigateur peut libérer, soit 1 795 → 1 640 Mo. Il a été retiré : la régression visuelle a montré des traits légèrement moins nets (19 images sur 104, écart jusqu'à 42/255 sur les contours). La qualité passe avant un gain de 9 %.
+- **Relief 2.5D** : les cartes de profondeur sont gardées.
+- **Encodage vidéo sans carte graphique** : 79 ms par image, alors que le dessin ne prend que 3 ms. C'est l'encodeur du navigateur. Le mode temps réel a été essayé sans aucun gain, puis retiré. Aucun processus de rendu séparé n'a été ajouté, puisque le dessin n'est pas le goulot.
+- **Ajouts** : Forge installable comme application ; coupe (S) et ajustements ([ ]) au curseur ; aimantation sur tous les bords ; miniatures dans les blocs de calques ; calques proposés d'après le script.
+- **Fichiers PNG du logo** (`brand-kit/logo-forge-*.png`) : ils sont défectueux, ce sont des captures d'une image cassée. Le problème existait déjà. Les icônes de l'application sont générées depuis `favicon.svg`.
+
 ## 6. Fichiers importants
 - **Nouveaux :**
   - `src/lib/schema.ts`
