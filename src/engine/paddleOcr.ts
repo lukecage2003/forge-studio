@@ -110,6 +110,9 @@ function base() {
   return new URL(`${b}models/`, location.href).href;
 }
 
+/** the text lines already read for this page (no model run): what a quick decision may use */
+export const cachedLines = (key: string) => cache.get(key) ?? null;
+
 /** every text line of a page, in page pixels; null when the models can't run here (use Tesseract) */
 export async function readLines(key: string, img: CanvasImageSource, width: number, height: number): Promise<TextLine[] | null> {
   if (broken || typeof Worker === 'undefined') return null;

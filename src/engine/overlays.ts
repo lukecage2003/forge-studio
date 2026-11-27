@@ -23,13 +23,14 @@ export function bestPlace(sw: number, sh: number, W: number, H: number): Overlay
   const order: OverlayPlace[] = ['pip', 'bottom', 'top', 'right', 'left', 'full'];
   let best: OverlayPlace = 'pip', loss = Infinity;
   // full screen hides the whole main track: advised only when it is clearly better
-  for (const pl of order) { const b = placeBox(pl, W, H); const l = fitLoss(sw, sh, b.w, b.h) + (pl === 'full' ? 0.25 : 0); if (l < loss - 0.05) { loss = l; best = pl; } }
+  for (const pl of order) { const b = pl === 'pip' ? pipBox(sw / sh, W, H) : placeBox(pl, W, H); const l = fitLoss(sw, sh, b.w, b.h) + (pl === 'full' ? 0.25 : 0); if (l < loss - 0.05) { loss = l; best = pl; } }
   return best;
 }
 
 /** pure: the box of an overlay at t (a free overlay moves from its box to its end box) */
-export function overlayBox(o: Overlay, t: number, W: number, H: number) {
-  if (o.place !== 'free' || !o.box) return placeBox(o.place === 'free' ? 'pip' : o.place, W, H, o.corner);
+export function overlayBox(o: Overlay, t: number, W: number, H: number, aspect?: number, srcW?: number, subs = true) {
+  if (o.place === 'pip' || (o.place === 'free' && !o.box)) return pipBox(aspect ?? 0.8, W, H, o.corner, o.size ?? 1, srcW, subs);
+  if (o.place !== 'free' || !o.box) return placeBox(o.place, W, H, o.corner);
   const a = o.box, b = o.boxEnd ?? o.box, k = ease(Math.min(1, Math.max(0, (t - o.start) / Math.max(0.01, o.duration))));
   const m = (u: number, v: number) => u + (v - u) * k;
   return { x: m(a.x, b.x) * W, y: m(a.y, b.y) * H, w: m(a.w, b.w) * W, h: m(a.h, b.h) * H };
@@ -39,7 +40,6 @@ export const toNBox = (b: { x: number; y: number; w: number; h: number }, W: num
 
 /** pure: where an overlay sits in a W×H frame */
 export function placeBox(place: OverlayPlace, W: number, H: number, corner: Overlay['corner'] = 'tr'): Box {
-  const m = Math.round(Math.min(W, H) * 0.04);
   switch (place) {
     case 'full': return { x: 0, y: 0, w: W, h: H };
     case 'top': return { x: 0, y: 0, w: W, h: H / 2 };
@@ -47,12 +47,7 @@ export function placeBox(place: OverlayPlace, W: number, H: number, corner: Over
     case 'left': return { x: 0, y: 0, w: W / 2, h: H };
     case 'right': return { x: W / 2, y: 0, w: W / 2, h: H };
     case 'free': return placeBox('pip', W, H);
-    case 'pip': {
-      const w = Math.round(W * 0.42), h = Math.round(w * (H > W ? 1.25 : 0.62));
-      const left = corner === 'tl' || corner === 'bl', bottom = corner === 'bl' || corner === 'br';
-      // below the platform's top bar, and above the subtitles when at the bottom
-      return { x: left ? m : W - w - m, y: bottom ? Math.round(H * 0.62) - h : Math.round(H * 0.16), w, h };
-    }
+    case 'pip': return pipBox(0.8, W, H, corner);
   }
 }
 
@@ -61,6 +56,36 @@ export function fitLoss(sw: number, sh: number, bw: number, bh: number): number 
   const k = Math.max(bw / sw, bh / sh);
   return 1 - Math.min(1, (bw / k) / sw) * Math.min(1, (bh / k) / sh);
 }
+
+/**
+ * pure: a picture-in-picture sized for its shape, so it is always readable: about a fifth
+ * of the frame whatever the shape (a very wide panel becomes a banner across the frame,
+ * a tall one a column on the side), never stretched beyond 3× its own pixels (blur),
+ * below the platform's top bar, and above the subtitles when at the bottom.
+ */
+export function pipBox(aspect: number, W: number, H: number, corner: Overlay['corner'] = 'tr', size = 1, srcW = Infinity, subs = true): Box {
+  const m = Math.round(Math.min(W, H) * 0.04);
+  const a = Math.max(0.15, Math.min(8, aspect || 1));
+  const area = 0.2 * W * H * size * size;
+  let w = Math.sqrt(area * a), h = w / a;
+  const maxW = W - 2 * m, maxH = (H > W ? 0.44 : 0.6) * H;
+  if (w > maxW) { w = maxW; h = w / a; }
+  if (h > maxH) { h = maxH; w = h * a; }
+  // never under a third of the frame's short side (a sliver is unreadable)
+  const minSide = Math.min(W, H) / 3;
+  if (Math.max(w, h) < minSide) { const k = minSide / Math.max(w, h); w *= k; h *= k; }
+  if (w > 3 * srcW) { const k = (3 * srcW) / w; w *= k; h *= k; }
+  w = Math.round(w); h = Math.round(h);
+  const left = corner === 'tl' || corner === 'ml' || corner === 'bl', bottom = corner === 'bl' || corner === 'br', middle = corner === 'ml' || corner === 'mr';
+  const x = w >= maxW - 1 ? m : left ? m : W - w - m;
+  // the lowest it may go: above the subtitles when there are some, else above the platform's buttons
+  const top = Math.round(H * 0.15), low = Math.max(top, Math.round(H * (subs ? 0.64 : 0.88)) - h);
+  const y = middle ? Math.round((top + low) / 2) : bottom ? low : top;
+  return { x, y, w, h };
+}
+
+/** subtitles are drawn in this video */
+export const hasSubtitles = (p: Project) => !!p.subtitleStyle?.on && (p.subtitles?.length ?? 0) > 0;
 
 /** pure: the overlays visible at t, lower tracks first (drawn first, so higher tracks cover them) */
 export function activeOverlays(p: Project, t: number): Overlay[] {
@@ -107,10 +132,10 @@ export function drawOverlays(ctx: Ctx, p: Project, t: number, W: number, H: numb
       const iw = (img as HTMLVideoElement).videoWidth || (img as HTMLCanvasElement).width || sw;
       const k = iw / sw; sw *= k; sh *= k;
     }
-    let box = overlayBox(o, t, W, H);
-    // a picture-in-picture or a free frame takes the picture's own shape when filling would cut it:
-    // the frame hugs the panel instead of leaving it small in a blurred box
-    if ((o.place === 'pip' || o.place === 'free') && o.source.kind !== 'video' && fitLoss(sw, sh, box.w, box.h) > 0.25) {
+    // a picture-in-picture is sized for the picture's own shape (pipBox): nothing cut, readable
+    let box = overlayBox(o, t, W, H, sw / sh, o.source.kind === 'video' ? Infinity : sw, hasSubtitles(p));
+    // a free frame takes the picture's shape when filling would cut it
+    if (o.place === 'free' && o.source.kind !== 'video' && fitLoss(sw, sh, box.w, box.h) > 0.25) {
       const kk = Math.min(box.w / sw, box.h / sh), nw = sw * kk, nh = sh * kk;
       box = { x: box.x + (box.w - nw) / 2, y: box.y + (box.h - nh) / 2, w: nw, h: nh };
     }
@@ -171,10 +196,10 @@ export function splitAt(p: Project, t: number): Overlay | null {
  * `detail(box)` measures how much drawing a box holds (edges, contrast); the bottom
  * corners also count the subtitles when they are on, so text never lands on text.
  */
-export function chooseCorner(W: number, H: number, detail: (b: Box) => number, subtitles: boolean): NonNullable<Overlay['corner']> {
+export function chooseCorner(W: number, H: number, detail: (b: Box) => number, subtitles: boolean, aspect = 0.8, size = 1): NonNullable<Overlay['corner']> {
   let best: NonNullable<Overlay['corner']> = 'tr', score = Infinity;
-  for (const c of ['tr', 'tl', 'br', 'bl'] as const) {
-    const b = placeBox('pip', W, H, c);
+  for (const c of ['tr', 'tl', 'mr', 'ml', 'br', 'bl'] as const) {
+    const b = pipBox(aspect, W, H, c, size, Infinity, subtitles);
     const s = detail(b) * ((c === 'br' || c === 'bl') && subtitles ? 1.6 : 1) * (c === 'tr' ? 0.95 : 1);
     if (s < score) { score = s; best = c; }
   }
@@ -187,4 +212,18 @@ export function detailOf(data: Uint8ClampedArray, W: number, b: Box): number {
   const L = (x: number, y: number) => { const i = (y * W + x) * 4; return data[i] * 0.3 + data[i + 1] * 0.59 + data[i + 2] * 0.11; };
   for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { sum += Math.abs(L(x + 1, y) - L(x - 1, y)) + Math.abs(L(x, y + 1) - L(x, y - 1)); n++; }
   return n ? sum / n : 0;
+}
+
+/** the shape of an overlay's picture (panel, image or video) */
+export function overlayAspect(_p: Project, o: Overlay): { aspect: number; srcW: number } {
+  const s = o.source;
+  if (s.kind === 'panel') return { aspect: s.rect.w / Math.max(1, s.rect.h), srcW: s.rect.w };
+  if (s.kind === 'video') return { aspect: s.width / Math.max(1, s.height), srcW: Infinity };
+  const a = getImage(s.mediaId);
+  return a ? { aspect: a.width / a.height, srcW: a.width } : { aspect: 0.8, srcW: Infinity };
+}
+/** where an overlay sits at t, its picture's shape included (the handle in the preview, tests) */
+export function overlayRect(p: Project, o: Overlay, t: number, W: number, H: number) {
+  const { aspect, srcW } = overlayAspect(p, o);
+  return overlayBox(o, t, W, H, aspect, srcW, hasSubtitles(p));
 }

@@ -66,7 +66,7 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
     const out = {};
     const panelOv = pr.overlays.find((o) => o.source.kind === 'panel'); const panelPlace = panelOv.place;
     for (const [name, t, place] of [['case', 1.6, panelPlace], ['vidéo', 4.2, 'top']]) {
-      const box = O.placeBox(place, W, H, name === 'case' ? panelOv.corner : undefined); const inner = { x: Math.round(box.x + box.w * 0.1), y: Math.round(box.y + box.h * 0.1), w: Math.round(box.w * 0.8), h: Math.round(box.h * 0.8) };
+      const box = name === 'case' ? O.overlayRect(pr, panelOv, t, W, H) : O.placeBox(place, W, H); const inner = { x: Math.round(box.x + box.w * 0.1), y: Math.round(box.y + box.h * 0.1), w: Math.round(box.w * 0.8), h: Math.round(box.h * 0.8) };
       const e = await frameAt(t), withOv = await refAt(t, true), without = await refAt(t, false);
       out[name] = { vsRendu: +diff(e, withOv, inner).toFixed(1), sansSuperposition: +diff(e, without, inner).toFixed(1) };
     }
@@ -87,7 +87,7 @@ const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}  [${((D
     // the centre of the panel (cover-fit keeps the centre)
     const panel = mean(src, { x: Math.round(r.x + r.w * 0.35), y: Math.round(r.y + r.h * 0.35), w: Math.max(1, Math.round(r.w * 0.3)), h: Math.max(1, Math.round(r.h * 0.3)) });
     const W = 1080, H = 1920, c = new OffscreenCanvas(W, H); R.createRenderer(W, H).draw(c.getContext('2d'), pr, o.start + o.duration / 2);
-    const b = O.placeBox(o.place, W, H, o.corner);
+    const b = O.overlayRect(pr, o, o.start + o.duration / 2, W, H);
     const pip = mean(c, { x: Math.round(b.x + b.w * 0.35), y: Math.round(b.y + b.h * 0.35), w: Math.round(b.w * 0.3), h: Math.round(b.h * 0.3) });
     return { panel: panel.map(Math.round), pip: pip.map(Math.round), d: Math.max(...panel.map((v, i) => Math.abs(v - pip[i]))) };
   });

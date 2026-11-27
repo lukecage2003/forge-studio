@@ -58,15 +58,24 @@ describe('calques : la case entière quand le cadrage la couperait trop', () => 
 });
 
 describe('calques : placement conseillé, mouvement, entrées', () => {
-  it('le placement conseillé suit la forme : case large en moitié haute ou basse, case haute en incrustation ou moitié', async () => {
-    const { bestPlace, fitLoss, placeBox } = await import('../src/engine/overlays');
-    const wide = bestPlace(1600, 700, 1080, 1920);
-    expect(['bottom', 'top']).toContain(wide);
-    const tall = bestPlace(500, 1100, 1080, 1920);
-    expect(['pip', 'right', 'left']).toContain(tall);
-    // whatever it picks, it cuts no more than the picture-in-picture would
-    const pb = placeBox('pip', 1080, 1920), wb = placeBox(wide, 1080, 1920);
-    expect(fitLoss(1600, 700, wb.w, wb.h)).toBeLessThanOrEqual(fitLoss(1600, 700, pb.w, pb.h));
+  it('incrustation lisible quelle que soit la forme : bandeau, carré, colonne ; jamais une miette', async () => {
+    const { bestPlace, pipBox } = await import('../src/engine/overlays');
+    const W = 1080, H = 1920;
+    expect(bestPlace(1600, 700, W, H)).toBe('pip');
+    const banner = pipBox(1600 / 700, W, H);          // very wide panel → across the frame
+    expect(banner.w).toBeGreaterThan(W * 0.9);
+    expect(banner.h).toBeGreaterThan(H * 0.2);
+    const square = pipBox(1, W, H);                     // square → about 60 % of the width
+    expect(square.w / W).toBeGreaterThan(0.55);
+    const column = pipBox(500 / 1100, W, H);            // tall → a column on the side
+    expect(column.h).toBeGreaterThan(H * 0.35);
+    // usual shapes keep a readable fifth of the frame; extreme strips take the whole width or height they can
+    for (const a of [0.45, 0.7, 1, 1.5, 2.3]) { const b = pipBox(a, W, H); expect(b.w * b.h).toBeGreaterThan(W * H * 0.15); }
+    for (const a of [0.2, 0.3, 4, 7]) { const b = pipBox(a, W, H); expect(b.w > W * 0.9 || b.h > H * 0.43).toBe(true); expect(b.x + b.w).toBeLessThanOrEqual(W); expect(b.y + b.h).toBeLessThanOrEqual(H); }
+    // a small panel is never stretched past 3× its own pixels (it would blur)
+    expect(pipBox(1, W, H, 'tr', 1, 120).w).toBeLessThanOrEqual(360);
+    // landscape video (16:9) too
+    const land = pipBox(1, 1920, 1080); expect(land.h).toBeGreaterThan(1080 * 0.4);
   });
   it('un calque libre va de sa position de départ à sa position de fin', async () => {
     const { overlayBox } = await import('../src/engine/overlays');
@@ -116,11 +125,11 @@ describe('écran partagé et coin de l’incrustation', () => {
     const W = 1080, H = 1920;
     // drawing everywhere except the bottom-left corner
     const busyBut = (quiet: string) => (b: { x: number; y: number; w: number; h: number }) => { const c = `${b.y + b.h / 2 > H * 0.35 ? 'b' : 't'}${b.x + b.w / 2 < W / 2 ? 'l' : 'r'}`; return c === quiet ? 1 : 10; };
-    expect(chooseCorner(W, H, busyBut('bl'), false)).toBe('bl');
+    expect(['bl', 'ml']).toContain(chooseCorner(W, H, busyBut('bl'), false));
     expect(chooseCorner(W, H, busyBut('tl'), true)).toBe('tl');
     // equal everywhere: the top corners win when subtitles are on
     expect(['tl', 'tr']).toContain(chooseCorner(W, H, () => 5, true));
     const br = placeBox('pip', W, H, 'br');
-    expect(br.y + br.h).toBeLessThanOrEqual(H * 0.62 + 1); // above the subtitles
+    expect(br.y + br.h).toBeLessThanOrEqual(H * 0.64 + 1); // above the subtitles
   });
 });

@@ -1,7 +1,7 @@
 import { useStore } from '../store';
 import { getState, setUI } from '../store';
 import { patchOverlay } from '../actions';
-import { overlayBox, toNBox } from '../engine/overlays';
+import { overlayRect, toNBox } from '../engine/overlays';
 import type { NBox } from '../types';
 
 /**
@@ -14,11 +14,12 @@ export function OverlayHandle({ W, H, scale }: { W: number; H: number; scale: nu
   const sel = useStore((s) => s.ui.selection);
   const t = useStore((s) => s.ui.playhead);
   const editEnd = useStore((s) => !!s.ui.overlayEditEnd);
-  const o = useStore((s) => (sel?.kind === 'overlay' ? s.project.overlays?.find((x) => x.id === sel.id) : undefined));
+  const project = useStore((s) => s.project);
+  const o = sel?.kind === 'overlay' ? project.overlays?.find((x) => x.id === sel.id) : undefined;
   if (!o) return null;
   // shown at the playhead when the overlay is on screen, else at its start (or its end when setting the end)
   const at = editEnd && o.place === 'free' ? o.start + o.duration : t >= o.start && t < o.start + o.duration ? t : o.start;
-  const b = editEnd && o.place === 'free' && o.boxEnd ? { x: o.boxEnd.x * W, y: o.boxEnd.y * H, w: o.boxEnd.w * W, h: o.boxEnd.h * H } : overlayBox(o, at, W, H);
+  const b = editEnd && o.place === 'free' && o.boxEnd ? { x: o.boxEnd.x * W, y: o.boxEnd.y * H, w: o.boxEnd.w * W, h: o.boxEnd.h * H } : overlayRect(project, o, at, W, H);
   const down = (e: React.PointerEvent, resize: boolean) => {
     e.preventDefault(); e.stopPropagation();
     const x0 = e.clientX, y0 = e.clientY, start = { ...b };

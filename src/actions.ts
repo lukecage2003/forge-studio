@@ -4,7 +4,8 @@ import { FORMATS } from './types';
 import { getState, newShot, setUI, update } from './store';
 import { getAudio, getImage, importAudio, importImage, importVideo } from './engine/media';
 import { bestPlace, chooseCorner, detailOf } from './engine/overlays';
-import { createRenderer } from './engine/render';
+import { cameraAt, createRenderer } from './engine/render';
+import { cachedLines, readLines } from './engine/paddleOcr';
 import { cutPage } from './engine/detect';
 import { filesToPages } from './engine/importers';
 import { classifyPage, hashDistance, kindFromText, medianAspect, pageHash, trimBottomToArt, type PageText } from './engine/classify';
@@ -269,18 +270,48 @@ function defaultPlace(src: OverlaySource): Overlay['place'] {
   if (src.kind === 'image') { const a = getImage(src.mediaId); return a ? bestPlace(a.width, a.height, w, h) : 'full'; }
   return 'full';
 }
+/** width / height of an overlay's picture */
+function sourceAspect(src: OverlaySource): number {
+  if (src.kind === 'panel') return src.rect.w / Math.max(1, src.rect.h);
+  if (src.kind === 'video') return src.width / Math.max(1, src.height);
+  const a = getImage(src.mediaId); return a ? a.width / a.height : 0.8;
+}
 /** the corner where a picture-in-picture hides the least of the frame at t (drawn small, without overlays) */
-export function quietCorner(p: Project, t: number): Overlay['corner'] {
+export function quietCorner(p: Project, t0: number, aspect = 0.8, dur = 1): Overlay['corner'] {
   if (typeof document === 'undefined') return 'tr';
   try {
     const { w, h } = FORMATS[p.format];
-    const k = 270 / w, W = Math.round(w * k), H = Math.round(h * k);
+    const k = 360 / w, W = Math.round(w * k), H = Math.round(h * k);
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d', { willReadFrequently: true })!;
-    createRenderer(W, H).draw(ctx, { ...p, overlays: [], subtitleStyle: { ...p.subtitleStyle, on: false } }, t);
-    const data = ctx.getImageData(0, 0, W, H).data;
-    return chooseCorner(W, H, (b) => detailOf(data, W, b), !!p.subtitleStyle.on && p.subtitles.length > 0);
-  } catch { return 'tr'; }
+    const rd = createRenderer(W, H);
+    const bare: Project = { ...p, overlays: [], subtitleStyle: { ...p.subtitleStyle, on: false } };
+    // the main track can change shot, and its camera move, while the overlay is on screen:
+    // measured every 0.4 s over its whole life (at most 12 frames)
+    const n = Math.max(1, Math.min(12, Math.round(dur / 0.4)));
+    const times = Array.from({ length: n }, (_, i) => t0 + ((i + 0.5) / n) * dur);
+    const frames = times.map((t) => {
+      rd.draw(ctx, bare, t);
+      const data = ctx.getImageData(0, 0, W, H).data;
+      // the balloons and lettering of the main panel, where the camera shows them at t: covering text always costs
+      // more than covering drawing (a caption is a flat box: its drawing score alone would look « calm »)
+      const texts: { x: number; y: number; w: number; h: number }[] = [];
+      const ts = layoutShots(p).find((x) => t >= x.start && t < x.end);
+      if (ts?.shot.pageId && (ts.shot.layout ?? 'full') === 'full') {
+        const pg = p.pages.find((x) => x.id === ts.shot.pageId);
+        // balloons (local detector) and every text line read on the page (PaddleOCR, when already read)
+        const rects = [...(ts.shot.balloons ?? []), ...((pg && cachedLines(pg.mediaId)) ?? [])];
+        if (rects.length) {
+          const v = cameraAt(ts.shot, (t - ts.start) / Math.max(0.01, ts.shot.duration), W / H, p.readingOrder === 'rtl');
+          const sc = W / v.vw;
+          for (const b of rects) texts.push({ x: (b.x - v.cx) * sc + W / 2, y: (b.y - v.cy) * sc + H / 2, w: b.w * sc, h: b.h * sc });
+        }
+      }
+      return { data, texts };
+    });
+    const overlap = (b: { x: number; y: number; w: number; h: number }, texts: { x: number; y: number; w: number; h: number }[]) => texts.reduce((a, r) => a + Math.max(0, Math.min(b.x + b.w, r.x + r.w) - Math.max(b.x, r.x)) * Math.max(0, Math.min(b.y + b.h, r.y + r.h) - Math.max(b.y, r.y)), 0) / Math.max(1, b.w * b.h);
+    return chooseCorner(W, H, (b) => frames.reduce((a, f) => a + detailOf(f.data, W, b) + 80 * overlap(b, f.texts), 0), !!p.subtitleStyle.on && p.subtitles.length > 0, aspect);
+  } catch (e) { console.warn('Coin de l’incrustation : mesure impossible, haut droite par défaut', e); return 'tr'; }
 }
 /** place a picture on an overlay track at the playhead; undoable, selected for editing */
 export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
@@ -288,7 +319,7 @@ export function addOverlay(source: OverlaySource, opts: Partial<Overlay> = {}) {
   const duration = opts.duration ?? (source.kind === 'video' ? Math.min(5, Math.max(0.5, source.sourceDuration - source.offset)) : 3);
   const place = opts.place ?? defaultPlace(source);
   const o: Overlay = {
-    corner: place === 'pip' && !opts.corner ? quietCorner(getState().project, start + Math.min(0.5, duration / 2)) : opts.corner,
+    corner: place === 'pip' && !opts.corner ? quietCorner(getState().project, start, sourceAspect(source), duration) : opts.corner,
     id: uid('ov_'), start, duration, source,
     track: opts.track ?? freeTrack(getState().project, start, duration),
     place,
@@ -803,11 +834,17 @@ export function trimToPlayhead(side: 'start' | 'end'): boolean {
 export async function withAutoOverlays(p: Project): Promise<Project> {
   const { suggestOverlays } = await import('./engine/overlaySuggest');
   let cur: Project = { ...p, overlays: (p.overlays ?? []).filter((o) => !o.auto) };
-  for (const s of suggestOverlays(cur)) {
+  const props = suggestOverlays(cur);
+  // a picture-in-picture must not hide text: the lettering of the pages under them is read first (local, cached)
+  if (props.some((x) => x.place === 'pip')) {
+    const used = new Set(layoutShots(cur).filter((t) => props.some((x) => t.start < x.at + x.duration && x.at < t.end)).map((t) => t.shot.pageId).filter(Boolean) as string[]);
+    for (const pg of cur.pages.filter((x) => used.has(x.id))) { const a = getImage(pg.mediaId); if (a) await readLines(pg.mediaId, a.img, a.width, a.height).catch(() => null); }
+  }
+  for (const s of props) {
     const o: Overlay = {
       id: uid('ov_'), start: s.at, duration: s.duration, track: freeTrack(cur, s.at, s.duration),
       source: { kind: 'panel', pageId: s.pageId, rect: s.rect }, place: s.place, zoom: 1, fade: 0.35,
-      enter: s.place === 'pip' ? 'pop' : 'slide', corner: s.place === 'pip' ? quietCorner(cur, s.at + 0.5) : undefined,
+      enter: s.place === 'pip' ? 'pop' : 'slide', corner: s.place === 'pip' ? quietCorner(cur, s.at, s.rect.w / Math.max(1, s.rect.h), s.duration) : undefined,
       auto: true, why: s.raison,
     };
     cur = { ...cur, overlays: [...(cur.overlays ?? []), o] };

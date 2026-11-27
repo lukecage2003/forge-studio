@@ -39,10 +39,11 @@ export function OverlayPanel({ o }: { o: Overlay }) {
           {(Object.keys(PLACE_FR) as OverlayPlace[]).filter((p) => p !== 'free' || o.box).map((p) => <button key={p} role="radio" aria-checked={o.place === p} className={o.place === p ? 'on' : ''} onClick={() => patchOverlay(o.id, { place: p })}>{PLACE_FR[p]}</button>)}
         </div>
         {o.place === 'pip' && (
-          <div className="seg full" role="radiogroup" aria-label="Coin de l’incrustation">
-            {([['tl', '↖ Haut gauche'], ['tr', 'Haut droite ↗'], ['bl', '↙ Bas gauche'], ['br', 'Bas droite ↘']] as const).map(([c, l]) => <button key={c} role="radio" aria-checked={(o.corner ?? 'tr') === c} className={(o.corner ?? 'tr') === c ? 'on' : ''} onClick={() => patchOverlay(o.id, { corner: c })}>{l}</button>)}
+          <div className="seg full wrap" role="radiogroup" aria-label="Position de l’incrustation">
+            {([['tl', '↖ Haut G'], ['tr', 'Haut D ↗'], ['ml', '← Milieu G'], ['mr', 'Milieu D →'], ['bl', '↙ Bas G'], ['br', 'Bas D ↘']] as const).map(([c, l]) => <button key={c} role="radio" aria-checked={(o.corner ?? 'tr') === c} className={(o.corner ?? 'tr') === c ? 'on' : ''} onClick={() => patchOverlay(o.id, { corner: c })}>{l}</button>)}
           </div>
         )}
+        {o.place === 'pip' && <Slider label="Taille" value={o.size ?? 1} min={0.6} max={1.6} step={0.05} fmt={(v) => Math.round(v * 100) + ' %'} onChange={(v) => patchOverlay(o.id, { size: v }, k('sz'))} />}
         {(o.place === 'top' || o.place === 'bottom' || o.place === 'left' || o.place === 'right') && (
           <label className="check-row"><input type="checkbox" checked={o.split !== false} onChange={(e) => patchOverlay(o.id, { split: e.target.checked })} /> Écran partagé : la case principale se range dans l’autre moitié</label>
         )}
