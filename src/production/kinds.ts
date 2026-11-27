@@ -122,6 +122,23 @@ export function registerKinds(q: TaskQueue) {
     },
   });
 
+  q.register<{ mediaId: string }, Blob>({
+    kind: 'rush.proxy', lane: 'heavy', family: 'proxy', priority: 20,
+    label: () => 'Aperçu léger du rush (540p)',
+    key: (p) => p.mediaId,
+    // a copy for the preview only: nothing the user edits depends on it
+    guard: (p) => `${p.mediaId}`,
+    run: async (ctx, p) => {
+      const ar = aroll(p.mediaId);
+      const { mediaBlob } = await import('../engine/media');
+      const blob = await mediaBlob(p.mediaId);
+      if (!ar || !blob) throw Object.assign(new Error('Rush introuvable'), { kind: 'input' });
+      const { makeProxy } = await import('../engine/proxy');
+      return makeProxy(blob, ar.width, ar.height, (x) => ctx.progress(x), ctx.signal);
+    },
+    commit: (b, p) => { void import('../engine/media').then((M) => M.setProxy(p.mediaId, b)); },
+  });
+
   q.register<{ mediaId: string; engine: 'whisper' | 'gemini' | 'ai'; model: string }, { words: Word[]; via: string }>({
     kind: 'rush.transcribe', lane: 'heavy', family: 'whisper', keepResult: true, priority: 75, maxAttempts: 4,
     label: (p) => `Transcription du rush (${p.engine === 'gemini' ? 'Google' : p.engine === 'ai' ? 'IA' : `Whisper ${p.model}`})`,
@@ -388,6 +405,11 @@ export async function analyseRush(mediaId: string) {
   await startOrchestrator();
   const a = enqueue('rush.analyse', { mediaId }, { group: 'rush', force: true });
   enqueue('rush.face', { mediaId }, { group: 'rush' });
+  // a large rush gets a light copy for a fluid preview (the export keeps the original)
+  const ar = getState().project.aroll;
+  const { needsProxy } = await import('../engine/proxy');
+  const { hasProxy, loadProxy } = await import('../engine/media');
+  if (ar?.mediaId === mediaId && needsProxy(ar.width, ar.height) && !hasProxy(mediaId) && !(await loadProxy(mediaId))) enqueue('rush.proxy', { mediaId }, { group: 'rush' });
   return a;
 }
 

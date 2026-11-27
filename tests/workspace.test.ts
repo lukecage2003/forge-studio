@@ -139,3 +139,26 @@ describe('espace disque et nettoyage sûr', () => {
     expect(await ws.getMedia('img1')).not.toBeNull();
   });
 });
+
+describe('aperçus légers (proxies)', () => {
+  it('taille du proxy : même rapport, petit côté 540, nombres pairs ; seulement au-dessus de 720p', async () => {
+    const { proxySize, needsProxy } = await import('../src/engine/proxy');
+    expect(proxySize(1920, 1080)).toEqual({ width: 960, height: 540 });
+    expect(proxySize(1080, 1920)).toEqual({ width: 540, height: 960 });
+    expect(proxySize(3840, 2160)).toEqual({ width: 960, height: 540 });
+    const odd = proxySize(1442, 1080);
+    expect(odd.width % 2).toBe(0);
+    expect(needsProxy(1280, 720)).toBe(false);
+    expect(needsProxy(1920, 1080)).toBe(true);
+  });
+  it('rangés à part des originaux, comptés, et supprimables sans toucher aux médias', async () => {
+    const ws = await new Workspace(new MemDir(), 'folder').init();
+    await ws.saveProject(proj({ aroll: { mediaId: 'vid1' } as never }), getBlob);
+    await ws.putProxy('vid1', new Blob(['petit']));
+    expect(await (await ws.getProxy('vid1'))!.text()).toBe('petit');
+    expect((await ws.usage()).proxies).toEqual({ count: 1, bytes: 5 });
+    expect(await ws.removeProxies()).toBe(1);
+    expect(await ws.getProxy('vid1')).toBeNull();
+    expect(await ws.getMedia('vid1')).not.toBeNull();
+  });
+});

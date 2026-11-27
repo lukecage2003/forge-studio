@@ -171,6 +171,32 @@ export interface VideoAsset { url: string; width: number; height: number; durati
 const videos = new Map<string, VideoAsset>();
 export const getVideo = (id: string) => videos.get(id);
 
+/* ------------------------------------------------------------ proxies (preview only) */
+const proxies = new Map<string, string>();
+let proxyStore: { put: (id: string, b: Blob) => Promise<void>; get: (id: string) => Promise<Blob | null> } | null = null;
+/** the studio plugs the workspace's proxies/ folder in here */
+export const setProxyStore = (s: typeof proxyStore) => { proxyStore = s; };
+/** what the preview plays: the light copy when there is one, else the original. The export never uses this. */
+export const previewUrl = (id: string) => proxies.get(id) ?? videos.get(id)?.url;
+export const hasProxy = (id: string) => proxies.has(id);
+export async function setProxy(id: string, b: Blob, keep = true) {
+  const old = proxies.get(id);
+  proxies.set(id, URL.createObjectURL(b));
+  if (old) URL.revokeObjectURL(old);
+  if (keep && proxyStore) await proxyStore.put(id, b).catch(() => {});
+  emit();
+}
+/** a proxy made in an earlier session */
+export async function loadProxy(id: string): Promise<boolean> {
+  if (proxies.has(id)) return true;
+  const b = await proxyStore?.get(id).catch(() => null);
+  if (!b) return false;
+  await setProxy(id, b, false);
+  return true;
+}
+/** forget the light copies in memory (they were removed from the disk): the preview goes back to the originals */
+export function dropProxies() { for (const u of proxies.values()) URL.revokeObjectURL(u); proxies.clear(); emit(); }
+
 function probeVideo(url: string): Promise<{ width: number; height: number; duration: number }> {
   return new Promise((res, rej) => {
     const v = document.createElement('video');
@@ -214,6 +240,7 @@ export function ensureVideo(id: string): Promise<unknown> {
   if (pending.has(id)) return pending.get(id)!;
   const p: Promise<unknown> = readBlob(id).then((blob): Promise<unknown> => {
     if (!blob) throw new Error('Rush introuvable : ' + id);
+    void loadProxy(id);
     return decodeVideo(id, blob);
   });
   pending.set(id, p);

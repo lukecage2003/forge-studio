@@ -1,7 +1,7 @@
 import type { Project } from '../types';
 import { flushSave, getState, loadProject, newProject, onSaved, setUI } from '../store';
 import { idb } from './db';
-import { cacheUsage, evictCached, freeCacheCopies, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
+import { cacheUsage, dropProxies, setProxyStore, evictCached, freeCacheCopies, mediaBlob, notifyMedia, putMediaBlob, setMediaSink } from '../engine/media';
 import { loadMediaOf, mediaRefs, openProjectFile, saveProjectFile, type CarriedVersion } from './projectFile';
 import { uid } from './util';
 import {
@@ -28,6 +28,7 @@ const listeners = new Set<() => void>();
 function plug(w: Workspace | null) {
   ws = w;
   setMediaSink(w ? { put: (id, b) => w.putMedia(id, b), get: (id) => w.getMedia(id) } : null);
+  setProxyStore(w ? { put: (id, b) => w.putProxy(id, b), get: (id) => w.getProxy(id) } : null);
 }
 const changed = () => listeners.forEach((f) => f());
 export const onStudio = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f); }; };
@@ -218,6 +219,8 @@ export async function freeSpace(): Promise<{ moved: number; bytes: number; refus
   changed();
   return { ...r, cacheFreed: c.freed, cacheBytes: c.bytes };
 }
+/** proxies take room and are always made again: removable at any time */
+export async function removeProxies() { const n = (await ws?.removeProxies()) ?? 0; dropProxies(); changed(); return n; }
 export const restoreTrash = async () => { const n = (await ws?.restoreTrash()) ?? 0; changed(); return n; };
 export const emptyTrash = async () => { const n = (await ws?.emptyTrash()) ?? 0; changed(); return n; };
 

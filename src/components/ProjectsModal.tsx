@@ -297,6 +297,7 @@ function DiskSpace() {
         <tr><td>Médias que plus aucun projet ni version n’utilise</td><td>{u.unused.length}</td><td>{mo(unused)}</td></tr>
         <tr><td>Versions des projets</td><td>{u.versions.count}</td><td>{mo(u.versions.bytes)}</td></tr>
         <tr><td>Vidéos exportées</td><td>{u.exports.count}</td><td>{mo(u.exports.bytes)}</td></tr>
+        <tr><td>Aperçus légers des rushes (refaits au besoin)</td><td>{u.proxies.count}</td><td>{mo(u.proxies.bytes)}</td></tr>
         <tr><td>Corbeille</td><td>{u.trash.count}</td><td>{mo(u.trash.bytes)}</td></tr>
         <tr><td>Cache du navigateur (copies)</td><td>{u.cache.count}</td><td>{mo(u.cache.bytes)}</td></tr>
       </tbody></table>
@@ -306,6 +307,7 @@ function DiskSpace() {
           if (!r) return 'Aucun espace de projets';
           return `${r.moved} média${r.moved > 1 ? 's' : ''} inutilisé${r.moved > 1 ? 's' : ''} mis à la corbeille (${mo(r.bytes)}), ${r.cacheFreed} copie${r.cacheFreed > 1 ? 's' : ''} du cache libérée${r.cacheFreed > 1 ? 's' : ''} (${mo(r.cacheBytes)})${r.refused ? ` — ${r.refused} gardé${r.refused > 1 ? 's' : ''} car utilisé${r.refused > 1 ? 's' : ''}` : ''}`;
         })}>{busy === 'Nettoyage…' ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Libérer de la place</button>
+        {u.proxies.count > 0 && <button className="btn ghost" disabled={!!busy} onClick={() => void run('Suppression des aperçus…', async () => `${await S.removeProxies()} aperçu(s) léger(s) supprimé(s) : l’aperçu relit les originaux`)}>Supprimer les aperçus légers</button>}
         {u.trash.count > 0 && <button className="btn ghost" disabled={!!busy} onClick={() => void run('Restauration…', async () => `${await S.restoreTrash()} média(s) remis en place`)}><RotateCcw size={14} /> Restaurer la corbeille</button>}
         {u.trash.count > 0 && (confirmEmpty
           ? <button className="btn danger" disabled={!!busy} onClick={() => { setConfirmEmpty(false); void run('Suppression…', async () => `${await S.emptyTrash()} média(s) supprimé(s) définitivement`); }}>Confirmer : supprimer définitivement</button>

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AudioWaveform, Crosshair, FileVideo, Headphones, Languages, Play, RotateCcw, ScanLine, Sparkles, Wand2, ZoomIn, ZoomOut, Bot } from 'lucide-react';
 import type { ARoll, Cut, Word } from '../types';
 import { setUI, useStore } from '../store';
-import { getVideo } from '../engine/media';
+import { getVideo, previewUrl } from '../engine/media';
 import { HOP, isFiller, keepSegments, keptShare, segsDuration } from '../engine/speech';
 import { addManualCut, cachedAnalysis, detectFace, importRush, roughCut, setAllCuts, setFocus, toggleCut, toggleWords, transcribe, patchRoughSettings, patchAroll } from '../rush';
 import { hasGoogle } from '../engine/google';
@@ -130,7 +130,7 @@ function RushWorkspace({ ar, busy }: { ar: ARoll; busy: string | null }) {
       <div className="rush-grid">
         <div className="rush-left">
           <div className={`rush-video ${focusMode ? 'focusing' : ''}`}>
-            {asset && <video ref={vid} src={asset.url} playsInline preload="auto" onClick={(e) => {
+            {asset && <video ref={vid} src={previewUrl(ar.mediaId) ?? asset.url} playsInline preload="auto" onClick={(e) => {
               if (!focusMode) { const v = e.currentTarget; if (v.paused) void v.play(); else v.pause(); return; }
               const r = e.currentTarget.getBoundingClientRect();
               const vw = asset.width, vh = asset.height;

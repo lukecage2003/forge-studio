@@ -1,4 +1,4 @@
-import { getVideo, notifyMedia } from './media';
+import { previewUrl, notifyMedia } from './media';
 import type { Seg } from './speech';
 
 /**
@@ -15,21 +15,24 @@ class ARollPlayer {
   private seekTarget = -1;
 
   private ensure(mediaId: string) {
-    const v = getVideo(mediaId);
-    if (!v) return false;
-    if (this.url !== v.url) {
+    // the light copy when there is one (engine/proxy): same picture, less decoding
+    const url = previewUrl(mediaId);
+    if (!url) return false;
+    if (this.url !== url) {
+      const at = this.els[this.active]?.currentTime ?? 0;
       this.els.forEach((e) => { e.pause(); e.removeAttribute('src'); e.load(); });
       this.els = [0, 1].map(() => {
         const e = document.createElement('video');
         e.muted = true;
         e.playsInline = true;
         e.preload = 'auto';
-        e.src = v.url;
+        e.src = url;
+        if (at) e.currentTime = at;
         e.addEventListener('seeked', () => notifyMedia());
         e.addEventListener('loadeddata', () => notifyMedia());
         return e;
       });
-      this.url = v.url;
+      this.url = url;
       this.active = 0;
       this.seg = -1;
     }

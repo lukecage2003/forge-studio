@@ -36,9 +36,17 @@ Voir [ETAT-TECHNIQUE.md](ETAT-TECHNIQUE.md). En résumé :
 
 ## 5. Encore incomplet (non fait dans cette campagne)
 - **Montage multipiste libre** : il y a une seule piste d'images, plus le rush, la voix, la musique, les sous-titres et les effets. Ce n'est pas une timeline de NLE avec des pistes vidéo empilées à volonté.
-- **Proxies vidéo** : il n'y en a pas. Les rushes sont lus en original.
 - **Historique d'annulation** : il n'est pas conservé après fermeture. Les versions jouent ce rôle.
 - **Barre de nouvelle version et fenêtre de rechargement** : testées localement et en CI, pas encore observées en ligne sur un vrai changement de version.
+
+## Suite : aperçus légers (proxies)
+Fait après le rapport initial.
+- **Fabrication** : un rush de plus de 720p reçoit une copie 540p sans son. C'est une tâche de l'orchestrateur, en basse priorité.
+- **Rangement** : la copie est rangée dans `proxies/`, à part des originaux, et retrouvée à la session suivante.
+- **Lecture** : l'aperçu lit la copie. L'export lit toujours l'original.
+- **Même image** : le rendu dessine le rush à la taille de sa zone, donc la composition est identique. Seule la netteté de l'aperçu change.
+- **Suppression** : les copies se suppriment sans risque depuis Projets › Stockage.
+- **Mesure** (`tests/e2e/proxy.e2e.cjs`, Chromium sans GPU) : un déplacement dans l'aperçu prend environ 400 ms sur un original 1080p WebM et 26 ms sur la copie. Cet original vient d'un enregistrement du navigateur, sans index, donc particulièrement lent à parcourir. Le gain sur un MP4 de caméra sera plus faible : **non mesuré**.
 
 ## 6. Fichiers importants
 - **Nouveaux :**

@@ -14,6 +14,7 @@ import { uid } from './util';
  *   projects/<id>/meta.json          what the project list shows (fast listing)
  *   projects/<id>/versions/*.json    snapshots (automatic and named)
  *   media/<mediaId> + <mediaId>.json media bytes, shared by every project; never deleted automatically
+ *   proxies/<mediaId>.mp4            light copies of large rushes for the preview (made again on demand)
  *   corbeille/<mediaId>             media no project nor version used, moved here on request; restorable
  *   templates/<id>.json              project templates (settings only, no media)
  *
@@ -56,7 +57,7 @@ const readText = async (d: DirLike, name: string) => (await (await d.getFileHand
 async function readJson<T>(d: DirLike, name: string): Promise<T | null> { try { return JSON.parse(await readText(d, name)) as T; } catch { return null; } }
 async function names(d: DirLike) { const out: string[] = []; for await (const k of d.keys()) out.push(k); return out; }
 const TRASH = 'corbeille';
-export interface DiskUsage { used: { count: number; bytes: number }; unused: { id: string; bytes: number; name?: string }[]; versions: { count: number; bytes: number }; exports: { count: number; bytes: number }; trash: { count: number; bytes: number } }
+export interface DiskUsage { used: { count: number; bytes: number }; unused: { id: string; bytes: number; name?: string }[]; versions: { count: number; bytes: number }; exports: { count: number; bytes: number }; proxies: { count: number; bytes: number }; trash: { count: number; bytes: number } }
 const safeId = (id: string) => id.replace(/[^\w.-]/g, '_');
 
 /* ---------------------------------------------------------------- workspace */
@@ -192,6 +193,16 @@ export class Workspace {
   async writeData(name: string, text: string) { await writeFile(await sub(this.root, 'library'), name, text); }
   async mediaInfo(id: string): Promise<{ type?: string; size?: number; addedAt?: string; name?: string; source?: string } | null> { return readJson(await sub(this.root, 'media'), `${safeId(id)}.json`); }
 
+  /* -------- proxies: light copies for the preview, always made again from the original */
+  async putProxy(id: string, blob: Blob) { await writeFile(await sub(this.root, 'proxies'), `${safeId(id)}.mp4`, blob); }
+  async getProxy(id: string): Promise<Blob | null> {
+    try { const b = await (await (await sub(this.root, 'proxies', false)).getFileHandle(`${safeId(id)}.mp4`)).getFile(); return new Blob([b], { type: 'video/mp4' }); } catch { return null; }
+  }
+  /** proxies are never originals: removing them all is safe, they are made again on demand */
+  async removeProxies(): Promise<number> {
+    try { const d = await sub(this.root, 'proxies', false); const all = await names(d); for (const f of all) await d.removeEntry(f); return all.length; } catch { return 0; }
+  }
+
   /* -------- disk space and safe cleanup */
   /** every media id that a project or one of its versions points to: these are never cleaned */
   async usedMedia(): Promise<Set<string>> {
@@ -214,7 +225,7 @@ export class Workspace {
     const used = await this.usedMedia();
     const size = async (d: DirLike, n: string) => { try { return (await (await d.getFileHandle(n)).getFile()).size; } catch { return 0; } };
     const media = await sub(this.root, 'media');
-    const out: DiskUsage = { used: { count: 0, bytes: 0 }, unused: [], versions: { count: 0, bytes: 0 }, exports: { count: 0, bytes: 0 }, trash: { count: 0, bytes: 0 } };
+    const out: DiskUsage = { used: { count: 0, bytes: 0 }, unused: [], versions: { count: 0, bytes: 0 }, exports: { count: 0, bytes: 0 }, proxies: { count: 0, bytes: 0 }, trash: { count: 0, bytes: 0 } };
     for (const n of await names(media)) {
       if (n.endsWith('.json')) continue;
       const info = await readJson<{ id?: string; name?: string; size?: number }>(media, `${n}.json`);
@@ -226,7 +237,7 @@ export class Workspace {
     for (const n of await names(ps)) {
       try { const vd = await sub(await sub(ps, n, false), 'versions', false); for (const f of await names(vd)) { out.versions.count++; out.versions.bytes += await size(vd, f); } } catch { /* none */ }
     }
-    for (const [key, dirName] of [['exports', 'exports'], ['trash', TRASH]] as const) {
+    for (const [key, dirName] of [['exports', 'exports'], ['proxies', 'proxies'], ['trash', TRASH]] as const) {
       try { const d = await sub(this.root, dirName, false); for (const f of await names(d)) { if (key === 'trash' && f.endsWith('.json')) continue; out[key].count++; out[key].bytes += await size(d, f); } } catch { /* none */ }
     }
     return out;

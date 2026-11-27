@@ -249,6 +249,7 @@ Le workflow `.github/workflows/deploy.yml` publie Forge sur la branche `gh-pages
 - **Versions.** *Projets → Versions* : prendre une version nommée, comparer, restaurer. Restaurer garde d'abord l'état actuel dans une version, donc tout se défait.
 - **Fichier .forge.** Le bouton *Enregistrer le projet* produit un fichier unique avec le projet, tous ses médias (rush compris), ses versions et un manifeste (version du format, de Forge et des moteurs). Ouvrir un .forge sur un autre ordinateur rend le projet complet ; s'il remplace un projet existant, l'état précédent est gardé dans les versions.
 - **Projets d'une autre version de Forge.** Un projet ancien est mis à jour à l'ouverture. Un projet enregistré par une version plus récente s'ouvre sans rien perdre de ce que cette version ne connaît pas, avec un avertissement.
+- **Aperçus légers.** Un rush plus grand que 720p reçoit une copie 540p pour un aperçu fluide ; l'export utilise toujours l'original. Ces copies sont dans `proxies/` et peuvent être supprimées à tout moment (*Projets → Stockage*) : elles se refont.
 - **Faire de la place.** *Projets → Stockage → Libérer de la place* met à la corbeille les médias que plus aucun projet ni aucune version n'utilise (restaurable) et retire les copies en double du cache. Un média utilisé n'est jamais touché. Seul *Vider la corbeille*, après confirmation, supprime des fichiers.
 
 ## Studios
