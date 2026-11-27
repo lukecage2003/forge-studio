@@ -176,8 +176,10 @@ const settle = (p, ms = 300000) => p.waitForFunction(`(() => { const q = ${Q}; c
   const crash = await state(cp);
   check(crash.pages === 6 && crash.shotsPerPage.every((n) => n >= 1), `après l’arrêt brutal du navigateur : 6 pages, toutes analysées (${crash.shotsPerPage})`);
   check(crash.interrupted >= 1, `les tâches interrompues ont repris (${crash.interrupted})`);
-  await br.close().catch(() => {}); proc.kill('SIGKILL');
-  fs.rmSync(dir, { recursive: true, force: true });
+  await br.close().catch(() => {});
+  if (proc.exitCode === null) { proc.kill('SIGKILL'); await new Promise((r) => proc.once('exit', r)); }
+  // Windows keeps the profile files locked a moment after the process exits: cleanup is best effort
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); } catch { console.log(`  (profil de test laissé dans ${dir})`); }
   console.log(fails.length ? `\n${fails.length} échec(s)` : '\nTout est bon');
   process.exit(fails.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
