@@ -22,3 +22,12 @@ export const fmtTime = (s: number, fps = 30) => {
 };
 
 export const fmtShort = (s: number) => `${s.toFixed(1)} s`;
+
+/** save a file to the user's computer (no heavy dependency: the export engine and mediabunny stay out of the first load) */
+export function download(blob: Blob, name: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}

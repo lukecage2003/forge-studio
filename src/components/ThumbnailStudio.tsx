@@ -3,7 +3,7 @@ import { Download, ImagePlus, Loader2, Search, X, Clipboard } from 'lucide-react
 import { getState } from '../store';
 import { brandOf, drawThumbnail, sticker, trimAlpha, type ThumbLayout } from '../engine/brand';
 import { getImage, onMediaChange } from '../engine/media';
-import { download } from '../engine/export';
+import { download } from '../lib/util';
 import { magicTouchCutout } from '../engine/segment';
 import { cutoutOf, hasWebGPU } from '../engine/vision';
 import { panelFocus } from '../engine/auto';

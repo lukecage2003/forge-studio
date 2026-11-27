@@ -81,6 +81,7 @@ jobs:
           node tests/e2e/storyboard.e2e.cjs
           node tests/e2e/library.e2e.cjs
           node tests/e2e/finish.e2e.cjs
+          node tests/e2e/production.e2e.cjs
           node tests/e2e/update.e2e.cjs
       - name: Journal du serveur
         if: failure()

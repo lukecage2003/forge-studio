@@ -225,6 +225,7 @@ export const emptyTrash = async () => { const n = (await ws?.emptyTrash()) ?? 0;
 
 /** the open project as a .forge file, with its versions (and the media they use) */
 export async function exportForge(): Promise<{ blob: Blob; versions: number }> {
+  await initStudio().catch(() => null);
   await saveCurrent();
   const p = getState().project;
   const versions: CarriedVersion[] = [];
@@ -240,6 +241,8 @@ export async function exportForge(): Promise<{ blob: Blob; versions: number }> {
  * written over existing ones.
  */
 export async function importForge(file: File): Promise<{ name: string; versionsAdded: number; keptBefore: boolean; manifest: Awaited<ReturnType<typeof openProjectFile>>['manifest'] }> {
+  // the workspace may still be opening (a file opened right after start): its versions must not be lost
+  await initStudio().catch(() => null);
   await saveCurrent();
   const { project, versions, manifest } = await openProjectFile(file);
   let keptBefore = false, versionsAdded = 0;

@@ -176,7 +176,12 @@ function probeVideo(url: string): Promise<{ width: number; height: number; durat
     const v = document.createElement('video');
     v.preload = 'metadata';
     v.muted = true;
-    v.onloadedmetadata = () => res({ width: v.videoWidth, height: v.videoHeight, duration: v.duration });
+    v.onloadedmetadata = () => {
+      if (Number.isFinite(v.duration)) { res({ width: v.videoWidth, height: v.videoHeight, duration: v.duration }); return; }
+      // browser recordings (MediaRecorder WebM) carry no duration: seeking past the end makes the browser measure it
+      v.ondurationchange = () => { if (Number.isFinite(v.duration)) { v.ondurationchange = null; v.currentTime = 0; res({ width: v.videoWidth, height: v.videoHeight, duration: v.duration }); } };
+      v.currentTime = 1e7;
+    };
     v.onerror = () => rej(new Error('Vidéo illisible par le navigateur (essaie un MP4 H.264).'));
     v.src = url;
   });

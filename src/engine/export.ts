@@ -218,13 +218,8 @@ export function exportSrt(project: Project) {
     .join('\n');
 }
 
-export function download(blob: Blob, name: string) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-}
+/** kept here for the modules that import it from the export engine */
+export { download } from '../lib/util';
 
 /** YouTube chapters (description timestamps) from covers, schemas and title cards */
 export function youtubeChapters(project: Project): string {

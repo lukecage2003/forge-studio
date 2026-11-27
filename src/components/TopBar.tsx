@@ -3,7 +3,7 @@ import { Download, Wand2, FolderOpen, FilePlus2, FolderKanban, ListTodo, LayoutL
 import { Wordmark } from '../brand/Logo';
 import { FORMATS, type Format } from '../types';
 import { getState, loadProject, newProject, redo, setUI, undo, update, useHistory, useStore } from '../store';
-import { download } from '../engine/export';
+import { download } from '../lib/util';
 import { toast } from './Toast';
 import { lazy, Suspense } from 'react';
 const TaskBadge = lazy(() => import('./TasksPanel').then((m) => ({ default: () => { const n = m.useActiveTasks(); return n ? <span className="task-badge">{n}</span> : null; } })));

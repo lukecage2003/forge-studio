@@ -5,7 +5,7 @@ import type { TaskRecord, TaskState } from '../engine/queue';
 import { budget } from '../engine/resources';
 import { queue } from '../production/orchestrator';
 import { renders } from '../production/kinds';
-import { download } from '../engine/export';
+import { download } from '../lib/util';
 import { toast } from './Toast';
 
 const STATE: Record<TaskState, { label: string; icon: typeof Loader2; tone: string }> = {
