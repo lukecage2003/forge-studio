@@ -73,3 +73,16 @@ describe('transcription par fenêtres', () => {
     expect(words.map((x) => x.s)).toEqual([0.5, 12, 27, 28.5, 46, 55, 60]);
   });
 });
+
+describe('voix off et script', () => {
+  it('les sous-titres d’une voix off prennent le texte exact du script, au rythme de la voix', async () => {
+    const { narrationWords } = await import('../src/engine/narration');
+    const { newProject } = await import('../src/store');
+    const heard = [['citation', 0], ['de', 0.5], ['horrestre', 0.8], ['la', 1.6], ['sortie', 1.9], ['du', 2.4], ['collège', 2.6]].map(([w, s]) => ({ w: String(w), s: Number(s), e: Number(s) + 0.3 }));
+    const p = { ...newProject(), script: 'Citation d’Horace, la sortie du collège.', audio: [{ id: 'v', kind: 'voice', name: 'v', mediaId: 'm', start: 10, offset: 0, duration: 5, sourceDuration: 5, volume: 1, fadeIn: 0, fadeOut: 0, words: heard }] as never };
+    const ws = narrationWords(p);
+    expect(ws.map((w) => w.w).join(' ')).toBe('Citation d’Horace, la sortie du collège.');
+    expect(ws[0].s).toBeCloseTo(10, 1);
+    expect(ws.at(-1)!.s).toBeCloseTo(12.6, 1);
+  });
+});

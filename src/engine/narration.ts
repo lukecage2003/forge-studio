@@ -1,6 +1,7 @@
 import type { Project, Word } from '../types';
 import { isFiller } from './speech';
 import { timelineWords, sentencesOf } from './auto';
+import { alignScript } from './align';
 
 /**
  * Everything the viewer will hear, as timed sentences on the edit timeline:
@@ -15,14 +16,23 @@ export function narrationWords(p: Project): Word[] {
   const out: Word[] = [];
   // a rush: its transcript, or the pasted script laid on its voice when there is no transcript
   if (p.aroll && (p.aroll.words.length || p.script?.trim())) out.push(...timelineWords(p));
+  const voice: Word[] = [];
   for (const c of p.audio) {
     if (c.kind !== 'voice' || !c.words?.length) continue;
     for (const w of c.words) {
       if (w.filler || isFiller(w.w)) continue;
       if (w.s < c.offset || w.e > c.offset + c.duration) continue;
-      out.push({ w: w.w, s: c.start + (w.s - c.offset), e: c.start + (w.e - c.offset) });
+      voice.push({ w: w.w, s: c.start + (w.s - c.offset), e: c.start + (w.e - c.offset) });
     }
   }
+  voice.sort((a, b) => a.s - b.s);
+  // a voice-over with a pasted script: the script's words (exact spelling, names, punctuation)
+  // on the transcript's timing, as for a rush (engine/align)
+  if (!p.aroll && voice.length && p.script?.trim()) {
+    const al = alignScript(p.script, voice);
+    if (al.coverage >= 0.35) return al.words;
+  }
+  out.push(...voice);
   return out.sort((a, b) => a.s - b.s);
 }
 
